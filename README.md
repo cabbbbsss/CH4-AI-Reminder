@@ -16,6 +16,7 @@ What we browsed, and what surprised us:
 - Apple Intelligence used Foundation Models inside it, then they (Apple Intelligence) provide Apple ecosystem to the Foundation Models to work on. So we don't need CoreML to integrate Foundation Models.
 - Importing Foundation in Swift is completely different from 'Foundation Models' in AI. Foundation Models are large-scale machine learning models trained on broad data to perform varied AI tasks. In contrast, Swift's Foundation is a core software framework that provides essential base capabilities, like data storage, file management, networking, and date formatting, for Apple and Swift development.
 - The difference between action classification and activity classification is action for body movements so it needs video as an input meanwhile activity is for motion sensor
+  
 _What we actually built or tested in code (not just read about):
 [ ]
 What we discovered that we didn't expect:
