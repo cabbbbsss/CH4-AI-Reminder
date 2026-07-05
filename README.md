@@ -87,9 +87,9 @@ By focusing on a smart context assistant, we harness the baseline strengths of A
 Our use case absolutely mandates the strict collaboration of all these frameworks. The application could not function with the main Foundation Models framework alone. While the Foundation Model acts as the core "brain" for reasoning and personalization, it is completely isolated from the device's hardware, operating system data, and user interface. It lacks the native capability to fetch live data, track physical locations, or trigger system alerts on its own.
 
 The secondary frameworks serve as the essential eyes, ears, and hands for the AI model:
-- EventKit (The Data Foundation): This framework is required to sync directly with Apple’s native Calendar and Reminders applications. It extracts the historical and upcoming timeline data that the Foundation Model analyzes to map, predict, and understand the user's initial routine patterns.
-- CoreLocation (The Contextual Sensor): Acts as the sensory trigger, feeding real-time geographical coordinates to the app so the model can determine when a user has arrived at a relevant destination.
-- UserNotifications (The Delivery Pipeline): Because the core utility of an adaptive assistant relies entirely on timely engagement, this framework is critical. UserNotifications is the primary channel used to deliver the final adaptive reminders and request lightweight clarification prompts when the user is on the move.
+- EventKit: This framework is required to sync directly with Apple’s native Calendar and Reminders applications. It extracts the historical and upcoming timeline data that the Foundation Model analyzes to map, predict, and understand the user's initial routine patterns.
+- CoreLocation: Acts as the sensory trigger, feeding real-time geographical coordinates to the app so the model can determine when a user has arrived at a relevant destination.
+- UserNotifications: Because the core utility of an adaptive assistant relies entirely on timely engagement, this framework is critical. UserNotifications is the primary channel used to deliver the final adaptive reminders and request lightweight clarification prompts when the user is on the move.
 
 ### About accessibility and localization
 We focus on users with ADHD or executive dysfunction. The app targets "micro-habits"—small, vital routines frequently missed due to cognitive fatigue. By automating adaptive, non-intrusive timing, we reduce the mental friction caused by standard, rigid reminder apps.
