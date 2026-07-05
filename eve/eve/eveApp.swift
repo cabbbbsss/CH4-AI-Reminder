@@ -1,32 +1,25 @@
 //
-//  eveApp.swift
-//  eve
+//  EveApp.swift
+//  Eve
 //
-//  Created by Ketut Agus Cahyadi Nanda on 03/07/26.
+//  Created by cabsss on 05/07/26.
 //
 
 import SwiftUI
 import SwiftData
 
 @main
-struct eveApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
-
+struct EveApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
-        .modelContainer(sharedModelContainer)
+        .modelContainer(for: [
+            UserProfile.self,
+            UserEvent.self,
+            LearnedRoutine.self,
+            QuestionAnswer.self,
+            ReminderHistory.self
+        ])
     }
 }
