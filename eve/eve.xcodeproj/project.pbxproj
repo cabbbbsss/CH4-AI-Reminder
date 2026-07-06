@@ -10,9 +10,22 @@
 		B47008E12FF79D710071F6A5 /* eve.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = eve.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		B47009262FF7AA2B0071F6A5 /* Exceptions for "eve" folder in "eve" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B47008E02FF79D710071F6A5 /* eve */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B47008E32FF79D710071F6A5 /* eve */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B47009262FF7AA2B0071F6A5 /* Exceptions for "eve" folder in "eve" target */,
+			);
 			path = eve;
 			sourceTree = "<group>";
 		};
@@ -256,6 +269,11 @@
 				DEVELOPMENT_TEAM = QN85YCBSHX;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = eve/Info.plist;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Aplikasi ini membutuhkan akses kalender penuh untuk menampilkan dan mengelola jadwal acara Anda.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We use your location to update your city details even when the app is in the background.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location to show your current neighborhood and city on your dashboard.";
+				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Aplikasi ini membutuhkan akses kalender penuh untuk menampilkan dan mengelola jadwal acara Anda.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -288,6 +306,11 @@
 				DEVELOPMENT_TEAM = QN85YCBSHX;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = eve/Info.plist;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Aplikasi ini membutuhkan akses kalender penuh untuk menampilkan dan mengelola jadwal acara Anda.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We use your location to update your city details even when the app is in the background.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location to show your current neighborhood and city on your dashboard.";
+				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Aplikasi ini membutuhkan akses kalender penuh untuk menampilkan dan mengelola jadwal acara Anda.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
