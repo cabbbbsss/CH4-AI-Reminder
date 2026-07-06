@@ -1,8 +1,8 @@
 //
-//  eveApp.swift
-//  eve
+//  EveApp.swift
+//  Eve
 //
-//  Created by Ketut Agus Cahyadi Nanda on 03/07/26.
+//  Created by cabsss on 05/07/26.
 //
 
 import SwiftUI
