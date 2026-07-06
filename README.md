@@ -8,7 +8,7 @@
 - Nanda
 
 ## 2. Starting Assumption
-Going into this project, our primary assumption was that CoreML would be the foundational framework of our entire development stack. We believed that no matter what kind of AI application we designed, CoreML was universally required under the hood to act as the primary pipeline connecting raw AI models to native Swift code.
+Going into this project, our primary assumption was that CoreML would be the foundational framework of our entire development stack. We believed that no matter what kind of AI application we designed, CoreML was universally required under the hood to act as the primary pipeline connecting any AI models to native Swift code.
 
 ## 3. The Exploration Log
 
