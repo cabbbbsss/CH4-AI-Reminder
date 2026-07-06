@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		B47008E12FF79D710071F6A5 /* eve.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = eve.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0ADE82342FFA944B004E094F /* Eve.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Eve.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -21,18 +21,22 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		B47008E32FF79D710071F6A5 /* eve */ = {
+		0ADE82362FFA944B004E094F /* Eve */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+<<<<<<< HEAD
 			exceptions = (
 				B47009262FF7AA2B0071F6A5 /* Exceptions for "eve" folder in "eve" target */,
 			);
 			path = eve;
+=======
+			path = Eve;
+>>>>>>> 90135782069c15d574d903c3e5f9e1f79130be05
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		B47008DE2FF79D710071F6A5 /* Frameworks */ = {
+		0ADE82312FFA944B004E094F /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -42,18 +46,18 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		B47008D82FF79D710071F6A5 = {
+		0ADE822B2FFA944B004E094F = {
 			isa = PBXGroup;
 			children = (
-				B47008E32FF79D710071F6A5 /* eve */,
-				B47008E22FF79D710071F6A5 /* Products */,
+				0ADE82362FFA944B004E094F /* Eve */,
+				0ADE82352FFA944B004E094F /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		B47008E22FF79D710071F6A5 /* Products */ = {
+		0ADE82352FFA944B004E094F /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				B47008E12FF79D710071F6A5 /* eve.app */,
+				0ADE82342FFA944B004E094F /* Eve.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -61,64 +65,64 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		B47008E02FF79D710071F6A5 /* eve */ = {
+		0ADE82332FFA944B004E094F /* Eve */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = B47008EE2FF79D720071F6A5 /* Build configuration list for PBXNativeTarget "eve" */;
+			buildConfigurationList = 0ADE823F2FFA944B004E094F /* Build configuration list for PBXNativeTarget "Eve" */;
 			buildPhases = (
-				B47008DD2FF79D710071F6A5 /* Sources */,
-				B47008DE2FF79D710071F6A5 /* Frameworks */,
-				B47008DF2FF79D710071F6A5 /* Resources */,
+				0ADE82302FFA944B004E094F /* Sources */,
+				0ADE82312FFA944B004E094F /* Frameworks */,
+				0ADE82322FFA944B004E094F /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				B47008E32FF79D710071F6A5 /* eve */,
+				0ADE82362FFA944B004E094F /* Eve */,
 			);
-			name = eve;
+			name = Eve;
 			packageProductDependencies = (
 			);
-			productName = eve;
-			productReference = B47008E12FF79D710071F6A5 /* eve.app */;
+			productName = Eve;
+			productReference = 0ADE82342FFA944B004E094F /* Eve.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		B47008D92FF79D710071F6A5 /* Project object */ = {
+		0ADE822C2FFA944B004E094F /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2660;
-				LastUpgradeCheck = 2660;
+				LastSwiftUpdateCheck = 2630;
+				LastUpgradeCheck = 2630;
 				TargetAttributes = {
-					B47008E02FF79D710071F6A5 = {
-						CreatedOnToolsVersion = 26.6;
+					0ADE82332FFA944B004E094F = {
+						CreatedOnToolsVersion = 26.3;
 					};
 				};
 			};
-			buildConfigurationList = B47008DC2FF79D710071F6A5 /* Build configuration list for PBXProject "eve" */;
+			buildConfigurationList = 0ADE822F2FFA944B004E094F /* Build configuration list for PBXProject "Eve" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
 			);
-			mainGroup = B47008D82FF79D710071F6A5;
+			mainGroup = 0ADE822B2FFA944B004E094F;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = B47008E22FF79D710071F6A5 /* Products */;
+			productRefGroup = 0ADE82352FFA944B004E094F /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				B47008E02FF79D710071F6A5 /* eve */,
+				0ADE82332FFA944B004E094F /* Eve */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		B47008DF2FF79D710071F6A5 /* Resources */ = {
+		0ADE82322FFA944B004E094F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -128,7 +132,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		B47008DD2FF79D710071F6A5 /* Sources */ = {
+		0ADE82302FFA944B004E094F /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -138,7 +142,7 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		B47008EC2FF79D720071F6A5 /* Debug */ = {
+		0ADE823D2FFA944B004E094F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -173,7 +177,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = QN85YCBSHX;
+				DEVELOPMENT_TEAM = SSJH6446CA;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -191,7 +195,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -202,7 +206,7 @@
 			};
 			name = Debug;
 		};
-		B47008ED2FF79D720071F6A5 /* Release */ = {
+		0ADE823E2FFA944B004E094F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -237,7 +241,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = QN85YCBSHX;
+				DEVELOPMENT_TEAM = SSJH6446CA;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -249,7 +253,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -259,14 +263,14 @@
 			};
 			name = Release;
 		};
-		B47008EF2FF79D720071F6A5 /* Debug */ = {
+		0ADE82402FFA944B004E094F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = QN85YCBSHX;
+				DEVELOPMENT_TEAM = SSJH6446CA;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = eve/Info.plist;
@@ -284,7 +288,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.ch4.eve;
+				PRODUCT_BUNDLE_IDENTIFIER = com.caca.Eve;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -296,14 +300,14 @@
 			};
 			name = Debug;
 		};
-		B47008F02FF79D720071F6A5 /* Release */ = {
+		0ADE82412FFA944B004E094F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = QN85YCBSHX;
+				DEVELOPMENT_TEAM = SSJH6446CA;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = eve/Info.plist;
@@ -321,7 +325,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.ch4.eve;
+				PRODUCT_BUNDLE_IDENTIFIER = com.caca.Eve;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -336,25 +340,25 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		B47008DC2FF79D710071F6A5 /* Build configuration list for PBXProject "eve" */ = {
+		0ADE822F2FFA944B004E094F /* Build configuration list for PBXProject "Eve" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				B47008EC2FF79D720071F6A5 /* Debug */,
-				B47008ED2FF79D720071F6A5 /* Release */,
+				0ADE823D2FFA944B004E094F /* Debug */,
+				0ADE823E2FFA944B004E094F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		B47008EE2FF79D720071F6A5 /* Build configuration list for PBXNativeTarget "eve" */ = {
+		0ADE823F2FFA944B004E094F /* Build configuration list for PBXNativeTarget "Eve" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				B47008EF2FF79D720071F6A5 /* Debug */,
-				B47008F02FF79D720071F6A5 /* Release */,
+				0ADE82402FFA944B004E094F /* Debug */,
+				0ADE82412FFA944B004E094F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = B47008D92FF79D710071F6A5 /* Project object */;
+	rootObject = 0ADE822C2FFA944B004E094F /* Project object */;
 }
