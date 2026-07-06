@@ -31,15 +31,17 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     guard let location = locations.last else { return }
     
     Task {
-      let request = MKReverseGeocodingRequest(location: location)
+      // FIX: Safely unwrap the optional initializer
+      guard let request = MKReverseGeocodingRequest(location: location) else {
+        print("Failed to initialize MKReverseGeocodingRequest")
+        return
+      }
       
       do {
-        // MKReverseGeocodingRequest returns map items directly
         let mapItems = try await request.mapItems
         
         if let firstPlace = mapItems.first {
           await MainActor.run {
-            // mapItem provides descriptive properties (e.g., name, placemark)
             self.currentLocationName = firstPlace.name ?? "Unknown Location"
           }
         }
@@ -48,6 +50,7 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
       }
     }
   }
+
   
   func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) {
     print("Entered region: \(region.identifier)")
