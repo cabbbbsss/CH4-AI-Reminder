@@ -1,35 +1,27 @@
-//
-//  ContentView.swift
-//  Eve
-//
-//  Created by cabsss on 05/07/26.
-//
-
 import SwiftUI
+import SwiftData
 
 struct ContentView: View {
-    var body: some View {
-        VStack {
-            Button("Load Calendar") {
-
-                Task {
-
-                    let service = CalendarService()
-
-                    try? await service.requestAccess()
-
-                    let events = service.fetchTodayEvents()
-
-                    print(events)
-
-                }
-
-            }
+  @AppStorage("onboardingStep") private var currentStep: Int = 0
+  @Bindable private var permissionManager = PermissionManager.shared
+  
+  var body: some View {
+    Group {
+      if permissionManager.hasCompletedOnboarding {
+        HomeView()
+      } else {
+        switch currentStep {
+        case 0:
+          WelcomeView(currentStep: $currentStep)
+        case 1:
+          PermissionView(currentStep: $currentStep)
+        case 2:
+          AILearningView(currentStep: $currentStep)
+        default:
+          HomeView()
         }
-        .padding()
+      }
     }
-}
-
-#Preview {
-    ContentView()
+    .animation(.easeInOut, value: currentStep)
+  }
 }
