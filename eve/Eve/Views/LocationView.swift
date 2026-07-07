@@ -172,5 +172,7 @@ struct LocationCardView: View {
 }
 
 #Preview {
-    LocationView()
+    NavigationStack {
+        LocationView()
+    }
 }

@@ -162,5 +162,7 @@ struct CalendarTimelineRow: View {
 }
 
 #Preview {
-    CalendarView()
+    NavigationStack {
+        CalendarView()
+    }
 }

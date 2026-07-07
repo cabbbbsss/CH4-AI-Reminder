@@ -177,7 +177,7 @@ struct HomeView: View {
                             }
                             .padding(.bottom, 8)
                             
-                            Button(action: {}) {
+                            NavigationLink(destination: InsightView()) {
                                 Text("View Insights")
                                     .font(.system(size: 14, weight: .bold))
                                     .foregroundColor(Color(hex: "#E0ECF7"))
