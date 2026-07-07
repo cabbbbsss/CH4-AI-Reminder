@@ -87,6 +87,9 @@ struct FloatingBubble1: View {
         .frame(width: 76, height: 62)
         .scaleEffect(scale)
     }
+    .frame(width: 76, height: 62)
+    .scaleEffect(scale)
+  }
 }
 
 struct FloatingBubble2: View {
@@ -106,8 +109,11 @@ struct FloatingBubble2: View {
         .frame(width: 76, height: 62)
         .scaleEffect(scale)
     }
+    .frame(width: 76, height: 62)
+    .scaleEffect(scale)
+  }
 }
 
 #Preview {
-    WelcomeView(currentStep: .constant(0))
+  WelcomeView(currentStep: .constant(0))
 }
