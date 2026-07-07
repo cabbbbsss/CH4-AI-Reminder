@@ -16,8 +16,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "0ADE82332FFA944B004E094F"
-               BuildableName = "Eve.app"
-               BlueprintName = "Eve"
+               BuildableName = "eve.app"
+               BlueprintName = "eve"
                ReferencedContainer = "container:eve.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -46,8 +46,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "0ADE82332FFA944B004E094F"
-            BuildableName = "Eve.app"
-            BlueprintName = "Eve"
+            BuildableName = "eve.app"
+            BlueprintName = "eve"
             ReferencedContainer = "container:eve.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -63,8 +63,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "0ADE82332FFA944B004E094F"
-            BuildableName = "Eve.app"
-            BlueprintName = "Eve"
+            BuildableName = "eve.app"
+            BlueprintName = "eve"
             ReferencedContainer = "container:eve.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

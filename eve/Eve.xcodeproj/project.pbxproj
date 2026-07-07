@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		0ADE82342FFA944B004E094F /* Eve.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Eve.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0ADE82342FFA944B004E094F /* eve.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = eve.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -40,7 +40,7 @@
 		0ADE82352FFA944B004E094F /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				0ADE82342FFA944B004E094F /* Eve.app */,
+				0ADE82342FFA944B004E094F /* eve.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,9 +48,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		0ADE82332FFA944B004E094F /* Eve */ = {
+		0ADE82332FFA944B004E094F /* eve */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 0ADE823F2FFA944B004E094F /* Build configuration list for PBXNativeTarget "Eve" */;
+			buildConfigurationList = 0ADE823F2FFA944B004E094F /* Build configuration list for PBXNativeTarget "eve" */;
 			buildPhases = (
 				0ADE82302FFA944B004E094F /* Sources */,
 				0ADE82312FFA944B004E094F /* Frameworks */,
@@ -63,11 +63,11 @@
 			fileSystemSynchronizedGroups = (
 				0ADE82362FFA944B004E094F /* eve */,
 			);
-			name = Eve;
+			name = eve;
 			packageProductDependencies = (
 			);
 			productName = Eve;
-			productReference = 0ADE82342FFA944B004E094F /* Eve.app */;
+			productReference = 0ADE82342FFA944B004E094F /* eve.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -99,7 +99,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				0ADE82332FFA944B004E094F /* Eve */,
+				0ADE82332FFA944B004E094F /* eve */,
 			);
 		};
 /* End PBXProject section */
@@ -322,7 +322,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		0ADE823F2FFA944B004E094F /* Build configuration list for PBXNativeTarget "Eve" */ = {
+		0ADE823F2FFA944B004E094F /* Build configuration list for PBXNativeTarget "eve" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				0ADE82402FFA944B004E094F /* Debug */,
