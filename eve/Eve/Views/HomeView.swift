@@ -123,32 +123,36 @@ struct HomeView: View {
                         
                         HStack(spacing: 16) {
                             // Location Card
-                            VStack(alignment: .leading, spacing: 12) {
-                                Image(systemName: "location.fill")
-                                    .font(.system(size: 24))
-                                    .foregroundColor(Color(hex: "#1D3557"))
-                                Text("Location")
-                                    .font(.system(size: 17, weight: .bold))
-                                    .foregroundColor(Color(hex: "#1D3557"))
+                            NavigationLink(destination: LocationView()) {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Image(systemName: "location.fill")
+                                        .font(.system(size: 24))
+                                        .foregroundColor(Color(hex: "#1D3557"))
+                                    Text("Location")
+                                        .font(.system(size: 17, weight: .bold))
+                                        .foregroundColor(Color(hex: "#1D3557"))
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(20)
+                                .background(Color(hex: "#E8F3FF"))
+                                .cornerRadius(20)
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(20)
-                            .background(Color(hex: "#E8F3FF"))
-                            .cornerRadius(20)
                             
                             // Calendar Card
-                            VStack(alignment: .leading, spacing: 12) {
-                                Image(systemName: "calendar")
-                                    .font(.system(size: 24))
-                                    .foregroundColor(Color(hex: "#1D3557"))
-                                Text("Calendar")
-                                    .font(.system(size: 17, weight: .bold))
-                                    .foregroundColor(Color(hex: "#1D3557"))
+                            NavigationLink(destination: CalendarView()) {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Image(systemName: "calendar")
+                                        .font(.system(size: 24))
+                                        .foregroundColor(Color(hex: "#1D3557"))
+                                    Text("Calendar")
+                                        .font(.system(size: 17, weight: .bold))
+                                        .foregroundColor(Color(hex: "#1D3557"))
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(20)
+                                .background(Color(hex: "#E8F3FF"))
+                                .cornerRadius(20)
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(20)
-                            .background(Color(hex: "#E8F3FF"))
-                            .cornerRadius(20)
                         }
                         .padding(.horizontal, 24)
                         .padding(.top, 16)
