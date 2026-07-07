@@ -155,3 +155,7 @@ struct PermissionRow: View {
         .cornerRadius(20)
     }
 }
+
+#Preview {
+    PermissionView(currentStep: .constant(1))
+}

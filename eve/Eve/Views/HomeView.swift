@@ -248,3 +248,7 @@ struct TimelineItem: View {
     }
 }
 
+#Preview {
+    HomeView()
+}
+

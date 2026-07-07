@@ -81,3 +81,7 @@ struct PatternRow: View {
     return .red
   }
 }
+
+#Preview {
+    AITransparencyView()
+}

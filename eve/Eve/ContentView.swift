@@ -25,3 +25,7 @@ struct ContentView: View {
     .animation(.easeInOut, value: currentStep)
   }
 }
+
+#Preview {
+    ContentView()
+}

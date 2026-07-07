@@ -61,3 +61,7 @@ struct AILearningView: View {
     }
   }
 }
+
+#Preview {
+    AILearningView(currentStep: .constant(2))
+}

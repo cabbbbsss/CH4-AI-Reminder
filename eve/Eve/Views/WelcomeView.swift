@@ -83,3 +83,7 @@ struct FloatingBubble: View {
         .scaleEffect(scale)
     }
 }
+
+#Preview {
+    WelcomeView(currentStep: .constant(0))
+}
