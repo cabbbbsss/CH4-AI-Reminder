@@ -6,47 +6,41 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct ContentView: View {
-    
-    private let calendarService = CalendarService()
-    
-    @Environment(\.modelContext)
-    private var modelContext
-    
+
     var body: some View {
-        VStack {
-            Button("Load Calendar") {
+        TabView {
 
-                Task {
-
-                    try? await calendarService.requestAccess()
-
-                    let events = calendarService.fetchTodayEvents()
-
-                    print(events)
-
-                }
-
+            Tab("Today", systemImage: "sun.max") {
+                TodayView()
             }
-            
-            Button("Save Test Event") {
 
-                let manager = RoutineLearningManager(
-                    context: modelContext
-                )
-
-                try? manager.saveEvent(
-                    type: .locationArrival,
-                    value: "Office"
-                )
-
+            Tab("Insights", systemImage: "brain") {
+                InsightsView()
             }
+
+            Tab("History", systemImage: "clock") {
+                HistoryView()
+            }
+
         }
-        .padding()
     }
+
 }
 
 #Preview {
     ContentView()
+        .modelContainer(
+            for: [
+                UserProfile.self,
+                AIInsight.self,
+                HistoryItem.self,
+                QuestionAnswer.self,
+                CalendarEvent.self,
+                ReminderItem.self
+            ],
+            inMemory: true
+        )
 }

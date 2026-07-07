@@ -9,80 +9,54 @@ import Foundation
 import EventKit
 
 final class CalendarService {
+
     private let eventStore: EKEventStore
 
-    init() {
-        self.eventStore = EKEventStore()
+    init(eventStore: EKEventStore = EKEventStore()) {
+        self.eventStore = eventStore
     }
 
-    func requestAccess() async throws {
+    /// Returns false if the user denied access (EventKit does not throw on denial).
+    @discardableResult
+    func requestAccess() async throws -> Bool {
         try await eventStore.requestFullAccessToEvents()
-        
     }
-    
-    func fetchTodayEvents() -> [CalendarEvent] {
-        
+
+    /// Fetches events in a window around now (default: 33 days back, 33 days ahead).
+    func fetchEvents(
+        daysBefore: Int = 33,
+        daysAfter: Int = 33
+    ) -> [CalendarEvent] {
+
         let calendars = eventStore.calendars(for: .event)
-        
-        let start = Calendar.current.startOfDay(for: Date())
-        
+
+        let now = Date()
+
+        // Two steps: shift back N days, then snap to midnight.
+        let start = Calendar.current.startOfDay(
+            for: Calendar.current.date(
+                byAdding: .day,
+                value: -daysBefore,
+                to: now
+            )!
+        )
+
+        // Anchored to now, not to start — otherwise the
+        // window would end today instead of N days ahead.
         let end = Calendar.current.date(
             byAdding: .day,
-            value: 1,
-            to: start
+            value: daysAfter,
+            to: now
         )!
-        
+
         let predicate = eventStore.predicateForEvents(
             withStart: start,
             end: end,
             calendars: calendars
         )
-        
+
         return eventStore.events(matching: predicate)
-            .map{
-                CalendarEvent(
-                    title: $0.title,
-                    startDate: $0.startDate,
-                    endDate: $0.endDate
-                )
-            }
+            .map { CalendarEvent(event: $0) }
     }
-    
-    func requestReminderAccess() async throws {
-        try await eventStore.requestFullAccessToReminders()
-    }
-    
-    func fetchIncompleteReminders() async -> [ReminderItem] {
 
-        await withCheckedContinuation { continuation in
-
-            let predicate = eventStore.predicateForIncompleteReminders(
-                withDueDateStarting: nil,
-                ending: nil,
-                calendars: nil
-            )
-
-            eventStore.fetchReminders(
-                matching: predicate
-            ) { reminders in
-
-                let items = reminders?.map {
-
-                    ReminderItem(
-
-                        title: $0.title,
-
-                        dueDate: $0.dueDateComponents?.date
-
-                    )
-
-                } ?? []
-
-                continuation.resume(returning: items)
-
-            }
-
-        }
-
-    }
 }

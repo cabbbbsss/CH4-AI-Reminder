@@ -16,10 +16,11 @@ struct EveApp: App {
         }
         .modelContainer(for: [
             UserProfile.self,
-            UserEvent.self,
-            LearnedRoutine.self,
+            AIInsight.self,
+            HistoryItem.self,
             QuestionAnswer.self,
-            ReminderHistory.self
+            CalendarEvent.self,
+            ReminderItem.self
         ])
     }
 }
