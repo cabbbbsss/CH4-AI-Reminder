@@ -7,14 +7,13 @@
 
 import Foundation
 import CoreLocation
+import MapKit
 
 /// Bridges Core Location's delegate callbacks into async/await:
 /// one-shot questions use continuations, ongoing monitoring uses AsyncStream.
 final class LocationService: NSObject, CLLocationManagerDelegate {
 
     private let manager = CLLocationManager()
-
-    private let geocoder = CLGeocoder()
 
     private var authContinuation: CheckedContinuation<CLAuthorizationStatus, Never>?
 
@@ -82,13 +81,16 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     }
 
     /// Turns raw coordinates into a human-readable place name.
+    /// Uses MapKit's reverse-geocoding request (CLGeocoder is deprecated in iOS 26).
     func placeName(for location: CLLocation) async -> String? {
 
-        let placemark = try? await geocoder
-            .reverseGeocodeLocation(location)
-            .first
+        guard let request = MKReverseGeocodingRequest(location: location) else {
+            return nil
+        }
 
-        return placemark?.name ?? placemark?.locality
+        let mapItems = try? await request.mapItems
+
+        return mapItems?.first?.name
 
     }
 

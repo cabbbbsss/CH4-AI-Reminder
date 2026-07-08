@@ -74,11 +74,29 @@ struct AILearningView: View {
       : "EVE is ingesting\nyour data..."
   }
 
+  /// The "Allow" action on the paused card.
+  ///
+  /// Apple Intelligence itself can only be switched on in the iOS Settings
+  /// app — no in-app toggle can enable the OS feature. So we (1) record the
+  /// user's consent to let EVE learn via AI, then (2) send them to Settings.
+  /// Re-collection happens automatically on return (see `.onChange(scenePhase)`).
+  private func handleAllowTapped() {
+    PermissionManager.shared.enableAI()
+
+    if let url = URL(string: UIApplication.openSettingsURLString) {
+      openURL(url)
+    }
+  }
+
+  /// Checks Apple Intelligence availability and, if ready, runs the real
+  /// data-collection pass exactly once. Called on first appear AND every
+  /// time the app returns to the foreground — so enabling Apple Intelligence
+  /// in Settings and coming back re-triggers collection on its own.
   private func startIfPossible() async {
 
     aiMissing = !engine.isAppleIntelligenceAvailable
 
-    guard !aiMissing, !hasStartedAnalysis else { return }
+    guard !aiMissing, !hasStartedAnalysis, !engine.isAnalyzing else { return }
 
     hasStartedAnalysis = true
 
@@ -220,9 +238,7 @@ struct AILearningView: View {
       .foregroundColor(Color(hex: "#1D3557"))
 
       Button {
-        if let url = URL(string: UIApplication.openSettingsURLString) {
-          openURL(url)
-        }
+        handleAllowTapped()
       } label: {
         Text("Allow")
           .font(.system(size: 14, weight: .bold))
@@ -246,12 +262,12 @@ struct AILearningView: View {
 
   private var continueButton: some View {
     Button {
-      PermissionManager.shared.completeOnboarding()
+      // Onboarding isn't finished yet — go to the questions step.
       withAnimation {
-        currentStep = 3 // Go to Home
+        currentStep = 3
       }
     } label: {
-      Text("Continue to Home")
+      Text("Continue")
         .font(.system(size: 17, weight: .bold))
         .foregroundColor(Color(hex: "#1D3557"))
         .frame(maxWidth: .infinity)

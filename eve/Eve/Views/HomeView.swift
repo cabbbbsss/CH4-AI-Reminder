@@ -289,6 +289,10 @@ struct HomeView: View {
             let vm = TodayViewModel(context: modelContext)
             viewModel = vm
             await vm.start()
+
+            // Populate the suggestion bubble with a real reminder on first
+            // appear — silently, so opening Home doesn't fire a notification.
+            await vm.assistant.generateInitialInsights(currentPlace: vm.location.currentPlace)
         }
     }
 

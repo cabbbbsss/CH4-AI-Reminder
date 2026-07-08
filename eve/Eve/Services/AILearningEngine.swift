@@ -30,6 +30,25 @@ final class AILearningEngine {
   /// Steps that have finished, in order — drives the streaming log UI.
   var completedTasks: [String] = []
 
+  /// Questions the onboarding questions screen will ask, produced by the
+  /// model at the end of the learning pass (falls back to a default set).
+  var onboardingQuestions: [OnboardingQuestion] = []
+
+  /// The place detected during the learning pass, reused when the
+  /// questions screen refines insights at the end of onboarding.
+  private(set) var lastKnownPlace: String?
+
+  /// A safe default set used when the model can't generate questions.
+  private var fallbackQuestions: [OnboardingQuestion] {
+    [
+      OnboardingQuestion(question: "Do you take any medication on a regular schedule?", category: "health"),
+      OnboardingQuestion(question: "Do you have a pet that needs regular care?", category: "pet"),
+      OnboardingQuestion(question: "Do you commute to a workplace on weekdays?", category: "commute"),
+      OnboardingQuestion(question: "Do you exercise or go to the gym regularly?", category: "routine"),
+      OnboardingQuestion(question: "Would you like reminders before you leave home?", category: "preference")
+    ]
+  }
+
   func analyzeUserRoutines(context: ModelContext?) async {
 
     isAnalyzing = true
@@ -60,17 +79,24 @@ final class AILearningEngine {
     }
 
     // 2. Establish where the user is right now.
-    await runStep("Detecting your location…", progress: 0.55) {
+    await runStep("Detecting your location…", progress: 0.5) {
       await location.start()
     }
 
+    lastKnownPlace = location.currentPlace
+
     // 3. Let the Foundation Model summarise first insights (no notification).
-    await runStep("Learning your routines…", progress: 0.85) {
+    await runStep("Learning your routines…", progress: 0.75) {
       await assistant.generateInitialInsights(currentPlace: location.currentPlace)
     }
 
-    // 4. Settle.
-    await runStep("Generating contextual insights…", progress: 1.0) {}
+    // 4. Prepare personalised questions for the final onboarding step.
+    await runStep("Preparing a few questions…", progress: 1.0) {
+      let generated = await assistant.onboardingQuestions(
+        currentPlace: location.currentPlace
+      )
+      self.onboardingQuestions = generated.isEmpty ? self.fallbackQuestions : generated
+    }
   }
 
   /// Marks a step active, awaits its work, then marks it complete —
