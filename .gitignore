@@ -1,0 +1,29 @@
+# Xcode
+build/
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Xcode per-user state
+xcuserdata/
+*.xcuserdatad
+*.xcuserstate
+project.xcworkspace/
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcworkspace/contents.xcworkspacedata
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# macOS / OS X
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon_
+._*
+.Spotlight-V100
+.Trashes
