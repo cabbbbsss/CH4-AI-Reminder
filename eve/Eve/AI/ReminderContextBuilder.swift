@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftData
+import NaturalLanguage
 
 /// The only component allowed to gather information for the AI.
 /// Reads the SwiftData mirror (kept fresh by EventKitSyncManager)
@@ -24,7 +25,7 @@ final class ReminderContextBuilder {
 
         ReminderContext(
             currentDate: .now,
-            currentPlace: currentPlace,
+            currentPlace: currentPlace.flatMap(englishOrNil),
             upcomingEvents: upcomingEvents(),
             pendingReminders: pendingReminders(),
             insights: insights(),
@@ -32,6 +33,43 @@ final class ReminderContextBuilder {
             answeredQuestions: answeredQuestions()
         )
 
+    }
+
+    // MARK: - Language safety
+    //
+    // The on-device Foundation Model runs language identification on the
+    // whole prompt and throws "Unsupported language id detected" when
+    // non-English content dominates. User data (holiday calendars,
+    // localized place names, Indonesian reminder titles, and older records
+    // synced before locale fixes) can carry that content into the prompt.
+    //
+    // Rather than chase every source, we filter here — the single chokepoint
+    // where all context is assembled — dropping any line confidently
+    // detected as a non-English language. This is resilient to stale data
+    // already in the store, so no reinstall is needed.
+
+    private let recognizer = NLLanguageRecognizer()
+
+    /// Keeps only lines that are English or too short/ambiguous to classify.
+    private func englishOnly(_ lines: [String]) -> [String] {
+        lines.filter { isEnglishSafe($0) }
+    }
+
+    /// Returns the string if it is safe to feed the model, else nil.
+    private func englishOrNil(_ text: String) -> String? {
+        isEnglishSafe(text) ? text : nil
+    }
+
+    /// True when the dominant language is English, or when the recognizer
+    /// can't confidently identify a language (short strings, proper nouns,
+    /// dates) — in which case it won't tip the prompt's overall detection.
+    private func isEnglishSafe(_ text: String) -> Bool {
+        recognizer.reset()
+        recognizer.processString(text)
+        guard let language = recognizer.dominantLanguage else {
+            return true
+        }
+        return language == .english
     }
 
     // MARK: - Gathering
@@ -48,9 +86,9 @@ final class ReminderContextBuilder {
 
         let events = (try? context.fetch(descriptor)) ?? []
 
-        return events.map {
+        return englishOnly(events.map {
             "\($0.title) — \($0.startDate.formatted(date: .abbreviated, time: .shortened))"
-        }
+        })
 
     }
 
@@ -60,7 +98,7 @@ final class ReminderContextBuilder {
 
         let reminders = (try? context.fetch(descriptor)) ?? []
 
-        return reminders
+        return englishOnly(reminders
             .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
             .prefix(limit)
             .map { reminder in
@@ -71,7 +109,7 @@ final class ReminderContextBuilder {
 
                 return "\(reminder.title) — no due date"
 
-            }
+            })
 
     }
 
@@ -83,7 +121,7 @@ final class ReminderContextBuilder {
 
         let insights = (try? context.fetch(descriptor)) ?? []
 
-        return insights.map { insight in
+        return englishOnly(insights.map { insight in
 
             let confidence = Int(insight.confidence * 100)
 
@@ -93,7 +131,7 @@ final class ReminderContextBuilder {
 
             return "[\(insight.category.rawValue)] \(insight.title): \(insight.value) (\(origin))"
 
-        }
+        })
 
     }
 
@@ -106,9 +144,9 @@ final class ReminderContextBuilder {
 
         let items = (try? context.fetch(descriptor)) ?? []
 
-        return items.map {
+        return englishOnly(items.map {
             "\($0.timestamp.formatted(date: .abbreviated, time: .shortened)) — \($0.title)"
-        }
+        })
 
     }
 
@@ -121,9 +159,9 @@ final class ReminderContextBuilder {
 
         let answers = (try? context.fetch(descriptor)) ?? []
 
-        return answers.map {
+        return englishOnly(answers.map {
             "Q: \($0.question) — A: \($0.answer)"
-        }
+        })
 
     }
 

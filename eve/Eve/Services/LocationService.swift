@@ -82,10 +82,17 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     }
 
     /// Turns raw coordinates into a human-readable place name.
+    ///
+    /// Reverse geocoding otherwise returns names in the *local* language of
+    /// wherever the coordinates are, regardless of the device's UI language —
+    /// e.g. Indonesian street/locality names even on an English-language
+    /// device. That breaks the on-device Foundation Model, which rejects
+    /// non-English input. Forcing an English locale here keeps the place
+    /// name in a language the model can actually process.
     func placeName(for location: CLLocation) async -> String? {
 
         let placemark = try? await geocoder
-            .reverseGeocodeLocation(location)
+            .reverseGeocodeLocation(location, preferredLocale: Locale(identifier: "en_US"))
             .first
 
         return placemark?.name ?? placemark?.locality

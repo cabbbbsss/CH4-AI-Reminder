@@ -28,7 +28,12 @@ final class CalendarService {
         daysAfter: Int = 33
     ) -> [CalendarEvent] {
 
+        // Exclude read-only system calendars (Holidays, Birthdays): they're
+        // auto-populated in the device's regional language regardless of
+        // the app's own language settings, which breaks the on-device
+        // model's language check when their titles end up in the AI prompt.
         let calendars = eventStore.calendars(for: .event)
+            .filter(\.allowsContentModifications)
 
         let now = Date()
 

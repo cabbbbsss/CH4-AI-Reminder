@@ -20,12 +20,17 @@ final class ReminderItem {
 
     var notes: String?
 
+    /// The reminder's location text, if any (EKCalendarItem.location).
+    /// Display-only.
+    var location: String?
+
     init(reminder: EKReminder) {
 
         self.reminderIdentifier = reminder.calendarItemIdentifier
         self.title = reminder.title
         self.dueDate = reminder.dueDateComponents?.date
         self.notes = reminder.notes
+        self.location = reminder.location
 
     }
 

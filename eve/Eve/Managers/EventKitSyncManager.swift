@@ -164,12 +164,14 @@ final class EventKitSyncManager {
                 if current.title != event.title
                     || current.startDate != event.startDate
                     || current.endDate != event.endDate
-                    || current.notes != event.notes {
+                    || current.notes != event.notes
+                    || current.location != event.location {
 
                     current.title = event.title
                     current.startDate = event.startDate
                     current.endDate = event.endDate
                     current.notes = event.notes
+                    current.location = event.location
 
                     updated += 1
 
@@ -216,11 +218,13 @@ final class EventKitSyncManager {
 
                 if current.title != reminder.title
                     || current.dueDate != reminder.dueDate
-                    || current.notes != reminder.notes {
+                    || current.notes != reminder.notes
+                    || current.location != reminder.location {
 
                     current.title = reminder.title
                     current.dueDate = reminder.dueDate
                     current.notes = reminder.notes
+                    current.location = reminder.location
 
                     updated += 1
 

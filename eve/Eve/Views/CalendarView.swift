@@ -1,8 +1,74 @@
 import SwiftUI
+import SwiftData
+
+/// A single row on the timeline: either an on-the-hour tick mark
+/// or a real event, merged and sorted by their actual time.
+private enum CalendarTimelineEntry: Identifiable {
+    case hour(Date)
+    case event(CalendarEvent)
+
+    var id: String {
+        switch self {
+        case .hour(let date): return "hour-\(date.timeIntervalSince1970)"
+        case .event(let event): return "event-\(event.occurrenceID)"
+        }
+    }
+
+    var sortDate: Date {
+        switch self {
+        case .hour(let date): return date
+        case .event(let event): return event.startDate
+        }
+    }
+}
 
 struct CalendarView: View {
     @Environment(\.dismiss) var dismiss
-    
+    @Query(sort: \CalendarEvent.startDate) private var events: [CalendarEvent]
+
+    private var selectedDate: Date { .now }
+
+    private var todaysEvents: [CalendarEvent] {
+        events.filter { Calendar.current.isDate($0.startDate, inSameDayAs: selectedDate) }
+    }
+
+    private var dateHeaderText: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, d MMMM yyyy"
+        let formatted = formatter.string(from: selectedDate)
+        return Calendar.current.isDateInToday(selectedDate) ? "Today\n\(formatted)" : formatted
+    }
+
+    private var timelineEntries: [CalendarTimelineEntry] {
+
+        guard let first = todaysEvents.first, let last = todaysEvents.last else { return [] }
+
+        let calendar = Calendar.current
+
+        let startHour = calendar.date(
+            bySettingHour: calendar.component(.hour, from: first.startDate),
+            minute: 0, second: 0, of: first.startDate
+        ) ?? first.startDate
+
+        let endHour = calendar.date(
+            bySettingHour: calendar.component(.hour, from: last.startDate),
+            minute: 0, second: 0, of: last.startDate
+        ) ?? last.startDate
+
+        var entries: [CalendarTimelineEntry] = []
+        var cursor = startHour
+
+        while cursor <= endHour {
+            entries.append(.hour(cursor))
+            cursor = calendar.date(byAdding: .hour, value: 1, to: cursor) ?? endHour.addingTimeInterval(3600)
+        }
+
+        entries.append(contentsOf: todaysEvents.map { .event($0) })
+
+        return entries.sorted { $0.sortDate < $1.sortDate }
+
+    }
+
     var body: some View {
         ZStack {
             Color(hex: "#4F83AB").ignoresSafeArea()
@@ -56,7 +122,7 @@ struct CalendarView: View {
                 // Calendar section title
                 HStack {
                     Spacer()
-                    Text("Today\nFriday, 5 July 2026")
+                    Text(dateHeaderText)
                         .font(.system(size: 32, weight: .black, design: .default))
                         .foregroundColor(Color(hex: "#90B9DCCC"))
                         .multilineTextAlignment(.center)
@@ -64,26 +130,42 @@ struct CalendarView: View {
                     Spacer()
                 }
                 .padding(.horizontal, 24)
-                
+
                 Spacer().frame(height: 32)
-                
+
                 // Timeline Container
                 ZStack(alignment: .top) {
                     Color(hex: "#1D3557")
                         .cornerRadius(32, corners: [.topLeft, .topRight])
                         .ignoresSafeArea(edges: .bottom)
-                    
-                    ScrollView(showsIndicators: false) {
-                        VStack(spacing: 0) {
-                            Spacer().frame(height: 30)
-                            CalendarTimelineRow(time: "8.00 AM", isMainTime: true)
-                            CalendarTimelineRow(time: "8.30 AM", title: "Go to the Office", subtitle: "Usually takes 20 minutes", isMainTime: false)
-                            CalendarTimelineRow(time: "9.00 AM", isMainTime: true)
-                            CalendarTimelineRow(time: "9.10 AM", title: "Meeting with Eve", subtitle: "Prepare charger", isMainTime: false, isImportant: true)
-                            CalendarTimelineRow(time: "10.00 AM", isMainTime: true)
-                            CalendarTimelineRow(time: "10.25 AM", title: "WFC in Max & Nine", subtitle: "Prepare earphones", isMainTime: false)
-                            CalendarTimelineRow(time: "11.00 AM", isMainTime: true)
-                            Spacer().frame(height: 40)
+
+                    if todaysEvents.isEmpty {
+                        Text("No events synced for today.")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(Color(hex: "#7AA0C3"))
+                            .padding(.top, 40)
+                    } else {
+                        ScrollView(showsIndicators: false) {
+                            VStack(spacing: 0) {
+                                Spacer().frame(height: 30)
+                                ForEach(timelineEntries) { entry in
+                                    switch entry {
+                                    case .hour(let date):
+                                        CalendarTimelineRow(
+                                            time: date.formatted(date: .omitted, time: .shortened),
+                                            isMainTime: true
+                                        )
+                                    case .event(let event):
+                                        CalendarTimelineRow(
+                                            time: event.startDate.formatted(date: .omitted, time: .shortened),
+                                            title: event.title,
+                                            subtitle: event.location ?? event.notes,
+                                            isMainTime: false
+                                        )
+                                    }
+                                }
+                                Spacer().frame(height: 40)
+                            }
                         }
                     }
                 }
@@ -165,4 +247,5 @@ struct CalendarTimelineRow: View {
     NavigationStack {
         CalendarView()
     }
+    .modelContainer(for: CalendarEvent.self, inMemory: true)
 }

@@ -73,12 +73,22 @@ struct HomeView: View {
 
     /// The AI suggestion bubble text: Eve's latest decision if it has
     /// one, otherwise a friendly prompt to tap and ask.
+    ///
+    /// Distinguishes "haven't asked yet" from "asked, nothing needed" and
+    /// "asked, it failed" — otherwise a successful-but-quiet decision and a
+    /// silent failure both look identical to the untapped state, making it
+    /// impossible to tell whether tapping did anything at all.
     private var suggestionText: String {
         if viewModel?.assistant.isThinking == true {
             return "Thinking about your day…"
         }
-        if let decision = viewModel?.assistant.lastDecision, decision.shouldNotify {
-            return decision.body
+        if let error = viewModel?.assistant.errorMessage {
+            return "Something went wrong: \(error)"
+        }
+        if let decision = viewModel?.assistant.lastDecision {
+            return decision.shouldNotify
+                ? decision.body
+                : "Nothing urgent right now — I'll let you know if something comes up."
         }
         return "Tap me anytime and I'll look at your day and suggest what matters."
     }
@@ -136,11 +146,11 @@ struct HomeView: View {
                         }
                         .padding(.top, 20)
 
-                        // AI Suggestion Bubble — tap Eve to run one assistant cycle.
-                        HStack(alignment: .top, spacing: 10) {
-                            Button {
-                                Task { await viewModel?.askEve() }
-                            } label: {
+                        // AI Suggestion Bubble — tap anywhere here (avatar or bubble) to run one assistant cycle.
+                        Button {
+                            Task { await viewModel?.askEve() }
+                        } label: {
+                            HStack(alignment: .top, spacing: 10) {
                                 ZStack {
                                     Image("Avatar")
                                         .resizable()
@@ -152,21 +162,21 @@ struct HomeView: View {
                                             .tint(.white)
                                     }
                                 }
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(viewModel == nil || viewModel?.assistant.isThinking == true)
 
-                            VStack(alignment: .leading) {
-                                Text(suggestionText)
-                                    .font(.system(size: 15, weight: .medium))
-                                    .foregroundColor(.black)
-                                    .fixedSize(horizontal: false, vertical: true)
+                                VStack(alignment: .leading) {
+                                    Text(suggestionText)
+                                        .font(.system(size: 15, weight: .medium))
+                                        .foregroundColor(.black)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .padding(16)
+                                .background(Color(hex: "#C4D7EA"))
+                                .cornerRadius(20, corners: [.topRight, .bottomLeft, .bottomRight])
+                                .cornerRadius(4, corners: [.topLeft])
                             }
-                            .padding(16)
-                            .background(Color(hex: "#C4D7EA"))
-                            .cornerRadius(20, corners: [.topRight, .bottomLeft, .bottomRight])
-                            .cornerRadius(4, corners: [.topLeft])
                         }
+                        .buttonStyle(.plain)
+                        .disabled(viewModel == nil || viewModel?.assistant.isThinking == true)
                         .padding(.horizontal, 24)
                         .padding(.top, 20)
                         .animation(.easeInOut, value: suggestionText)

@@ -27,6 +27,11 @@ final class CalendarEvent {
 
     var notes: String?
 
+    /// The event's location text, if any (EKEvent.location). Display-only —
+    /// deliberately NOT included in the AI prompt, since venue names are
+    /// often non-English and would trip the on-device model's language check.
+    var location: String?
+
     init(event: EKEvent) {
 
         let identifier = event.eventIdentifier ?? UUID().uuidString
@@ -37,6 +42,7 @@ final class CalendarEvent {
         self.startDate = event.startDate
         self.endDate = event.endDate
         self.notes = event.notes
+        self.location = event.location
 
     }
 
