@@ -6,11 +6,18 @@ struct PermissionView: View {
     
     var body: some View {
         ZStack {
-            Color(hex: "#E0ECF7").ignoresSafeArea()
+            Color(hex: "#1D3557").ignoresSafeArea()
+            
+            Rectangle()
+                .fill(Color.white.opacity(0.8))
+                .frame(width: 800, height: 500)
+                .blur(radius: 150)
+                .position(x: 200, y: 150)
+                .ignoresSafeArea(edges: .all)
             
             VStack(alignment: .leading, spacing: 0) {
                 Text("Enhance \nYour Assistant")
-                    .font(.system(size: 34, weight: .black, design: .default))
+                    .font(.system(size: 30, weight: .bold, design: .default))
                     .foregroundColor(Color(hex: "#1D3557"))
                     .padding(.top, 60)
                     .padding(.horizontal, 24)
@@ -18,14 +25,14 @@ struct PermissionView: View {
                 Text("EVE works by understanding your world to remind you. All data stored on your device, never anywhere else.")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundColor(Color.black.opacity(0.8))
-                    .padding(.top, 16)
+                    .padding(.top, 10)
                     .padding(.horizontal, 24)
                 
                 ScrollView(showsIndicators: false) {
-                    VStack(spacing: 16) {
+                    VStack(spacing: 20) {
                         PermissionRow(
                             icon: "apple.intelligence",
-                            iconColor: Color(hex: "#30D158"),
+                            iconColor: Color(hex: "#368BC8"),
                             title: "Apple Intelligence",
                             description: "EVE builds unique patterns from your data.",
                             isGranted: permissionManager.isAIEnabled
@@ -63,40 +70,33 @@ struct PermissionView: View {
                             Task { await permissionManager.requestCalendar() }
                         }
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.top, 40)
-                    .padding(.bottom, 100) // Space for floating button
+                    .padding(.horizontal, 20)
+                    .padding(.top, 30)
+                    .padding(.bottom, 20) // Space for floating button
                 }
             }
             
             // Floating Next Button
-            VStack {
-                Spacer()
-                HStack {
-                    Spacer()
                     Button {
                         withAnimation {
                             currentStep = 2
                         }
                     } label: {
-                        ZStack {
-                            Circle()
-                                .fill(Color(hex: "#1D3557"))
-                                .frame(width: 56, height: 56)
-                                .shadow(color: .black.opacity(0.2), radius: 10, y: 5)
-                            
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 20, weight: .bold))
-                                .foregroundColor(Color.white.opacity(0.8))
-                        }
+                        Image(systemName: "chevron.right")
+                            .font(.title2)
+                            .foregroundStyle(Color.primary)
+                            .padding(5)
                     }
-                    .padding(.trailing, 24)
-                    .padding(.bottom, 40)
+                    .buttonStyle(.glassProminent)
+                    .clipShape(Circle())
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .padding(30)
                     .disabled(!allPermissionsGranted) // Optional: disable if not all granted? The original design had "Continue" or "Skip". Let's allow skipping by not disabling it.
                 }
             }
-        }
-    }
+        
+
     
     var allPermissionsGranted: Bool {
         permissionManager.isAIEnabled && permissionManager.isLocationGranted && permissionManager.isNotificationsGranted && permissionManager.isCalendarGranted
@@ -116,14 +116,15 @@ struct PermissionRow: View {
             Image(systemName: icon)
                 .font(.system(size: 30))
                 .foregroundColor(iconColor)
-                .frame(width: 40)
+                .frame(width: 30)
             
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(title)
-                    .font(.system(size: 15, weight: .black))
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundColor(Color(hex: "#1D3557"))
+                
                 Text(description)
-                    .font(.system(size: 13, weight: .regular))
+                    .font(.system(size: 14, weight: .regular))
                     .foregroundColor(Color(hex: "#1D3557"))
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -144,7 +145,7 @@ struct PermissionRow: View {
                         .font(.system(size: 13, weight: .bold))
                         .foregroundColor(.white)
                         .padding(.vertical, 8)
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, 10)
                         .background(Color(hex: "#368BC8"))
                         .clipShape(Capsule())
                 }
