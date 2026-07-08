@@ -65,9 +65,10 @@ struct PermissionView: View {
                             iconColor: Color(hex: "#368BC8"),
                             title: "Calendar & Reminders",
                             description: "Learns your schedules to avoid duplicate reminders.",
-                            isGranted: permissionManager.isCalendarGranted
+                            isGranted: permissionManager.isCalendarGranted && permissionManager.isReminderGranted
                         ) {
-                            Task { await permissionManager.requestCalendar() }
+                          Task { await permissionManager.requestCalendar() await permissionManager.requestReminders() }
+                          
                         }
                     }
                     .padding(.horizontal, 20)
