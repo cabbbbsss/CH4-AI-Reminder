@@ -12,15 +12,15 @@ struct SettingsView: View {
                 // Allow EVE to Access
                 SettingsSection(header: "Allow EVE to Access") {
                     SettingsCard {
-                        SettingsNavRow(icon: "sparkles", label: "Apple Intelligence") {
+                        SettingsNavRow(icon: "apple.intelligence", label: "Apple Intelligence") {
                             AppleIntelligenceSettingsView()
                         }
                         SettingsDivider()
-                        SettingsNavRow(icon: "location", label: "Location") {
+                        SettingsNavRow(icon: "location.fill", label: "Location") {
                             LocationSettingsView()
                         }
                         SettingsDivider()
-                        SettingsNavRow(icon: "bell", label: "Notification") {
+                        SettingsNavRow(icon: "bell.badge.fill", label: "Notification") {
                             NotificationSettingsView()
                         }
                     }
@@ -29,7 +29,7 @@ struct SettingsView: View {
                 // Profile
                 SettingsSection(header: "Profile") {
                     SettingsCard {
-                        SettingsValueRow(label: "Name", value: name, trailingIcon: "pencil")
+                        SettingsValueRow(label: "Name", value: $name, trailingIcon: "pencil", isEditable: true)
                         SettingsDivider()
                         SettingsNavRow(label: "Saved Address") {
                             SavedAddressView()
@@ -91,13 +91,15 @@ struct SettingsNavBar: View {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundColor(Color(hex: "#1D3557"))
+                        .frame(width: 30, height: 30)
                 }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
                 Spacer()
             }
             .padding(.horizontal, 24)
         }
-        .frame(height: 44)
-        .padding(.top, 8)
+        .frame(height: 64)
     }
 }
 
@@ -169,10 +171,15 @@ struct SettingsRow: View {
 }
 
 /// A row that displays a value (and optional trailing glyph) instead of a chevron.
+/// When `isEditable` is true, tapping the trailing icon turns the value into an editable text field.
 struct SettingsValueRow: View {
     var label: String
-    var value: String
+    @Binding var value: String
     var trailingIcon: String? = nil
+    var isEditable: Bool = false
+
+    @State private var isEditing = false
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         HStack(spacing: 8) {
@@ -180,13 +187,29 @@ struct SettingsValueRow: View {
                 .font(.system(size: 17))
                 .foregroundColor(Color(hex: "#1D3557"))
             Spacer()
-            Text(value)
-                .font(.system(size: 17))
-                .foregroundColor(Color(hex: "#1D3557").opacity(0.7))
-            if let trailingIcon {
-                Image(systemName: trailingIcon)
-                    .font(.system(size: 15))
+            if isEditing {
+                TextField("", text: $value)
+                    .font(.system(size: 17))
+                    .foregroundColor(Color(hex: "#1D3557"))
+                    .multilineTextAlignment(.trailing)
+                    .focused($isFocused)
+                    .submitLabel(.done)
+                    .onSubmit { isEditing = false }
+            } else {
+                Text(value)
+                    .font(.system(size: 17))
                     .foregroundColor(Color(hex: "#1D3557").opacity(0.7))
+            }
+            if let trailingIcon, isEditable {
+                Button {
+                    isEditing.toggle()
+                    isFocused = isEditing
+                } label: {
+                    Image(systemName: isEditing ? "checkmark" : trailingIcon)
+                        .font(.system(size: 15))
+                        .foregroundColor(Color(hex: "#1D3557").opacity(0.7))
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 18)

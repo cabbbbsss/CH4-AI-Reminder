@@ -23,33 +23,67 @@ struct SavedAddressView: View {
         )
     ]
     @State private var toast: String?
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        SettingsScaffold(title: "Saved Address") {
-            VStack(spacing: 16) {
-                ForEach($addresses) { $item in
-                    AddressCard(
-                        item: item,
-                        onEdit: { showToast("Address updated successfully") },
-                        onDelete: { delete(item) }
-                    )
-                }
+        ZStack {
+            Color(hex: "#E0ECF7").ignoresSafeArea()
 
-                NavigationLink {
-                    AddNewAddressView()
-                } label: {
-                    Label("Add New Address", systemImage: "plus")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(Color(hex: "#E0ECF7"))
-                        .frame(width: 200, height: 40)
-                        .background(Color(hex: "#368BC8"))
-                        .cornerRadius(20)
+            VStack(spacing: 0) {
+                SettingsNavBar(title: "Saved Address") { dismiss() }
+
+                // A native List is required here (not ScrollView/VStack) so `.swipeActions`
+                // gives the real Apple swipe-to-delete/edit gesture: half-swipe reveals
+                // Edit + Delete, full swipe triggers Delete immediately.
+                List {
+                    ForEach($addresses) { $item in
+                        AddressCard(
+                            item: item,
+                            onEdit: { showToast("Address updated successfully") },
+                            onDelete: { delete(item) }
+                        )
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                delete(item)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+
+                            Button {
+                                showToast("Address updated successfully")
+                            } label: {
+                                Label("Edit", systemImage: "pencil")
+                            }
+                            .tint(.blue)
+                        }
+                    }
+
+                    ZStack {
+                        NavigationLink(destination: AddNewAddressView()) { EmptyView() }
+                            .opacity(0)
+                        Label("Add New Address", systemImage: "plus")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(Color(hex: "#E0ECF7"))
+                            .frame(width: 200, height: 40)
+                            .background(Color(hex: "#368BC8"))
+                            .cornerRadius(20)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 8)
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
                 }
-                .buttonStyle(.plain)
-                .padding(.top, 8)
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .listRowSpacing(16)
+                .contentMargins(.top, 20, for: .scrollContent)
             }
-            .padding(.top, 20)
         }
+        .navigationBarHidden(true)
         .overlay(alignment: .bottom) {
             if let toast {
                 SuccessToast(message: toast)
