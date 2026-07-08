@@ -75,6 +75,33 @@ final class AssistantManager {
 
     }
 
+    /// Onboarding pass: learn insights from the freshly-imported context,
+    /// WITHOUT sending a notification (the user hasn't finished setup yet).
+    /// Reuses the same context → model → insights pipeline as `runOnce`.
+    func generateInitialInsights(currentPlace: String?) async {
+
+        isThinking = true
+        errorMessage = nil
+
+        defer { isThinking = false }
+
+        let reminderContext = contextBuilder.build(currentPlace: currentPlace)
+
+        do {
+
+            let decision = try await foundationModel.decide(from: reminderContext)
+
+            lastDecision = decision
+            pendingQuestion = decision.followUpQuestion
+
+            try? insightManager.apply(decision.proposedInsights)
+
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+    }
+
     /// Stores the user's answer to Eve's follow-up question.
     /// It becomes context for every future decision.
     func answerPendingQuestion(with answer: String) {

@@ -1,9 +1,14 @@
 import Foundation
 import SwiftData
-import NaturalLanguage
 import Observation
 import FoundationModels
 
+/// Drives the onboarding "learning" screen.
+///
+/// This runs the REAL pipeline — it imports Calendar & Reminders into
+/// SwiftData, detects the current place, then asks the Foundation Model
+/// to summarise first insights — while exposing streaming progress
+/// (currentAnalysisTask / completedTasks) for AILearningView.
 @Observable
 final class AILearningEngine {
   static let shared = AILearningEngine()
@@ -25,54 +30,59 @@ final class AILearningEngine {
   /// Steps that have finished, in order — drives the streaming log UI.
   var completedTasks: [String] = []
 
-  var predictedActivities: [Prediction] = []
-  var suggestedQuestions: [String] = []
-
   func analyzeUserRoutines(context: ModelContext?) async {
-    let steps: [(task: String, progress: Double)] = [
-      ("Loading Calendar & Reminders History...", 0.25),
-      ("Processing Location Patterns...", 0.5),
-      ("Learning Your Daily Routines...", 0.75),
-      ("Generating Contextual Predictions...", 1.0)
-    ]
 
-    await MainActor.run {
-      self.isAnalyzing = true
-      self.analysisProgress = 0.0
-      self.completedTasks = []
+    isAnalyzing = true
+    analysisProgress = 0.0
+    completedTasks = []
+    currentAnalysisTask = ""
+
+    defer { isAnalyzing = false }
+
+    guard let context else {
+      // No store to learn from — nothing to import. Finish cleanly.
+      analysisProgress = 1.0
+      return
     }
 
-    // Simulating Apple Intelligence Foundation Model processing
-    for step in steps {
-      await MainActor.run {
-        self.currentAnalysisTask = step.task
-      }
+    // The same managers HomeView uses; here they run once, up front.
+    let notifications = NotificationService()
+    let sync = EventKitSyncManager(context: context)
+    let location = LocationActivityManager(context: context)
+    let assistant = AssistantManager(
+      context: context,
+      notificationService: notifications
+    )
 
-      try? await Task.sleep(nanoseconds: 1_500_000_000)
-
-      await MainActor.run {
-        self.analysisProgress = step.progress
-        self.completedTasks.append(step.task)
-      }
+    // 1. Pull the user's real Calendar & Reminders into SwiftData.
+    await runStep("Importing your Calendar & Reminders…", progress: 0.3) {
+      await sync.start()
     }
 
-    await MainActor.run {
-      self.generateMockPredictions()
-      self.isAnalyzing = false
+    // 2. Establish where the user is right now.
+    await runStep("Detecting your location…", progress: 0.55) {
+      await location.start()
     }
+
+    // 3. Let the Foundation Model summarise first insights (no notification).
+    await runStep("Learning your routines…", progress: 0.85) {
+      await assistant.generateInitialInsights(currentPlace: location.currentPlace)
+    }
+
+    // 4. Settle.
+    await runStep("Generating contextual insights…", progress: 1.0) {}
   }
-  
-  private func generateMockPredictions() {
-    predictedActivities = [
-      Prediction(suggestion: "Skip tomorrow's work alarm", context: "Tomorrow is a public holiday.", type: .scheduleChange, confidence: 95.0),
-      Prediction(suggestion: "Bring your umbrella", context: "Your meeting at 3 PM is outside.", type: .insight, confidence: 88.0),
-      Prediction(suggestion: "Don't forget your office badge", context: "You usually leave for work around this time.", type: .reminder, confidence: 92.0)
-    ]
-    
-    suggestedQuestions = [
-      "Do you take medication regularly?",
-      "Has your gym schedule changed recently?",
-      "Would you like automatic reminders for vitamins?"
-    ]
+
+  /// Marks a step active, awaits its work, then marks it complete —
+  /// producing the streaming checklist the onboarding screen renders.
+  private func runStep(
+    _ task: String,
+    progress: Double,
+    _ work: () async -> Void
+  ) async {
+    currentAnalysisTask = task
+    await work()
+    analysisProgress = progress
+    completedTasks.append(task)
   }
 }

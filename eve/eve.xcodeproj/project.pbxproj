@@ -258,6 +258,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Eve reads your calendar to understand your routine and time reminders adaptively.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Eve uses your location in the background to learn your routine and remind you at the right place and time.";
+				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "Eve uses your location in the background to learn your routine and remind you at the right place and time.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Eve uses your location to understand where you are and time reminders adaptively.";
 				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Eve reads your reminders to deliver them at the right moment.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -294,6 +295,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Eve reads your calendar to understand your routine and time reminders adaptively.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Eve uses your location in the background to learn your routine and remind you at the right place and time.";
+				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "Eve uses your location in the background to learn your routine and remind you at the right place and time.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Eve uses your location to understand where you are and time reminders adaptively.";
 				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Eve reads your reminders to deliver them at the right moment.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

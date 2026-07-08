@@ -5,7 +5,6 @@ import SwiftData
 struct eveApp: App {
   var sharedModelContainer: ModelContainer = {
     let schema = Schema([
-      RoutinePattern.self,
       UserProfile.self,
       AIInsight.self,
       HistoryItem.self,

@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 extension Color {
     init(hex: String) {
@@ -44,8 +45,44 @@ extension View {
 }
 
 struct HomeView: View {
-    @Bindable var viewModel = HomeViewModel()
-    
+
+    @Environment(\.modelContext) private var modelContext
+
+    // The composition root ported from TodayView: owns the sync,
+    // location and assistant managers and starts them in order.
+    @State private var viewModel: TodayViewModel?
+
+    // Calendar mirror kept fresh by EventKitSyncManager. @Query
+    // re-renders the routine automatically when a sync writes.
+    @Query(sort: \CalendarEvent.startDate)
+    private var events: [CalendarEvent]
+
+    /// Only today's events, in time order — this is "Today's Routine".
+    private var todaysEvents: [CalendarEvent] {
+        let calendar = Calendar.current
+        return events.filter { calendar.isDateInToday($0.startDate) }
+    }
+
+    private var greeting: String {
+        switch Calendar.current.component(.hour, from: Date()) {
+        case 0..<12: "Good morning!"
+        case 12..<17: "Good afternoon!"
+        default: "Good evening!"
+        }
+    }
+
+    /// The AI suggestion bubble text: Eve's latest decision if it has
+    /// one, otherwise a friendly prompt to tap and ask.
+    private var suggestionText: String {
+        if viewModel?.assistant.isThinking == true {
+            return "Thinking about your day…"
+        }
+        if let decision = viewModel?.assistant.lastDecision, decision.shouldNotify {
+            return decision.body
+        }
+        return "Tap me anytime and I'll look at your day and suggest what matters."
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -58,14 +95,14 @@ struct HomeView: View {
                   endPoint: .bottom
                 )
                 .ignoresSafeArea()
-                
+
                 Rectangle()
                     .fill(Color.init(hex: "#3E6590"))
                     .cornerRadius(20)
                     .frame(width: 390, height: 490)
                     .ignoresSafeArea(edges: .top)
                     .frame(maxHeight: .infinity, alignment: .top)
-                    
+
                 Rectangle()
                     .fill(Color.init(hex: "#1D3557"))
                     .cornerRadius(20)
@@ -74,18 +111,18 @@ struct HomeView: View {
                     .ignoresSafeArea(edges: .top)
                     .ignoresSafeArea(edges: .horizontal)
                     .frame(maxHeight: .infinity, alignment: .top)
-                    
-                
+
+
                     VStack(alignment: .leading, spacing: 0) {
                         // Header
                         HStack {
-                            Text("Good morning, John!")
+                            Text(greeting)
                                 .font(.system(size: 30, weight: .medium, design: .default))
                                 .foregroundColor(Color(hex: "#BCCFE3"))
                                 .padding(.leading, 30)
-                            
+
                             Spacer()
-                            
+
                             NavigationLink(destination: SettingsView()) {
                                 Image(systemName: "gearshape.fill")
                                     .font(.title2)
@@ -98,16 +135,29 @@ struct HomeView: View {
                             .padding(20)
                         }
                         .padding(.top, 20)
-                        
-                        // AI Suggestion Bubble
+
+                        // AI Suggestion Bubble — tap Eve to run one assistant cycle.
                         HStack(alignment: .top, spacing: 10) {
-                            Image("Avatar")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 70, height: 70)
-                            
+                            Button {
+                                Task { await viewModel?.askEve() }
+                            } label: {
+                                ZStack {
+                                    Image("Avatar")
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 70, height: 70)
+
+                                    if viewModel?.assistant.isThinking == true {
+                                        ProgressView()
+                                            .tint(.white)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(viewModel == nil || viewModel?.assistant.isThinking == true)
+
                             VStack(alignment: .leading) {
-                                Text("Don't forget to bring your charger, \nyou usually need it at work.")
+                                Text(suggestionText)
                                     .font(.system(size: 15, weight: .medium))
                                     .foregroundColor(.black)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -119,7 +169,8 @@ struct HomeView: View {
                         }
                         .padding(.horizontal, 24)
                         .padding(.top, 20)
-                        
+                        .animation(.easeInOut, value: suggestionText)
+
                         // Today's Routine
                         VStack(alignment: .leading, spacing: 16) {
                             Text("Today's Routine")
@@ -127,15 +178,31 @@ struct HomeView: View {
                                 .foregroundColor(Color(hex: "#1D3557"))
                                 .padding(.horizontal, 20)
                                 .padding(.top, 20)
-                            
+
                             ScrollView(.vertical, showsIndicators: true) {
-                                VStack(spacing: 0) {
-                                    TimelineItem(time: "9:00 AM", title: "Meeting", location: "Office", isCurrent: true, dotColor: Color(hex: "#3FA9F5"), isLast: false)
-                                    TimelineItem(time: "12:00 PM", title: "Lunch", location: "Downtown", isCurrent: false, dotColor: Color(hex: "#4A60B2"), isLast: false)
-                                    TimelineItem(time: "5:00 PM", title: "Gym", location: "", isCurrent: false, dotColor: Color(hex: "#E0ECF7"), isLast: true)
+                                if todaysEvents.isEmpty {
+                                    Text("No calendar events today.")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(Color(hex: "#1D3557").opacity(0.6))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.horizontal, 20)
+                                        .padding(.vertical, 24)
+                                } else {
+                                    VStack(spacing: 0) {
+                                        ForEach(Array(todaysEvents.enumerated()), id: \.element.occurrenceID) { index, event in
+                                            TimelineItem(
+                                                time: event.startDate.formatted(date: .omitted, time: .shortened),
+                                                title: event.title,
+                                                location: event.notes ?? "",
+                                                isCurrent: isNow(event),
+                                                dotColor: dotColor(for: index),
+                                                isLast: index == todaysEvents.count - 1
+                                            )
+                                        }
+                                    }
+                                    .padding(.horizontal, 20)
+                                    .padding(.bottom, 20)
                                 }
-                                .padding(.horizontal, 20)
-                                .padding(.bottom, 20)
                             }
                         }
                         .background()
@@ -144,14 +211,14 @@ struct HomeView: View {
                         .cornerRadius(10)
                         .padding(.horizontal, 24)
                         .padding(.top, 20)
-                        
+
                         // Synced Reminders
                         Text("Synced Reminders")
                             .font(.system(size: 20, weight: .bold))
                             .foregroundColor(Color(hex: "#1D3557"))
                             .padding(.horizontal, 30)
                             .padding(.top, 40)
-                        
+
                         HStack(spacing: 20) {
                             // Location Card
                             NavigationLink(destination: LocationView()) {
@@ -160,7 +227,7 @@ struct HomeView: View {
                                         .font(.system(size: 30))
                                         .foregroundColor(Color(hex: "#1D3557"))
                                         .frame(maxWidth: .infinity, alignment: .center)
-                                    
+
                                     Text("Location")
                                         .font(.system(size: 15, weight: .bold))
                                         .foregroundColor(Color(hex: "#1D3557"))
@@ -170,7 +237,7 @@ struct HomeView: View {
                                 .background(Color(hex: "#E8F3FF"))
                                 .cornerRadius(20)
                             }
-                            
+
                             // Calendar Card
                             NavigationLink(destination: CalendarView()) {
                                 VStack(alignment: .leading, spacing: 5) {
@@ -178,7 +245,7 @@ struct HomeView: View {
                                         .font(.system(size: 30))
                                         .foregroundColor(Color(hex: "#1D3557"))
                                         .frame(maxWidth: .infinity, alignment: .center)
-                                    
+
                                     Text("Calendar")
                                         .font(.system(size: 15, weight: .bold))
                                         .foregroundColor(Color(hex: "#1D3557"))
@@ -191,7 +258,7 @@ struct HomeView: View {
                         }
                         .padding(.horizontal, 24)
                         .padding(.top, 10)
-                        
+
                         // Bottom Area
                         VStack(spacing: 10) {
                             // Robot floating icon
@@ -199,7 +266,7 @@ struct HomeView: View {
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 130, height: 130)
-                            
+
                             NavigationLink(destination: InsightView()) {
                                 Text("View Insights")
                                     .font(.system(size: 14, weight: .bold))
@@ -216,6 +283,29 @@ struct HomeView: View {
             }
             .navigationBarHidden(true)
         }
+        .task {
+            // Create the managers once, then start syncing + monitoring.
+            guard viewModel == nil else { return }
+            let vm = TodayViewModel(context: modelContext)
+            viewModel = vm
+            await vm.start()
+        }
+    }
+
+    /// True if the given event is happening right now.
+    private func isNow(_ event: CalendarEvent) -> Bool {
+        let now = Date()
+        return event.startDate <= now && now <= event.endDate
+    }
+
+    /// Cycles through the three design accent colors for timeline dots.
+    private func dotColor(for index: Int) -> Color {
+        let palette = [
+            Color(hex: "#3FA9F5"),
+            Color(hex: "#4A60B2"),
+            Color(hex: "#E0ECF7")
+        ]
+        return palette[index % palette.count]
     }
 }
 
