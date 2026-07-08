@@ -49,53 +49,66 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color(hex: "#E0ECF7").ignoresSafeArea()
-                    
-                Rectangle()
-                    .fill(Color.accentColor.opacity(0.5))
-                    .frame(width: 800, height: 700)
-                    .blur(radius: 150)
-                    .position(x: 200, y: 250)
-                    .ignoresSafeArea(edges: .all)
+                LinearGradient(
+                  stops: [
+                    .init(color: Color(hex: "#AACBEB"), location: 0.75),
+                    .init(color: Color(hex: "#E8F3FF"), location: 1.0)
+                  ],
+                  startPoint: .top,
+                  endPoint: .bottom
+                )
+                .ignoresSafeArea()
                 
+                Rectangle()
+                    .fill(Color.init(hex: "#3E6590"))
+                    .cornerRadius(20)
+                    .frame(width: 390, height: 490)
+                    .ignoresSafeArea(edges: .top)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    
                 Rectangle()
                     .fill(Color.init(hex: "#1D3557"))
                     .cornerRadius(20)
+                    .blur(radius: 100)
+                    .frame(width: 400, height: 300)
                     .ignoresSafeArea(edges: .top)
-                    .frame(height: 400)
+                    .ignoresSafeArea(edges: .horizontal)
                     .frame(maxHeight: .infinity, alignment: .top)
                     
-                    
                 
-                ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 0) {
                         // Header
                         HStack {
                             Text("Good morning, John!")
-                                .font(.system(size: 22, weight: .bold, design: .default))
-                                .foregroundColor(Color(hex: "#1D3557"))
+                                .font(.system(size: 30, weight: .medium, design: .default))
+                                .foregroundColor(Color(hex: "#BCCFE3"))
+                                .padding(.leading, 30)
+                            
                             Spacer()
+                            
                             NavigationLink(destination: SettingsView()) {
-                                Image(systemName: "person.crop.circle.fill")
-                                    .font(.system(size: 32))
-                                    .foregroundColor(Color(hex: "#1D3557"))
+                                Image(systemName: "gearshape.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(Color.primaryEve)
+                                    .padding(5)
                             }
+                            .buttonStyle(.glassProminent)
+                            .clipShape(Circle())
+                            .frame(maxHeight: .infinity, alignment: .topTrailing)
+                            .padding(20)
                         }
-                        .padding(.horizontal, 24)
                         .padding(.top, 20)
                         
                         // AI Suggestion Bubble
-                        HStack(alignment: .top, spacing: 12) {
-                            ZStack {
-                                Circle().fill(Color.white).frame(width: 48, height: 48)
-                                Image(systemName: "sparkles")
-                                    .foregroundColor(Color(hex: "#1D3557"))
-                                    .font(.system(size: 22, weight: .bold))
-                            }
+                        HStack(alignment: .top, spacing: 10) {
+                            Image("Avatar")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 70, height: 70)
                             
                             VStack(alignment: .leading) {
                                 Text("Don't forget to bring your charger, \nyou usually need it at work.")
-                                    .font(.system(size: 13, weight: .medium))
+                                    .font(.system(size: 15, weight: .medium))
                                     .foregroundColor(.black)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
@@ -105,7 +118,7 @@ struct HomeView: View {
                             .cornerRadius(4, corners: [.topLeft])
                         }
                         .padding(.horizontal, 24)
-                        .padding(.top, 24)
+                        .padding(.top, 20)
                         
                         // Today's Routine
                         VStack(alignment: .leading, spacing: 16) {
@@ -115,40 +128,44 @@ struct HomeView: View {
                                 .padding(.horizontal, 20)
                                 .padding(.top, 20)
                             
-                            VStack(spacing: 0) {
-                                TimelineItem(time: "9:00 AM", title: "Meeting", location: "Office", isCurrent: true, dotColor: Color(hex: "#3FA9F5"), isLast: false)
-                                TimelineItem(time: "12:00 PM", title: "Lunch", location: "Downtown", isCurrent: false, dotColor: Color(hex: "#4A60B2"), isLast: false)
-                                TimelineItem(time: "5:00 PM", title: "Gym", location: "", isCurrent: false, dotColor: Color(hex: "#E0ECF7"), isLast: true)
+                            ScrollView(.vertical, showsIndicators: true) {
+                                VStack(spacing: 0) {
+                                    TimelineItem(time: "9:00 AM", title: "Meeting", location: "Office", isCurrent: true, dotColor: Color(hex: "#3FA9F5"), isLast: false)
+                                    TimelineItem(time: "12:00 PM", title: "Lunch", location: "Downtown", isCurrent: false, dotColor: Color(hex: "#4A60B2"), isLast: false)
+                                    TimelineItem(time: "5:00 PM", title: "Gym", location: "", isCurrent: false, dotColor: Color(hex: "#E0ECF7"), isLast: true)
+                                }
+                                .padding(.horizontal, 20)
+                                .padding(.bottom, 20)
                             }
-                            .padding(.horizontal, 20)
-                            .padding(.bottom, 20)
                         }
-                        .background(
-                            LinearGradient(colors: [Color(hex: "#E8F3FF"), Color(hex: "#6FD3FF")], startPoint: .top, endPoint: .bottom)
-                        )
-                        .cornerRadius(24)
+                        .background()
+                        .opacity(0.9)
+                        .frame(height: 200)
+                        .cornerRadius(10)
                         .padding(.horizontal, 24)
-                        .padding(.top, 32)
+                        .padding(.top, 20)
                         
                         // Synced Reminders
                         Text("Synced Reminders")
                             .font(.system(size: 20, weight: .bold))
                             .foregroundColor(Color(hex: "#1D3557"))
-                            .padding(.horizontal, 24)
-                            .padding(.top, 32)
+                            .padding(.horizontal, 30)
+                            .padding(.top, 40)
                         
-                        HStack(spacing: 16) {
+                        HStack(spacing: 20) {
                             // Location Card
                             NavigationLink(destination: LocationView()) {
-                                VStack(alignment: .leading, spacing: 12) {
+                                VStack(alignment: .leading, spacing: 5) {
                                     Image(systemName: "location.fill")
-                                        .font(.system(size: 24))
+                                        .font(.system(size: 30))
                                         .foregroundColor(Color(hex: "#1D3557"))
+                                        .frame(maxWidth: .infinity, alignment: .center)
+                                    
                                     Text("Location")
-                                        .font(.system(size: 17, weight: .bold))
+                                        .font(.system(size: 15, weight: .bold))
                                         .foregroundColor(Color(hex: "#1D3557"))
+                                        .frame(maxWidth: .infinity, alignment: .center)
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(20)
                                 .background(Color(hex: "#E8F3FF"))
                                 .cornerRadius(20)
@@ -156,42 +173,32 @@ struct HomeView: View {
                             
                             // Calendar Card
                             NavigationLink(destination: CalendarView()) {
-                                VStack(alignment: .leading, spacing: 12) {
+                                VStack(alignment: .leading, spacing: 5) {
                                     Image(systemName: "calendar")
-                                        .font(.system(size: 24))
+                                        .font(.system(size: 30))
                                         .foregroundColor(Color(hex: "#1D3557"))
+                                        .frame(maxWidth: .infinity, alignment: .center)
+                                    
                                     Text("Calendar")
-                                        .font(.system(size: 17, weight: .bold))
+                                        .font(.system(size: 15, weight: .bold))
                                         .foregroundColor(Color(hex: "#1D3557"))
+                                        .frame(maxWidth: .infinity, alignment: .center)
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(20)
                                 .background(Color(hex: "#E8F3FF"))
                                 .cornerRadius(20)
                             }
                         }
                         .padding(.horizontal, 24)
-                        .padding(.top, 16)
+                        .padding(.top, 10)
                         
                         // Bottom Area
-                        VStack(spacing: 12) {
-                            Text("I'm learning as you go...")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(Color(hex: "#1D3557"))
-                            
+                        VStack(spacing: 10) {
                             // Robot floating icon
-                            ZStack {
-                                Circle().fill(Color.white).frame(width: 80, height: 80)
-                                    .shadow(color: .black.opacity(0.1), radius: 10, y: 5)
-                                VStack(spacing: 6) {
-                                    HStack(spacing: 12) {
-                                        Capsule().fill(Color(hex: "#1D3557")).frame(width: 8, height: 4)
-                                        Capsule().fill(Color(hex: "#1D3557")).frame(width: 8, height: 4)
-                                    }
-                                    Capsule().fill(Color(hex: "#1D3557")).frame(width: 16, height: 4)
-                                }
-                            }
-                            .padding(.bottom, 8)
+                            Image("Avatar")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 130, height: 130)
                             
                             NavigationLink(destination: InsightView()) {
                                 Text("View Insights")
@@ -204,9 +211,8 @@ struct HomeView: View {
                             }
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 40)
+                        .padding(.vertical, 20)
                     }
-                }
             }
             .navigationBarHidden(true)
         }
