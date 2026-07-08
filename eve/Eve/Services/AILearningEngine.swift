@@ -2,44 +2,61 @@ import Foundation
 import SwiftData
 import NaturalLanguage
 import Observation
+import FoundationModels
 
 @Observable
 final class AILearningEngine {
   static let shared = AILearningEngine()
-  
+
+  /// True when the on-device Foundation Model is ready to use.
+  /// False when Apple Intelligence is disabled, still downloading,
+  /// or unsupported on this device.
+  var isAppleIntelligenceAvailable: Bool {
+    if case .available = SystemLanguageModel.default.availability {
+      return true
+    }
+    return false
+  }
+
   var isAnalyzing: Bool = false
   var analysisProgress: Double = 0.0
   var currentAnalysisTask: String = ""
-  
+
+  /// Steps that have finished, in order — drives the streaming log UI.
+  var completedTasks: [String] = []
+
   var predictedActivities: [Prediction] = []
   var suggestedQuestions: [String] = []
-  
+
   func analyzeUserRoutines(context: ModelContext?) async {
-    DispatchQueue.main.async {
+    let steps: [(task: String, progress: Double)] = [
+      ("Loading Calendar & Reminders History...", 0.25),
+      ("Processing Location Patterns...", 0.5),
+      ("Learning Your Daily Routines...", 0.75),
+      ("Generating Contextual Predictions...", 1.0)
+    ]
+
+    await MainActor.run {
       self.isAnalyzing = true
-      self.analysisProgress = 0.1
-      self.currentAnalysisTask = "Loading Calendar & Reminders History..."
+      self.analysisProgress = 0.0
+      self.completedTasks = []
     }
-    
+
     // Simulating Apple Intelligence Foundation Model processing
-    try? await Task.sleep(nanoseconds: 1_500_000_000)
-    
-    DispatchQueue.main.async {
-      self.analysisProgress = 0.4
-      self.currentAnalysisTask = "Processing Location Patterns..."
+    for step in steps {
+      await MainActor.run {
+        self.currentAnalysisTask = step.task
+      }
+
+      try? await Task.sleep(nanoseconds: 1_500_000_000)
+
+      await MainActor.run {
+        self.analysisProgress = step.progress
+        self.completedTasks.append(step.task)
+      }
     }
-    
-    try? await Task.sleep(nanoseconds: 1_500_000_000)
-    
-    DispatchQueue.main.async {
-      self.analysisProgress = 0.7
-      self.currentAnalysisTask = "Generating Contextual Predictions..."
-    }
-    
-    try? await Task.sleep(nanoseconds: 1_500_000_000)
-    
-    DispatchQueue.main.async {
-      self.analysisProgress = 1.0
+
+    await MainActor.run {
       self.generateMockPredictions()
       self.isAnalyzing = false
     }

@@ -50,6 +50,22 @@ struct HomeView: View {
         NavigationStack {
             ZStack {
                 Color(hex: "#E0ECF7").ignoresSafeArea()
+                    
+                Rectangle()
+                    .fill(Color.accentColor.opacity(0.5))
+                    .frame(width: 800, height: 700)
+                    .blur(radius: 150)
+                    .position(x: 200, y: 250)
+                    .ignoresSafeArea(edges: .all)
+                
+                Rectangle()
+                    .fill(Color.init(hex: "#1D3557"))
+                    .cornerRadius(20)
+                    .ignoresSafeArea(edges: .top)
+                    .frame(height: 400)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    
+                    
                 
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 0) {
