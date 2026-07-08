@@ -6,6 +6,12 @@ struct eveApp: App {
   var sharedModelContainer: ModelContainer = {
     let schema = Schema([
       RoutinePattern.self,
+      UserProfile.self,
+      AIInsight.self,
+      HistoryItem.self,
+      QuestionAnswer.self,
+      CalendarEvent.self,
+      ReminderItem.self,
     ])
     let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
     

@@ -6,11 +6,27 @@
 //
 
 import Foundation
+import SwiftData
+import EventKit
 
-struct ReminderItem {
+@Model
+final class ReminderItem {
 
-    let title: String
+    @Attribute(.unique) var reminderIdentifier: String
 
-    let dueDate: Date?
+    var title: String
+
+    var dueDate: Date?
+
+    var notes: String?
+
+    init(reminder: EKReminder) {
+
+        self.reminderIdentifier = reminder.calendarItemIdentifier
+        self.title = reminder.title
+        self.dueDate = reminder.dueDateComponents?.date
+        self.notes = reminder.notes
+
+    }
 
 }
