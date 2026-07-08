@@ -16,6 +16,13 @@ struct ReminderContext {
 
     let currentPlace: String?
 
+    /// The single most time-urgent upcoming calendar event or dated
+    /// reminder, found by escalating the search window hour by hour
+    /// (next hour, then the hour after, ...) up to 24 hours out. nil when
+    /// nothing falls within that horizon — the model should stay quiet
+    /// rather than nudge about something far away.
+    let nextUrgentItem: String?
+
     let upcomingEvents: [String]
 
     let pendingReminders: [String]
@@ -37,6 +44,8 @@ struct ReminderContext {
         return """
         Current date and time: \(currentDate.formatted(date: .complete, time: .shortened))
         Current place: \(currentPlace ?? "unknown")
+
+        Most urgent upcoming commitment: \(nextUrgentItem ?? "none within the next 24 hours")
 
         \(section("Upcoming calendar events", upcomingEvents))
 

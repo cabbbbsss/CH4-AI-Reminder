@@ -46,8 +46,24 @@ final class AssistantManager {
 
         isThinking = true
         errorMessage = nil
+        pendingQuestion = nil
 
         defer { isThinking = false }
+
+        // Nothing on the calendar and nothing in reminders — there's
+        // genuinely nothing to reason about, so skip the model entirely.
+        // Faster, always available, and avoids any risk of a model error
+        // for a case that has one obvious right answer.
+        guard contextBuilder.hasAnyPendingCommitment() else {
+            lastDecision = ReminderDecision(
+                shouldNotify: false,
+                title: "All clear",
+                body: "Your day's wide open — I'll keep watch and let you know if anything comes up.",
+                followUpQuestion: nil,
+                proposedInsights: []
+            )
+            return
+        }
 
         let reminderContext = contextBuilder.build(currentPlace: currentPlace)
 
@@ -99,6 +115,45 @@ final class AssistantManager {
         } catch {
             errorMessage = error.localizedDescription
         }
+
+    }
+
+    /// A short, event-specific prep checklist for one calendar event —
+    /// used by the expandable rows in Today's Routine. Returns an empty
+    /// array on failure (unavailable model, language rejection, etc.) so
+    /// callers can just show "nothing specific" rather than an error.
+    ///
+    /// Deliberately scoped to just this one event (not the day's full
+    /// context) — see `ReminderContextBuilder.buildPreparationContext`.
+    func suggestPreparation(
+        forEventTitled title: String,
+        at date: Date,
+        notes: String?,
+        location: String?
+    ) async -> [String] {
+
+        guard let promptText = contextBuilder.buildPreparationContext(
+            eventTitle: title,
+            eventDate: date,
+            eventNotes: notes,
+            eventLocation: location
+        ) else { return [] }
+
+        return (try? await foundationModel.suggestPreparation(forPromptText: promptText)) ?? []
+
+    }
+
+    /// A short, place-specific "what Eve has learned" checklist — used by
+    /// the Locations screen. Returns an empty array on failure so callers
+    /// can show "nothing learned yet" rather than an error.
+    ///
+    /// Deliberately scoped to just this one place — see
+    /// `ReminderContextBuilder.buildPlaceContext`.
+    func suggestReminders(forPlace placeName: String) async -> [String] {
+
+        guard let promptText = contextBuilder.buildPlaceContext(placeName: placeName) else { return [] }
+
+        return (try? await foundationModel.suggestReminders(forPromptText: promptText)) ?? []
 
     }
 

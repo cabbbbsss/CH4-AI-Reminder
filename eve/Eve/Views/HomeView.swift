@@ -57,6 +57,13 @@ struct HomeView: View {
     @Query(sort: \CalendarEvent.startDate)
     private var events: [CalendarEvent]
 
+    // Which Today's Routine row is expanded, and its AI-generated prep
+    // checklist once fetched. Keyed by occurrenceID so each event caches
+    // independently and re-expanding doesn't re-ask the model.
+    @State private var expandedEventID: String?
+    @State private var preparationByEvent: [String: [String]] = [:]
+    @State private var loadingPreparationEventID: String?
+
     /// Only today's events, in time order — this is "Today's Routine".
     private var todaysEvents: [CalendarEvent] {
         let calendar = Calendar.current
@@ -206,7 +213,11 @@ struct HomeView: View {
                                                 location: event.notes ?? "",
                                                 isCurrent: isNow(event),
                                                 dotColor: dotColor(for: index),
-                                                isLast: index == todaysEvents.count - 1
+                                                isLast: index == todaysEvents.count - 1,
+                                                isExpanded: expandedEventID == event.occurrenceID,
+                                                isLoadingPreparation: loadingPreparationEventID == event.occurrenceID,
+                                                preparationItems: preparationByEvent[event.occurrenceID],
+                                                onToggle: { toggleExpand(event) }
                                             )
                                         }
                                     }
@@ -215,7 +226,11 @@ struct HomeView: View {
                                 }
                             }
                         }
-                        .background()
+                        // Fixed light color, not the adaptive system background —
+                        // the text inside is hardcoded dark, so an adaptive
+                        // background would turn near-black in Dark Mode and make
+                        // the text unreadable. Matches every other card on this screen.
+                        .background(Color(hex: "#E8F3FF"))
                         .opacity(0.9)
                         .frame(height: 200)
                         .cornerRadius(10)
@@ -308,6 +323,39 @@ struct HomeView: View {
         return event.startDate <= now && now <= event.endDate
     }
 
+    /// Expands/collapses a Today's Routine row. On first expand, kicks off
+    /// an AI call for that event's prep checklist and caches the result so
+    /// collapsing and re-expanding doesn't ask the model again.
+    private func toggleExpand(_ event: CalendarEvent) {
+
+        if expandedEventID == event.occurrenceID {
+            expandedEventID = nil
+            return
+        }
+
+        expandedEventID = event.occurrenceID
+
+        guard preparationByEvent[event.occurrenceID] == nil,
+              let assistant = viewModel?.assistant
+        else { return }
+
+        loadingPreparationEventID = event.occurrenceID
+
+        Task {
+            let items = await assistant.suggestPreparation(
+                forEventTitled: event.title,
+                at: event.startDate,
+                notes: event.notes,
+                location: event.location
+            )
+            preparationByEvent[event.occurrenceID] = items
+            if loadingPreparationEventID == event.occurrenceID {
+                loadingPreparationEventID = nil
+            }
+        }
+
+    }
+
     /// Cycles through the three design accent colors for timeline dots.
     private func dotColor(for index: Int) -> Color {
         let palette = [
@@ -326,7 +374,22 @@ struct TimelineItem: View {
     var isCurrent: Bool
     var dotColor: Color
     var isLast: Bool
-    
+
+    /// Expand state + AI prep checklist, owned by the parent HomeView so
+    /// the fetch-once-cache lives above this stateless row.
+    var isExpanded: Bool = false
+    var isLoadingPreparation: Bool = false
+    var preparationItems: [String]? = nil
+    var onToggle: (() -> Void)? = nil
+
+    private var textColor: Color {
+        isCurrent ? .white : Color(hex: "#1D3557")
+    }
+
+    private var secondaryTextColor: Color {
+        isCurrent ? Color.white.opacity(0.8) : Color(hex: "#1D3557").opacity(0.6)
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             // Timeline line & dot
@@ -335,7 +398,7 @@ struct TimelineItem: View {
                     .fill(dotColor)
                     .frame(width: 12, height: 12)
                     .padding(.top, 16)
-                
+
                 if !isLast {
                     Rectangle()
                         .fill(Color(hex: "#E0ECF7"))
@@ -344,24 +407,52 @@ struct TimelineItem: View {
                 }
             }
             .frame(width: 20)
-            
+
             VStack(alignment: .leading, spacing: 4) {
-                Text(time)
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundColor(isCurrent ? Color(hex: "#FFFFFF").opacity(0.8) : Color.black.opacity(0.6))
-                
-                Text(title)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(isCurrent ? .white : .black)
-                
-                if !location.isEmpty {
-                    HStack(spacing: 4) {
-                        Image(systemName: "location.fill")
-                            .font(.system(size: 10))
-                        Text(location)
-                            .font(.system(size: 13))
+                HStack(alignment: .top) {
+                    Button {
+                        onToggle?()
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(time)
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundColor(secondaryTextColor)
+
+                            Text(title)
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(textColor)
+
+                            if !location.isEmpty {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "location.fill")
+                                        .font(.system(size: 10))
+                                    Text(location)
+                                        .font(.system(size: 13))
+                                }
+                                .foregroundColor(secondaryTextColor)
+                            }
+                        }
+                        .contentShape(Rectangle())
                     }
-                    .foregroundColor(isCurrent ? Color(hex: "#FFFFFF").opacity(0.8) : Color.black.opacity(0.6))
+                    .buttonStyle(.plain)
+                    .disabled(onToggle == nil)
+
+                    Spacer(minLength: 8)
+
+                    if let onToggle {
+                        Button(action: onToggle) {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(secondaryTextColor)
+                                .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                                .padding(6)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                if isExpanded {
+                    preparationSection
                 }
             }
             .padding(.vertical, 12)
@@ -371,6 +462,47 @@ struct TimelineItem: View {
             .cornerRadius(12)
             .padding(.bottom, 8)
         }
+        .animation(.easeInOut(duration: 0.2), value: isExpanded)
+    }
+
+    /// AI-generated "things you might forget" for this specific event.
+    @ViewBuilder
+    private var preparationSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+
+            if isLoadingPreparation {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .tint(secondaryTextColor)
+                    Text("Thinking about what you might need…")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(secondaryTextColor)
+                }
+            } else if let items = preparationItems {
+                if items.isEmpty {
+                    Text("Nothing specific to prepare — you're all set.")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(secondaryTextColor)
+                } else {
+                    ForEach(items, id: \.self) { item in
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 10))
+                                .foregroundColor(secondaryTextColor)
+                                .padding(.top, 2)
+                            Text(item)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(textColor)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+
+        }
+        .padding(.top, 8)
+        .padding(.leading, 4)
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 }
 

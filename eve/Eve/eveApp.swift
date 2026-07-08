@@ -11,6 +11,9 @@ struct eveApp: App {
       QuestionAnswer.self,
       CalendarEvent.self,
       ReminderItem.self,
+      SavedLocation.self,
+      LocationReminder.self,
+      LocationAssignment.self,
     ])
     let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
     
