@@ -12,6 +12,7 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
   var isCalendarGranted: Bool = false
   var isNotificationsGranted: Bool = false
   var isAIEnabled: Bool = false
+  var isReminderGranted: Bool = false
   var hasCompletedOnboarding: Bool = false
   
   private let locationManager = CLLocationManager()
@@ -56,6 +57,15 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
       DispatchQueue.main.async { self.isNotificationsGranted = granted }
     } catch {
       print("Failed to request notification access: \(error)")
+    }
+  }
+  
+  func requestReminders() async {
+    do {
+      let granted = try await eventStore.requestFullAccessToReminders()
+      DispatchQueue.main.async { self.isReminderGranted = granted }
+    } catch  {
+      print("Failed to request reminder access: \(error)")
     }
   }
   
