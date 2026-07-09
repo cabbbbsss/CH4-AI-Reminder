@@ -75,9 +75,8 @@ struct LocationEditSheet: View {
 
 }
 
-/// Edit a reminder's text, move it to a different place, or delete it.
-/// Moving it calls `onMoved` so the caller can teach the AI classifier
-/// this correction.
+/// Edit a reminder's text, move it to a different place, or remove it.
+/// Any edit marks the row user-owned so a refresh won't overwrite it.
 struct ReminderEditSheet: View {
 
     @Environment(\.modelContext) private var modelContext
@@ -85,7 +84,7 @@ struct ReminderEditSheet: View {
 
     var reminder: LocationReminder
     var allLocations: [SavedLocation]
-    var onMoved: (String, SavedLocation) -> Void
+    var router: LocationRoutingManager?
 
     @State private var text: String = ""
     @State private var selectedLocationID: UUID?
@@ -106,9 +105,8 @@ struct ReminderEditSheet: View {
                 }
 
                 Section {
-                    Button("Delete Reminder", role: .destructive) {
-                        modelContext.delete(reminder)
-                        try? modelContext.save()
+                    Button("Remove Reminder", role: .destructive) {
+                        router?.remove(reminder)
                         dismiss()
                     }
                 }
@@ -139,13 +137,21 @@ struct ReminderEditSheet: View {
         let originalLocationID = reminder.locationID
 
         reminder.text = text.trimmingCharacters(in: .whitespaces)
+        // Any user edit makes this row theirs — refresh must not regenerate it.
+        reminder.isSystemManaged = false
 
         if let selectedLocationID,
            selectedLocationID != originalLocationID,
            let newLocation = allLocations.first(where: { $0.id == selectedLocationID }) {
 
             reminder.locationID = selectedLocationID
-            onMoved(reminder.text, newLocation)
+
+            if let eventTitle = reminder.eventTitle {
+                // Moves every other reminder generated from the same
+                // calendar event too, so they don't stay scattered across
+                // cards, and keeps future refreshes assigning it here.
+                router?.confirmAssignment(itemTitle: eventTitle, location: newLocation)
+            }
 
         }
 
@@ -155,8 +161,8 @@ struct ReminderEditSheet: View {
 
 }
 
-/// Adds a freeform reminder directly to a place — not sourced from
-/// calendar/reminders, so it isn't routed by LocationRoutingManager.
+/// Adds a freeform reminder directly to a place — not sourced from the
+/// Reminders app, so refresh leaves it alone (itemKey nil, user-owned).
 struct AddReminderSheet: View {
 
     @Environment(\.modelContext) private var modelContext
@@ -196,7 +202,7 @@ struct AddReminderSheet: View {
         guard !trimmed.isEmpty else { return }
 
         modelContext.insert(
-            LocationReminder(locationID: location.id, text: trimmed, isAISeeded: false)
+            LocationReminder(locationID: location.id, text: trimmed, itemKey: nil, isSystemManaged: false)
         )
 
         try? modelContext.save()

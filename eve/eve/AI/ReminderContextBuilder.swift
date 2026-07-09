@@ -88,11 +88,21 @@ final class ReminderContextBuilder {
 
     /// A place-scoped context for the Locations screen's AI-curated
     /// reminders. Same principle as `buildPreparationContext`: calendar
-    /// events, reminders, and beliefs are filtered to ones that share a
-    /// keyword with the place name (or have it as their explicit
-    /// location) before anything reaches the prompt — never handed over
-    /// wholesale for the model to self-filter.
-    func buildPlaceContext(placeName: String) -> String? {
+    /// events, reminders, and beliefs are filtered before anything reaches
+    /// the prompt — never handed over wholesale for the model to self-filter.
+    ///
+    /// Matching has two tiers:
+    /// 1. Strong — the place's name/address literally appears in the
+    ///    event/reminder's own location text, or shares a keyword with its
+    ///    title (expanded with Home/Work synonyms for places recognized as
+    ///    such — see `placeKind`).
+    /// 2. Weak (Home/Work places only) — no textual overlap, but the event
+    ///    falls in a time window typical for that kind of place (evenings/
+    ///    weekends for Home, weekday work-hours for Work). Flagged as
+    ///    "likely" in the prompt so the model treats it as a softer signal.
+    /// Custom places ("Gym", etc.) have no recognized kind, so they stay on
+    /// strong matching only — a time heuristic wouldn't generalize to them.
+    func buildPlaceContext(placeName: String, address: String? = nil) -> String? {
 
         // The place name is the prompt's subject and can't be filtered out.
         // Reverse-geocoded names are often non-English (e.g. "Kabupaten
@@ -107,7 +117,19 @@ final class ReminderContextBuilder {
             return "\(header):\n" + lines.map { "- \($0)" }.joined(separator: "\n")
         }
 
-        let placeKeywords = keywords(from: placeName)
+        var placeKeywords = keywords(from: placeName)
+        if let address {
+            placeKeywords.formUnion(keywords(from: address))
+        }
+
+        let kind = placeKind(for: placeName)
+
+        switch kind {
+        case .home: placeKeywords.formUnion(Self.homeSynonyms)
+        case .work: placeKeywords.formUnion(Self.workSynonyms)
+        case .other: break
+        }
+
         let visits = visitCount(for: placeName)
 
         let visitLine = visits > 0
@@ -118,13 +140,73 @@ final class ReminderContextBuilder {
         Place: \(placeName)
         \(visitLine)
 
-        \(section("Calendar events at or about this place", placeRelatedEvents(placeName: placeName, keywords: placeKeywords)))
+        \(section("Calendar events at or about this place", placeRelatedEvents(placeName: placeName, address: address, keywords: placeKeywords, kind: kind)))
 
-        \(section("Reminders at or about this place", placeRelatedReminders(placeName: placeName, keywords: placeKeywords)))
+        \(section("Reminders at or about this place", placeRelatedReminders(placeName: placeName, address: address, keywords: placeKeywords)))
 
         \(section("Beliefs about the user that specifically match this place", relevantInsights(to: placeKeywords)))
         """
 
+    }
+
+    // MARK: - Forgiving place matching
+    //
+    // The default places (Home/Office) are named generically, so their
+    // name/address almost never appears verbatim in real event text. Rather
+    // than requiring an address, places recognized as Home- or Work-like get
+    // a broader vocabulary (see the synonym sets below) plus a time-of-day/
+    // day-of-week fallback for events with no textual overlap at all.
+
+    private enum PlaceKind {
+        case home, work, other
+    }
+
+    private static let homeIndicators: Set<String> = [
+        "home", "house", "apartment", "flat", "residence", "condo"
+    ]
+
+    private static let workIndicators: Set<String> = [
+        "office", "work", "workplace", "job", "company", "hq", "headquarters"
+    ]
+
+    private static let homeSynonyms: Set<String> = [
+        "home", "house", "family", "dinner", "breakfast", "lunch", "cook", "cooking",
+        "laundry", "groceries", "grocery", "chores", "clean", "cleaning", "rent",
+        "sleep", "relax", "kids", "pet", "dog", "cat", "garden"
+    ]
+
+    private static let workSynonyms: Set<String> = [
+        "work", "office", "meeting", "meetings", "standup", "sync", "call", "calls",
+        "client", "project", "deadline", "presentation", "report", "class", "lecture",
+        "campus", "academy", "school", "shift", "interview", "review", "sprint", "demo"
+    ]
+
+    private func placeKind(for placeName: String) -> PlaceKind {
+        let nameKeywords = keywords(from: placeName)
+        if !nameKeywords.isDisjoint(with: Self.homeIndicators) { return .home }
+        if !nameKeywords.isDisjoint(with: Self.workIndicators) { return .work }
+        return .other
+    }
+
+    /// True for evenings, nights, and weekends — when someone is typically
+    /// home rather than out.
+    private func isLikelyHomeTime(_ date: Date) -> Bool {
+        let calendar = Calendar.current
+        let weekday = calendar.component(.weekday, from: date)
+        let hour = calendar.component(.hour, from: date)
+        let isWeekend = weekday == 1 || weekday == 7
+        let isEveningOrNight = hour >= 19 || hour < 7
+        return isWeekend || isEveningOrNight
+    }
+
+    /// True for weekday work hours.
+    private func isLikelyWorkTime(_ date: Date) -> Bool {
+        let calendar = Calendar.current
+        let weekday = calendar.component(.weekday, from: date)
+        let hour = calendar.component(.hour, from: date)
+        let isWeekday = (2...6).contains(weekday)
+        let isWorkHours = (8..<18).contains(hour)
+        return isWeekday && isWorkHours
     }
 
     private func visitCount(for placeName: String) -> Int {
@@ -142,36 +224,188 @@ final class ReminderContextBuilder {
 
     }
 
-    private func placeRelatedEvents(placeName: String, keywords placeKeywords: Set<String>, limit: Int = 10) -> [String] {
+    /// Whether/how strongly one event matches a place. `true` = strong
+    /// (textual overlap — the real signal), `false` = weak (time-of-day
+    /// fallback only, Home/Work places only), `nil` = no match at all.
+    private func matchTier(
+        for event: CalendarEvent,
+        placeName: String,
+        address: String?,
+        placeKeywords: Set<String>,
+        kind: PlaceKind
+    ) -> Bool? {
 
-        let allEvents = (try? context.fetch(FetchDescriptor<CalendarEvent>())) ?? []
+        var locationMatches = false
 
-        let matching = allEvents.filter { event in
-            let locationMatches = event.location.map { location in
-                location.caseInsensitiveCompare(placeName) == .orderedSame
-                    || sharesKeyword(location, with: placeKeywords)
-            } ?? false
-            let titleMatches = sharesKeyword(event.title, with: placeKeywords)
-            return locationMatches || titleMatches
+        if let location = event.location {
+            let matchesName: Bool = location.caseInsensitiveCompare(placeName) == .orderedSame
+            let matchesAddress: Bool = address.map { location.caseInsensitiveCompare($0) == .orderedSame } ?? false
+            let matchesKeyword: Bool = sharesKeyword(location, with: placeKeywords)
+            locationMatches = matchesName || matchesAddress || matchesKeyword
         }
 
-        let sorted = matching.sorted { first, second in first.startDate < second.startDate }
+        let titleMatches = sharesKeyword(event.title, with: placeKeywords)
 
-        let lines: [String] = sorted.prefix(limit).map { event in
-            "\(event.title) — \(event.startDate.formatted(date: .abbreviated, time: .shortened))"
+        if locationMatches || titleMatches { return true }
+
+        let timeMatches: Bool
+        switch kind {
+        case .home: timeMatches = isLikelyHomeTime(event.startDate)
+        case .work: timeMatches = isLikelyWorkTime(event.startDate)
+        case .other: timeMatches = false
+        }
+
+        return timeMatches ? false : nil
+
+    }
+
+    private func placeRelatedEvents(placeName: String, address: String?, keywords placeKeywords: Set<String>, kind: PlaceKind, limit: Int = 10) -> [String] {
+
+        let allEvents = (try? context.fetch(FetchDescriptor<CalendarEvent>())) ?? []
+        let now = Date.now
+
+        var strong: [CalendarEvent] = []
+        var weak: [CalendarEvent] = []
+
+        for event in allEvents {
+            switch matchTier(for: event, placeName: placeName, address: address, placeKeywords: placeKeywords, kind: kind) {
+            case true: strong.append(event)
+            case false: weak.append(event)
+            case nil: continue
+            }
+        }
+
+        // Prefer events closest to now (most relevant), then fill any
+        // remaining slots with the closest weak (time-only) matches.
+        func closestFirst(_ events: [CalendarEvent]) -> [CalendarEvent] {
+            events.sorted { abs($0.startDate.timeIntervalSince(now)) < abs($1.startDate.timeIntervalSince(now)) }
+        }
+
+        let selectedStrong = Array(closestFirst(strong).prefix(limit))
+        let remainingSlots = max(0, limit - selectedStrong.count)
+        let selectedWeak = Array(closestFirst(weak).prefix(remainingSlots))
+
+        let combined = (selectedStrong.map { ($0, true) } + selectedWeak.map { ($0, false) })
+            .sorted { $0.0.startDate < $1.0.startDate }
+
+        let lines: [String] = combined.map { event, isStrong in
+            let base = "\(event.title) — \(event.startDate.formatted(date: .abbreviated, time: .shortened))"
+            return isStrong ? base : "\(base) (likely — based on usual time at this place, not explicit)"
         }
 
         return englishOnly(lines)
 
     }
 
-    private func placeRelatedReminders(placeName: String, keywords placeKeywords: Set<String>, limit: Int = 10) -> [String] {
+    /// Assigns each upcoming calendar event to **at most one** saved place —
+    /// computed once across all places together, unlike per-place matching,
+    /// which let the same event win a strong match at one place (e.g. "Cook"
+    /// → Home, via keyword) *and* a weak time-of-day match at another (e.g.
+    /// the same event happening at 11am on a weekday → Office, via the work
+    /// hours fallback) independently, showing it twice.
+    ///
+    /// Priority per event: a user-confirmed override (ground truth, see
+    /// `LocationRoutingManager.confirmAssignment`) > a strong textual match
+    /// at any place > a weak time-of-day match, but only if exactly one
+    /// place's window applies. Restricted to what's still **upcoming** (a
+    /// past "Cook lunch" doesn't need a reminder anymore) and deduplicated
+    /// by title so a daily recurring event only contributes its nearest
+    /// occurrence. Feeds the Locations screen's per-event prep-reminder
+    /// generation (see `LocationRoutingManager`).
+    func matchedEventsByLocation(
+        _ locations: [(id: UUID, name: String, address: String?)],
+        limit: Int = 6
+    ) -> [UUID: [CalendarEvent]] {
+
+        struct LocationContext {
+            let id: UUID
+            let name: String
+            let address: String?
+            let keywords: Set<String>
+            let kind: PlaceKind
+        }
+
+        let locationContexts: [LocationContext] = locations.compactMap { location in
+            guard isEnglishSafe(location.name) else { return nil }
+            var kws = keywords(from: location.name)
+            if let address = location.address {
+                kws.formUnion(keywords(from: address))
+            }
+            let kind = placeKind(for: location.name)
+            switch kind {
+            case .home: kws.formUnion(Self.homeSynonyms)
+            case .work: kws.formUnion(Self.workSynonyms)
+            case .other: break
+            }
+            return LocationContext(id: location.id, name: location.name, address: location.address, keywords: kws, kind: kind)
+        }
+
+        let locationIDs = Set(locationContexts.map(\.id))
+
+        let now = Date.now
+
+        let descriptor = FetchDescriptor<CalendarEvent>(
+            predicate: #Predicate { $0.startDate >= now },
+            sortBy: [SortDescriptor(\.startDate)]
+        )
+
+        let upcoming = (try? context.fetch(descriptor)) ?? []
+
+        let confirmedAssignments = (try? context.fetch(FetchDescriptor<LocationAssignment>())) ?? []
+        var confirmedByKey: [String: UUID] = [:]
+        for assignment in confirmedAssignments where assignment.userConfirmed {
+            confirmedByKey[assignment.itemKey] = assignment.locationID
+        }
+
+        var seenTitles = Set<String>()
+        var result: [UUID: [CalendarEvent]] = [:]
+
+        for event in upcoming {
+
+            let key = event.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !key.isEmpty, !seenTitles.contains(key) else { continue }
+
+            if let confirmedID = confirmedByKey[key], locationIDs.contains(confirmedID) {
+                seenTitles.insert(key)
+                result[confirmedID, default: []].append(event)
+                continue
+            }
+
+            if let strongMatch = locationContexts.first(where: { lc in
+                matchTier(for: event, placeName: lc.name, address: lc.address, placeKeywords: lc.keywords, kind: lc.kind) == true
+            }) {
+                seenTitles.insert(key)
+                result[strongMatch.id, default: []].append(event)
+                continue
+            }
+
+            let weakMatches = locationContexts.filter { lc in
+                matchTier(for: event, placeName: lc.name, address: lc.address, placeKeywords: lc.keywords, kind: lc.kind) == false
+            }
+
+            if weakMatches.count == 1, let onlyMatch = weakMatches.first {
+                seenTitles.insert(key)
+                result[onlyMatch.id, default: []].append(event)
+            }
+
+        }
+
+        for (id, events) in result {
+            result[id] = Array(events.prefix(limit))
+        }
+
+        return result
+
+    }
+
+    private func placeRelatedReminders(placeName: String, address: String?, keywords placeKeywords: Set<String>, limit: Int = 10) -> [String] {
 
         let allReminders = (try? context.fetch(FetchDescriptor<ReminderItem>())) ?? []
 
         let matching = allReminders.filter { reminder in
             let locationMatches = reminder.location.map { location in
                 location.caseInsensitiveCompare(placeName) == .orderedSame
+                    || (address.map { location.caseInsensitiveCompare($0) == .orderedSame } ?? false)
                     || sharesKeyword(location, with: placeKeywords)
             } ?? false
             let titleMatches = sharesKeyword(reminder.title, with: placeKeywords)

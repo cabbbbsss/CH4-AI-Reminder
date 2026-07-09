@@ -64,6 +64,14 @@ struct LocationClassification {
 }
 
 @Generable
+struct PlaceIconSuggestion {
+
+    @Guide(description: "The single best-matching icon name, copied exactly from the allowed list in the instructions")
+    let iconName: String
+
+}
+
+@Generable
 struct ReminderDecision {
 
     @Guide(description: "Should a reminder be shown right now?")
@@ -147,12 +155,56 @@ final class FoundationModelService {
     When in doubt, leave it out.
     """
 
+    /// Unlike `preparationInstructions` (strict: every item must trace to
+    /// something explicitly given, used for Today's Routine where false
+    /// confidence about a random meeting would be embarrassing), this
+    /// permits ordinary common-sense inference from the event's own
+    /// activity — a "Gym" event implies gym gear, a "Cook" event implies
+    /// checking ingredients, even with no note saying so. Used only for
+    /// events already matched to a specific saved place (see
+    /// `LocationRoutingManager`), where the activity itself is the
+    /// intentionally-given signal.
+    private let locationEventInstructions = """
+    You are Eve, an adaptive reminder assistant running privately on the user's device.
+
+    You will be given ONE upcoming calendar event tied to one of the user's \
+    saved places, plus any reminders or beliefs that clearly relate to it. \
+    You are NOT shown the rest of the day's schedule — reason only about the \
+    named event.
+
+    Your only job: write 1-2 short, concrete reminders of things this person \
+    might forget to bring, prepare, or check before THIS event, based on \
+    what kind of activity it clearly is (e.g. a meal, a workout, a meeting, \
+    a class).
+
+    Rules:
+    - Base each reminder on the event's own title, notes, location, or a \
+    matching reminder/belief. Ordinary common-sense inference from the \
+    activity itself is fine and expected — e.g. "Gym" → bring workout gear, \
+    "Cook" or "Lunch" → check ingredients are on hand, "Meeting" → bring \
+    laptop/notes. This is the point of this task.
+    - Do not invent specifics that aren't implied by the event's own nature \
+    (e.g. don't guess a meeting needs an umbrella just because it might rain).
+    - If the event is too vague or generic to say anything concrete and \
+    useful (e.g. "Sleep", "Free time"), return an EMPTY list — that's a \
+    correct, expected answer. Do not force something just to fill it.
+    - Never phrase items as generic advice like "be prepared" or "arrive on \
+    time" — every item must be a specific, actionable thing to bring, \
+    prepare, or check.
+    """
+
     private let placeInstructions = """
     You are Eve, an adaptive reminder assistant running privately on the user's device.
 
     You will be given ONE specific place, how many times the user has visited it, \
     and any calendar events, reminders, or beliefs about the user that are \
     specifically tied to that place. You are NOT shown anything unrelated.
+
+    Some calendar events are marked "(likely — based on usual time at this place, \
+    not explicit)" — these weren't confirmed to be at this place, just inferred \
+    from when they happen (e.g. an evening event guessed as Home). Treat these as \
+    weaker signal: only draw on one if it's still concrete and plausible for this \
+    place, and never state or imply it's confirmed to happen here.
 
     Your only job: list 2-4 short, concrete things Eve has learned to remind the \
     user about when they are at THIS place.
@@ -186,6 +238,70 @@ final class FoundationModelService {
     - Return exactly one assignment per item given, in the same order, \
     copying each item's title back exactly as given.
     """
+
+    /// Built from `LocationIconResolver.catalog` so the icons offered to the
+    /// model are exactly the ones validation will accept.
+    private var iconInstructions: String {
+        """
+        You are Eve, an adaptive reminder assistant running privately on the user's device.
+
+        You will be given ONE place the user just saved: the name they gave it, \
+        and optionally the map's own name and address for the pin they confirmed.
+
+        Your only job: pick the ONE icon from the allowed list below that best \
+        represents what kind of place this is.
+
+        Allowed icons:
+        \(LocationIconResolver.promptCatalog)
+
+        Rules:
+        - Answer with exactly one icon name, copied exactly from the list above.
+        - Judge only from the given name and address — never invent details.
+        - The user's own name for the place is the strongest signal (e.g. a \
+        place named "Gym" is a gym even if the address says otherwise).
+        - If the kind of place is unclear or not covered, use "\(LocationIconResolver.defaultIcon)".
+        """
+    }
+
+    /// Picks the SF Symbol that best represents one just-saved place, from
+    /// the fixed catalog in `LocationIconResolver`. Used only when MapKit's
+    /// own point-of-interest category couldn't decide (see the resolver).
+    /// Returns nil for output outside the catalog — callers keep whatever
+    /// provisional icon they already have.
+    func classifyPlaceIcon(userName: String, mapName: String?, address: String?) async throws -> String? {
+
+        switch SystemLanguageModel.default.availability {
+
+        case .available:
+            break
+
+        case .unavailable(let reason):
+            throw AIError.unavailable(String(describing: reason))
+
+        }
+
+        var prompt = "Name the user gave this place: \"\(userName)\""
+
+        if let mapName, !mapName.isEmpty, mapName != userName {
+            prompt += "\nThe map's own name for the confirmed pin: \"\(mapName)\""
+        }
+
+        if let address, !address.isEmpty {
+            prompt += "\nAddress of the confirmed pin: \(address)"
+        }
+
+        let session = LanguageModelSession(instructions: iconInstructions)
+
+        let response = try await session.respond(
+            to: prompt,
+            generating: PlaceIconSuggestion.self
+        )
+
+        let icon = response.content.iconName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return LocationIconResolver.allowedSymbols.contains(icon) ? icon : nil
+
+    }
 
     func decide(from context: ReminderContext) async throws -> ReminderDecision {
 
@@ -227,6 +343,35 @@ final class FoundationModelService {
         }
 
         let session = LanguageModelSession(instructions: preparationInstructions)
+
+        let response = try await session.respond(
+            to: promptText,
+            generating: EventPreparation.self
+        )
+
+        return response.content.items
+
+    }
+
+    /// A short, activity-based reminder for one calendar event already tied
+    /// to a saved place (e.g. "Gym" → "Bring your whey and gloves"). Looser
+    /// than `suggestPreparation`: common-sense inference from the event's
+    /// own activity is expected, not just explicit context. `promptText`
+    /// must be scoped to just the one event (see
+    /// `ReminderContextBuilder.buildPreparationContext`).
+    func suggestLocationReminder(forPromptText promptText: String) async throws -> [String] {
+
+        switch SystemLanguageModel.default.availability {
+
+        case .available:
+            break
+
+        case .unavailable(let reason):
+            throw AIError.unavailable(String(describing: reason))
+
+        }
+
+        let session = LanguageModelSession(instructions: locationEventInstructions)
 
         let response = try await session.respond(
             to: promptText,
