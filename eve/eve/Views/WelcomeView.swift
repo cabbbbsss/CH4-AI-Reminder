@@ -5,7 +5,7 @@ struct WelcomeView: View {
     
     var body: some View {
         ZStack {
-            Color(hex: "#1D3557").ignoresSafeArea()
+            Color(.textPrimary).ignoresSafeArea()
             
             Rectangle()
                 .fill(Color.white.opacity(0.8))
@@ -50,12 +50,12 @@ struct WelcomeView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("EVE")
                         .font(.system(size: 86, weight: .bold, design: .default))
-                        .foregroundColor(Color(hex: "#19355E"))
+                        .foregroundColor(Color(.textPrimary))
                         .position(x: (20 + 213/2) * ratioX, y: (350 + (86+163)/2) * ratioY)
                     
                     Text("Your adaptive routine companion")
                         .font(.system(size: 30, weight: .bold, design: .default))
-                        .foregroundColor(Color(hex: "#1D3557").opacity(0.59))
+                        .foregroundColor(Color(.textPrimary).opacity(0.59))
                         .fixedSize(horizontal: false, vertical: true)
                         .position(x: (75 + 213/2) * ratioX, y: (-5 + (86+163)/2) * ratioY)
                 }

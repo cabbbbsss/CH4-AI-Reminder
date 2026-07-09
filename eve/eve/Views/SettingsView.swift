@@ -62,7 +62,7 @@ struct SettingsScaffold<Content: View>: View {
 
     var body: some View {
         ZStack {
-            Color(hex: "#E0ECF7").ignoresSafeArea()
+            Color(.bgPrimary).ignoresSafeArea()
 
             VStack(spacing: 0) {
                 SettingsNavBar(title: title) { dismiss() }
@@ -84,13 +84,13 @@ struct SettingsNavBar: View {
         ZStack {
             Text(title)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundColor(.black)
+                .foregroundColor(Color(.textPrimary))
 
             HStack {
                 Button(action: onBack) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(Color(hex: "#1D3557"))
+                        .foregroundColor(Color(.textPrimary))
                         .frame(width: 30, height: 30)
                 }
                 .buttonStyle(.glass)
@@ -111,7 +111,7 @@ struct SettingsSection<Content: View>: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(header)
                 .font(.system(size: 20, weight: .bold))
-                .foregroundColor(Color(hex: "#1D3557"))
+                .foregroundColor(Color(.textPrimary))
                 .padding(.horizontal, 24)
 
             content
@@ -126,7 +126,7 @@ struct SettingsCard<Content: View>: View {
         VStack(spacing: 0) {
             content
         }
-        .background(Color(hex: "#E8F3FF"))
+        .background(Color(.bgSecondary))
         .cornerRadius(20)
         .padding(.horizontal, 20)
     }
@@ -135,7 +135,7 @@ struct SettingsCard<Content: View>: View {
 struct SettingsDivider: View {
     var body: some View {
         Rectangle()
-            .fill(Color(hex: "#1D3557").opacity(0.06))
+            .fill(Color(.textPrimary).opacity(0.06))
             .frame(height: 1)
             .padding(.leading, 18)
     }
@@ -152,17 +152,17 @@ struct SettingsRow: View {
             if let icon {
                 Image(systemName: icon)
                     .font(.system(size: 17))
-                    .foregroundColor(Color(hex: "#1D3557"))
+                    .foregroundColor(Color(.textPrimary))
                     .frame(width: 26)
             }
             Text(label)
                 .font(.system(size: 17))
-                .foregroundColor(Color(hex: "#1D3557"))
+                .foregroundColor(Color(.textPrimary))
             Spacer()
             if showChevron {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(Color(hex: "#ADC0D3"))
+                    .foregroundColor(Color(.textTertiary))
             }
         }
         .padding(.horizontal, 18)
@@ -185,12 +185,12 @@ struct SettingsValueRow: View {
         HStack(spacing: 8) {
             Text(label)
                 .font(.system(size: 17))
-                .foregroundColor(Color(hex: "#1D3557"))
+                .foregroundColor(Color(.textPrimary))
             Spacer()
             if isEditing {
                 TextField("", text: $value)
                     .font(.system(size: 17))
-                    .foregroundColor(Color(hex: "#1D3557"))
+                    .foregroundColor(Color(.textPrimary))
                     .multilineTextAlignment(.trailing)
                     .focused($isFocused)
                     .submitLabel(.done)
@@ -198,7 +198,7 @@ struct SettingsValueRow: View {
             } else {
                 Text(value)
                     .font(.system(size: 17))
-                    .foregroundColor(Color(hex: "#1D3557").opacity(0.7))
+                    .foregroundColor(Color(.textPrimary).opacity(0.7))
             }
             if let trailingIcon, isEditable {
                 Button {
@@ -207,7 +207,7 @@ struct SettingsValueRow: View {
                 } label: {
                     Image(systemName: isEditing ? "checkmark" : trailingIcon)
                         .font(.system(size: 15))
-                        .foregroundColor(Color(hex: "#1D3557").opacity(0.7))
+                        .foregroundColor(Color(.textPrimary).opacity(0.7))
                 }
                 .buttonStyle(.plain)
             }
@@ -240,7 +240,7 @@ struct EVEToggle: View {
     var body: some View {
         Toggle("", isOn: $isOn)
             .labelsHidden()
-            .tint(Color(hex: "#3FA9F5"))
+            .tint(Color.accentColor)
     }
 }
 
@@ -253,7 +253,7 @@ struct SettingsToggleRow: View {
         HStack(spacing: 12) {
             Text(label)
                 .font(.system(size: 15))
-                .foregroundColor(Color(hex: "#1D3557"))
+                .foregroundColor(Color(.textPrimary))
             Spacer()
             EVEToggle(isOn: $isOn)
         }
@@ -273,12 +273,12 @@ struct SettingsChoiceRow: View {
             HStack(spacing: 12) {
                 Text(label)
                     .font(.system(size: 15))
-                    .foregroundColor(Color(hex: "#1D3557"))
+                    .foregroundColor(Color(.textPrimary))
                 Spacer()
                 if isSelected {
                     Image(systemName: "checkmark")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(Color(hex: "#0091FF"))
+                        .foregroundColor(Color.accentColor)
                 }
             }
             .padding(.horizontal, 18)

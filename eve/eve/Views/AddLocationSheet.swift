@@ -105,7 +105,7 @@ struct AddLocationSheet: View {
                     } label: {
                         row(
                             icon: "location.fill",
-                            iconColor: Color(hex: "#94A8BC"),
+                            iconColor: Color(.textQuarternary),
                             title: "Current Location",
                             subtitle: "Use where you are now",
                             selected: false
@@ -119,7 +119,7 @@ struct AddLocationSheet: View {
                         } label: {
                             row(
                                 icon: "mappin.circle.fill",
-                                iconColor: Color(hex: "#FF4245"),
+                                iconColor: Color.red,
                                 title: completion.title,
                                 subtitle: completion.subtitle,
                                 selected: completion.title == selectedTitle
@@ -133,7 +133,7 @@ struct AddLocationSheet: View {
                 if let coordinate = selectedCoordinate {
                     Map(position: $cameraPosition) {
                         Marker(placeName.isEmpty ? (selectedName ?? "Selected place") : placeName, coordinate: coordinate)
-                            .tint(Color(hex: "#FF4245"))
+                            .tint(Color.red)
                     }
                     .frame(height: 220)
                     .transition(.move(edge: .bottom))
@@ -167,13 +167,13 @@ struct AddLocationSheet: View {
     private var nameField: some View {
         HStack(spacing: 10) {
             Image(systemName: "tag.fill")
-                .foregroundColor(Color(hex: "#94A8BC"))
+                .foregroundColor(Color(.textQuarternary))
             TextField("Place name", text: $placeName)
                 .autocorrectionDisabled()
         }
         .padding(.horizontal, 14)
         .frame(height: 44)
-        .background(Color(hex: "#E8F3FF"))
+        .background(Color(.bgSecondary))
         .cornerRadius(14)
         .padding(.horizontal, 16)
         .padding(.top, 8)
@@ -182,7 +182,7 @@ struct AddLocationSheet: View {
     private var searchField: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .foregroundColor(Color(hex: "#94A8BC"))
+                .foregroundColor(Color(.textQuarternary))
             TextField("Search or Enter Address", text: $searchText)
                 .focused($searchFocused)
                 .autocorrectionDisabled()
@@ -197,14 +197,14 @@ struct AddLocationSheet: View {
                     completer.update(query: "")
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(Color(hex: "#94A8BC"))
+                        .foregroundColor(Color(.textQuarternary))
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 14)
         .frame(height: 44)
-        .background(Color(hex: "#E8F3FF"))
+        .background(Color(.bgSecondary))
         .cornerRadius(14)
         .padding(.horizontal, 16)
         .padding(.top, 8)
@@ -220,12 +220,12 @@ struct AddLocationSheet: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(Color(hex: "#1D3557"))
+                    .foregroundColor(Color(.textPrimary))
                     .lineLimit(1)
                 if !subtitle.isEmpty {
                     Text(subtitle)
                         .font(.system(size: 12))
-                        .foregroundColor(Color(hex: "#94A8BC"))
+                        .foregroundColor(Color(.textQuarternary))
                         .lineLimit(1)
                 }
             }
@@ -235,7 +235,7 @@ struct AddLocationSheet: View {
             if selected {
                 Image(systemName: "checkmark")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(Color(hex: "#368BC8"))
+                    .foregroundColor(Color.accentColor)
             }
         }
         .contentShape(Rectangle())

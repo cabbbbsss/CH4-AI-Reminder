@@ -27,7 +27,7 @@ struct SavedAddressView: View {
 
     var body: some View {
         ZStack {
-            Color(hex: "#E0ECF7").ignoresSafeArea()
+            Color(.bgPrimary).ignoresSafeArea()
 
             VStack(spacing: 0) {
                 SettingsNavBar(title: "Saved Address") { dismiss() }
@@ -66,9 +66,9 @@ struct SavedAddressView: View {
                             .opacity(0)
                         Label("Add New Address", systemImage: "plus")
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(Color(hex: "#E0ECF7"))
+                            .foregroundColor(Color(.textSecondary))
                             .frame(width: 200, height: 40)
-                            .background(Color(hex: "#368BC8"))
+                            .background(Color.accentColor)
                             .cornerRadius(20)
                     }
                     .frame(maxWidth: .infinity)
@@ -116,7 +116,7 @@ struct AddressCard: View {
             HStack(alignment: .top) {
                 Text(item.name)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(Color(hex: "#1E3659"))
+                    .foregroundColor(Color(.textPrimary))
                 Spacer()
                 Menu {
                     Button {
@@ -132,29 +132,29 @@ struct AddressCard: View {
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(Color(hex: "#94A8BC"))
+                        .foregroundColor(Color(.textQuarternary))
                         .frame(width: 32, height: 32)
                 }
             }
 
             Text(item.address)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundColor(Color(hex: "#94A8BC"))
+                .foregroundColor(Color(.textQuarternary))
                 .fixedSize(horizontal: false, vertical: true)
 
             if item.isPrimary {
                 Text("Primary")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(Color(hex: "#4F83AB"))
+                    .foregroundColor(Color.accentColor)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
-                    .background(Color(hex: "#C4D7EA").opacity(0.6))
+                    .background(Color(.bgTertiary).opacity(0.6))
                     .cornerRadius(8)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(hex: "#E8F3FF"))
+        .background(Color(.bgSecondary))
         .cornerRadius(20)
         .padding(.horizontal, 20)
     }
@@ -166,14 +166,14 @@ struct SuccessToast: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(Color(hex: "#0091FF"))
+                .foregroundColor(Color.accentColor)
             Text(message)
                 .font(.system(size: 13))
-                .foregroundColor(Color(hex: "#1D3557"))
+                .foregroundColor(Color(.textPrimary))
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
-        .background(Color(hex: "#C4D7EA"))
+        .background(Color(.bgTertiary))
         .cornerRadius(16)
     }
 }

@@ -13,7 +13,7 @@ struct HistoryView: View {
 
     var body: some View {
         ZStack {
-            Color(hex: "#E0ECF7").ignoresSafeArea()
+            Color(.bgPrimary).ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Top Nav
@@ -23,13 +23,13 @@ struct HistoryView: View {
                     }) {
                         Image(systemName: "chevron.backward.circle.fill")
                             .font(.system(size: 32))
-                            .foregroundColor(Color(hex: "#1D3557"))
-                            .background(Circle().fill(Color.white))
+                            .foregroundColor(Color(.textPrimary))
+                            .background(Circle().fill(Color(.bgSecondary)))
                     }
 
                     Text("History")
                         .font(.system(size: 17, weight: .bold))
-                        .foregroundColor(.black)
+                        .foregroundColor(Color(.textPrimary))
                         .padding(.leading, 12)
 
                     Spacer()
@@ -51,17 +51,17 @@ struct HistoryView: View {
 
                         // Screen
                         Ellipse()
-                            .fill(Color(hex: "#1A1916"))
+                            .fill(Color(.textPrimary))
                             .frame(width: 54, height: 36)
                             .offset(y: -2)
 
                         // Face details
                         VStack(spacing: 4) {
                             HStack(spacing: 14) {
-                                Ellipse().fill(Color(hex: "#E0ECF7")).frame(width: 5, height: 3)
-                                Ellipse().fill(Color(hex: "#E0ECF7")).frame(width: 5, height: 3)
+                                Ellipse().fill(Color(.textSecondary)).frame(width: 5, height: 3)
+                                Ellipse().fill(Color(.textSecondary)).frame(width: 5, height: 3)
                             }
-                            Rectangle().fill(Color(hex: "#E0ECF7")).frame(width: 13, height: 2)
+                            Rectangle().fill(Color(.textSecondary)).frame(width: 13, height: 2)
                         }
                         .offset(y: -2)
                     }
@@ -79,7 +79,7 @@ struct HistoryView: View {
 
                         Text("I learn from your interactions and adaptively remind you.")
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(Color(hex: "#1D3557"))
+                            .foregroundColor(Color(.textPrimary))
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
                             .background(Color.white)
@@ -97,13 +97,13 @@ struct HistoryView: View {
                     VStack(spacing: 8) {
                         Image(systemName: "clock")
                             .font(.system(size: 40))
-                            .foregroundColor(Color(hex: "#1E3659").opacity(0.4))
+                            .foregroundColor(Color(.textPrimary).opacity(0.4))
                         Text("Nothing yet")
                             .font(.system(size: 17, weight: .bold))
-                            .foregroundColor(Color(hex: "#1E3659"))
+                            .foregroundColor(Color(.textPrimary))
                         Text("Every sync, question, visit and insight will appear here as a timeline.")
                             .font(.system(size: 13))
-                            .foregroundColor(Color(hex: "#1E3659").opacity(0.6))
+                            .foregroundColor(Color(.textPrimary).opacity(0.6))
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 48)
                     }
@@ -215,14 +215,14 @@ struct HistoryTimelineRow: View {
                 if let dateLabel = dateLabel {
                     Text(dateLabel)
                         .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(Color(hex: "#1E3659"))
+                        .foregroundColor(Color(.textPrimary))
                         .padding(.top, 4)
                         .padding(.bottom, 8)
                 }
                 if let timeLabel = timeLabel {
                     Text(timeLabel)
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(Color(hex: "#1E3659"))
+                        .foregroundColor(Color(.textPrimary))
                         .multilineTextAlignment(.center)
                         .padding(.top, dateLabel == nil ? 12 : 0)
                 }
@@ -232,11 +232,11 @@ struct HistoryTimelineRow: View {
             // Timeline Line
             ZStack(alignment: .top) {
                 Rectangle()
-                    .fill(Color(hex: "#7AA0C3"))
+                    .fill(Color(.textQuarternary))
                     .frame(width: 4)
 
                 Circle()
-                    .fill(Color(hex: "#3FA9F5"))
+                    .fill(Color.accentColor)
                     .frame(width: 10, height: 10)
                     .offset(y: dateLabel != nil ? 54 : 14)
             }
@@ -248,11 +248,11 @@ struct HistoryTimelineRow: View {
                 HStack {
                     Text(title)
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(Color(hex: "#1E3659"))
+                        .foregroundColor(Color(.textPrimary))
                     Spacer()
                     if hasBody {
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .foregroundColor(Color(hex: "#ADC0D3"))
+                            .foregroundColor(Color(.textTertiary))
                             .font(.system(size: 12, weight: .bold))
                     }
                 }
@@ -265,7 +265,7 @@ struct HistoryTimelineRow: View {
                     if let bodyText = bodyText {
                         Text(bodyText)
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(Color(hex: "#1E3659"))
+                            .foregroundColor(Color(.textPrimary))
                             .padding(.horizontal, 16)
                             .padding(.bottom, 16)
                     }
@@ -275,19 +275,19 @@ struct HistoryTimelineRow: View {
                             if let insightTitle = insightTitle {
                                 Text(insightTitle)
                                     .font(.system(size: 11, weight: .black))
-                                    .foregroundColor(Color(hex: "#1E3659"))
+                                    .foregroundColor(Color(.textPrimary))
                             }
                             Text(insightBody)
                                 .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(Color(hex: "#1E3659"))
+                                .foregroundColor(Color(.textPrimary))
                         }
                         .padding(16)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(hex: "#C4D7EA"))
+                        .background(Color(.bgTertiary))
                     }
                 }
             }
-            .background(Color(hex: "#E8F3FF"))
+            .background(Color(.bgSecondary))
             .cornerRadius(12)
             .padding(.top, dateLabel != nil ? 40 : 0)
             .padding(.bottom, 24)

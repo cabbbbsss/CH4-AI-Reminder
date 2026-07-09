@@ -21,7 +21,7 @@ struct InsightView: View {
 
   var body: some View {
     ZStack {
-      Color(hex: "#E0ECF7").ignoresSafeArea()
+      Color(.bgPrimary).ignoresSafeArea()
 
       VStack(spacing: 0) {
         // Top Nav
@@ -31,15 +31,15 @@ struct InsightView: View {
           }) {
             Image(systemName: "chevron.backward.circle.fill")
               .font(.system(size: 32))
-              .foregroundColor(Color(hex: "#1D3557"))
-              .background(Circle().fill(Color.white))
+              .foregroundColor(Color(.textPrimary))
+              .background(Circle().fill(Color(.bgSecondary)))
           }
 
           Spacer()
 
           Text("Insight")
             .font(.system(size: 17, weight: .bold))
-            .foregroundColor(.black)
+            .foregroundColor(Color(.textPrimary))
 
           Spacer()
 
@@ -63,17 +63,17 @@ struct InsightView: View {
 
             // Screen
             Ellipse()
-              .fill(Color(hex: "#1A1916"))
+              .fill(Color(.textPrimary))
               .frame(width: 54, height: 36)
               .offset(y: -2)
 
             // Face details
             VStack(spacing: 4) {
               HStack(spacing: 14) {
-                Ellipse().fill(Color(hex: "#E0ECF7")).frame(width: 5, height: 3)
-                Ellipse().fill(Color(hex: "#E0ECF7")).frame(width: 5, height: 3)
+                Ellipse().fill(Color(.textSecondary)).frame(width: 5, height: 3)
+                Ellipse().fill(Color(.textSecondary)).frame(width: 5, height: 3)
               }
-              Rectangle().fill(Color(hex: "#E0ECF7")).frame(width: 13, height: 2)
+              Rectangle().fill(Color(.textSecondary)).frame(width: 13, height: 2)
             }
             .offset(y: -2)
           }
@@ -91,7 +91,7 @@ struct InsightView: View {
 
             Text("Here’s what I’ve learned\nabout you!")
               .font(.system(size: 13, weight: .bold))
-              .foregroundColor(Color(hex: "#1D3557"))
+              .foregroundColor(Color(.textPrimary))
               .padding(.horizontal, 16)
               .padding(.vertical, 12)
               .background(Color.white)
@@ -105,7 +105,7 @@ struct InsightView: View {
 
         // Dark Blue Container
         ZStack(alignment: .top) {
-          Color(hex: "#1D3557")
+          Color(.textPrimary)
             .cornerRadius(32, corners: [.topLeft, .topRight])
             .ignoresSafeArea(edges: .bottom)
 
@@ -133,9 +133,9 @@ struct InsightView: View {
             NavigationLink(destination: HistoryView()) {
               Text("View History")
                 .font(.system(size: 14, weight: .bold))
-                .foregroundColor(Color(hex: "#E0ECF7"))
+                .foregroundColor(Color(.textSecondary))
                 .frame(width: 200, height: 44)
-                .background(Color(hex: "#368BC8"))
+                .background(Color.accentColor)
                 .cornerRadius(22)
             }
             .padding(.bottom, 40)
@@ -154,13 +154,13 @@ struct InsightView: View {
     VStack(spacing: 12) {
       Image(systemName: "brain")
         .font(.system(size: 44))
-        .foregroundColor(Color(hex: "#E8F3FF").opacity(0.6))
+        .foregroundColor(Color(.textSecondary).opacity(0.6))
       Text("No insights yet")
         .font(.system(size: 18, weight: .bold))
-        .foregroundColor(Color(hex: "#E8F3FF"))
+        .foregroundColor(Color(.textSecondary))
       Text("Tap Eve on the home screen and I'll start learning your routine. What I learn appears here — always yours to correct.")
         .font(.system(size: 14))
-        .foregroundColor(Color(hex: "#E8F3FF").opacity(0.7))
+        .foregroundColor(Color(.textSecondary).opacity(0.7))
         .multilineTextAlignment(.center)
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -178,13 +178,13 @@ struct InsightRow: View {
     HStack(alignment: .top, spacing: 16) {
       Image(systemName: insight.isUserEdited ? "checkmark.seal.fill" : "checkmark.circle")
         .font(.system(size: 20))
-        .foregroundColor(Color(hex: "#EDF3FA"))
+        .foregroundColor(Color(.textSecondary))
         .padding(.top, 2)
 
       VStack(alignment: .leading, spacing: 4) {
         Text(insight.value)
           .font(.system(size: 18, weight: .medium))
-          .foregroundColor(Color(hex: "#E8F3FF"))
+          .foregroundColor(Color(.textSecondary))
           .fixedSize(horizontal: false, vertical: true)
           .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -192,12 +192,12 @@ struct InsightRow: View {
              ? "Confirmed by you"
              : "\(Int(insight.confidence * 100))% confident")
           .font(.system(size: 12, weight: .medium))
-          .foregroundColor(Color(hex: "#9FB6D1"))
+          .foregroundColor(Color(.textTertiary))
       }
 
       Image(systemName: "chevron.right")
         .font(.system(size: 12, weight: .bold))
-        .foregroundColor(Color(hex: "#9FB6D1"))
+        .foregroundColor(Color(.textTertiary))
         .padding(.top, 4)
     }
   }

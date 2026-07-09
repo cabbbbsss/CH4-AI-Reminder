@@ -14,7 +14,7 @@ struct AppleIntelligenceSettingsView: View {
 
                 Text("Allow Apple Intelligence to learn from how you use the synced apps to make suggestions and automate the reminders for you adaptively.")
                     .font(.system(size: 13))
-                    .foregroundColor(Color(hex: "#94A8BC"))
+                    .foregroundColor(Color(.textQuarternary))
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 24)
             }

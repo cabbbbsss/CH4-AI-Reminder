@@ -31,7 +31,7 @@ struct LocationView: View {
         .navigationTitle("Locations")
         .navigationBarTitleDisplayMode(.large)
         .toolbarBackground(.hidden, for: .navigationBar)
-        .tint(Color(hex: "#1D3557"))
+        .tint(Color(.textPrimary))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -100,11 +100,11 @@ struct LocationView: View {
 
     private var screen: some View {
         ZStack {
-            Color(hex: "#4F83AB").ignoresSafeArea()
+            Color(.bgPrimary).ignoresSafeArea()
 
             GeometryReader { proxy in
                 Ellipse()
-                    .fill(Color(hex: "#E0ECF7"))
+                    .fill(Color(.bgSecondary))
                     .frame(width: proxy.size.width * 2.5, height: proxy.size.height * 1.2)
                     .position(x: proxy.size.width / 2, y: -proxy.size.height * 0.1)
             }
@@ -133,10 +133,10 @@ struct LocationView: View {
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(Color(hex: "#1D3557"))
+                        .foregroundColor(Color(.textPrimary))
                         .frame(width: 40, height: 40)
-                        .background(Circle().fill(Color.white.opacity(0.85)))
-                        .overlay(Circle().stroke(Color(hex: "#1D3557").opacity(0.08), lineWidth: 1))
+                        .background(Circle().fill(Color(.bgSecondary).opacity(0.85)))
+                        .overlay(Circle().stroke(Color(.textPrimary).opacity(0.08), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
 
@@ -181,9 +181,9 @@ struct LocationView: View {
             // No location header inside the card — the filter above already
             // shows which place these reminders belong to.
             remindersList(for: location)
-                .background(Color(hex: "#E8F3FF"))
+                .background(Color(.bgSecondary))
                 .cornerRadius(24)
-                .shadow(color: Color(hex: "#1D3557").opacity(0.1), radius: 10, y: 5)
+                .shadow(color: Color(.textPrimary).opacity(0.1), radius: 10, y: 5)
                 .padding(.horizontal, 24)
                 .padding(.top, 12)
                 .padding(.bottom, 24)
@@ -197,10 +197,10 @@ struct LocationView: View {
             if items.isEmpty && isSeeding && !location.hasBeenSeeded {
                 HStack(spacing: 12) {
                     Image(systemName: "sparkles")
-                        .foregroundColor(Color(hex: "#94A8BC"))
+                        .foregroundColor(Color(.textQuarternary))
                     Text("Eve is learning about this place…")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(Color(hex: "#94A8BC"))
+                        .foregroundColor(Color(.textQuarternary))
                 }
                 .listRowInsets(EdgeInsets(top: 10, leading: 20, bottom: 10, trailing: 20))
                 .listRowSeparator(.hidden)
@@ -214,7 +214,7 @@ struct LocationView: View {
                     onTap: { editingReminder = reminder }
                 )
                 .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
-                .listRowSeparatorTint(Color(hex: "#C4D7EA"))
+                .listRowSeparatorTint(Color(.bgTertiary))
                 .listRowBackground(Color.clear)
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     // Icon-only, red — no "Delete" text.
@@ -232,11 +232,11 @@ struct LocationView: View {
             HStack(spacing: 12) {
                 Image(systemName: "circle")
                     .font(.system(size: 22))
-                    .foregroundColor(Color(hex: "#94A8BC").opacity(0.5))
+                    .foregroundColor(Color(.textQuarternary).opacity(0.5))
 
                 TextField("Add Reminder", text: $newReminderText)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(Color(hex: "#1D3557"))
+                    .foregroundColor(Color(.textPrimary))
                     .focused($newReminderFocused)
                     .submitLabel(.next)
                     .onSubmit { commitNewReminder(to: location) }
@@ -266,8 +266,8 @@ struct LocationView: View {
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundColor(.white)
                 .frame(width: 44, height: 44)
-                .background(Circle().fill(Color(hex: "#368BC8")))
-                .shadow(color: Color(hex: "#1D3557").opacity(0.3), radius: 6, y: 3)
+                .background(Circle().fill(Color.accentColor))
+                .shadow(color: Color(.textPrimary).opacity(0.3), radius: 6, y: 3)
         }
         .buttonStyle(.plain)
         // Equal inset from the screen's bottom and trailing edges, matching the
@@ -282,13 +282,13 @@ struct LocationView: View {
         VStack(spacing: 8) {
             Image(systemName: "mappin.slash")
                 .font(.system(size: 44))
-                .foregroundColor(Color(hex: "#1D3557").opacity(0.5))
+                .foregroundColor(Color(.textPrimary).opacity(0.5))
             Text("No places yet")
                 .font(.system(size: 18, weight: .bold))
-                .foregroundColor(Color(hex: "#1D3557"))
+                .foregroundColor(Color(.textPrimary))
             Text("Add a place and Eve will start learning what to remind you there.")
                 .font(.system(size: 13))
-                .foregroundColor(Color(hex: "#1D3557").opacity(0.7))
+                .foregroundColor(Color(.textPrimary).opacity(0.7))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
 
@@ -297,9 +297,9 @@ struct LocationView: View {
             } label: {
                 Label("Add Location", systemImage: "plus")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Color(hex: "#E0ECF7"))
+                    .foregroundColor(Color(.textSecondary))
                     .frame(width: 200, height: 40)
-                    .background(Color(hex: "#368BC8"))
+                    .background(Color.accentColor)
                     .cornerRadius(20)
             }
             .buttonStyle(.plain)
@@ -429,16 +429,16 @@ private struct LocationChip: View {
             Text(location.name)
                 .font(.system(size: 14, weight: .bold))
         }
-        .foregroundColor(isSelected ? .white : Color(hex: "#1D3557"))
+        .foregroundColor(isSelected ? .white : Color(.textPrimary))
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(
             Capsule()
-                .fill(isSelected ? Color(hex: "#368BC8") : Color.white.opacity(0.85))
+                .fill(isSelected ? Color.accentColor : Color(.bgSecondary).opacity(0.85))
         )
         .overlay(
             Capsule()
-                .stroke(Color(hex: "#1D3557").opacity(isSelected ? 0 : 0.08), lineWidth: 1)
+                .stroke(Color(.textPrimary).opacity(isSelected ? 0 : 0.08), lineWidth: 1)
         )
     }
 }
@@ -465,15 +465,15 @@ private struct ReminderRow: View {
             Button(action: onToggle) {
                 Image(systemName: reminder.isCompleted ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 22))
-                    .foregroundColor(reminder.isCompleted ? Color(hex: "#368BC8") : Color(hex: "#94A8BC"))
+                    .foregroundColor(reminder.isCompleted ? Color.accentColor : Color(.textQuarternary))
             }
             .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(reminder.isCompleted ? Color(hex: "#94A8BC") : Color(hex: "#1D3557"))
-                    .strikethrough(reminder.isCompleted, color: Color(hex: "#94A8BC"))
+                    .foregroundColor(reminder.isCompleted ? Color(.textQuarternary) : Color(.textPrimary))
+                    .strikethrough(reminder.isCompleted, color: Color(.textQuarternary))
                     .multilineTextAlignment(.leading)
 
                 // Subtitle = related calendar/reminder event. Empty for
@@ -481,7 +481,7 @@ private struct ReminderRow: View {
                 if let event = reminder.eventTitle, !event.isEmpty {
                     Text(event)
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(Color(hex: "#94A8BC"))
+                        .foregroundColor(Color(.textQuarternary))
                         .lineLimit(1)
                 }
             }

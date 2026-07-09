@@ -16,7 +16,7 @@ struct LocationSettingsView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("ALLOW LOCATION ACCESS")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(Color(hex: "#94A8BC"))
+                    .foregroundColor(Color(.textQuarternary))
                     .padding(.horizontal, 24)
 
                 SettingsCard {
@@ -35,7 +35,7 @@ struct LocationSettingsView: View {
 
                 Text("EVE keeps your location data on your device. It is used only to determine when to send reminders based on your current location, ensuring your routine stays private while providing timely notifications.")
                     .font(.system(size: 13))
-                    .foregroundColor(Color(hex: "#94A8BC"))
+                    .foregroundColor(Color(.textQuarternary))
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 24)
                     .padding(.top, 4)

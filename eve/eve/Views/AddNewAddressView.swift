@@ -35,19 +35,19 @@ struct AddNewAddressView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Search for an address")
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(Color(hex: "#1E3659"))
+                        .foregroundColor(Color(.textPrimary))
 
                     HStack(spacing: 10) {
                         TextField("Enter street, building or area", text: $searchText)
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(Color(hex: "#1E3659"))
+                            .foregroundColor(Color(.textPrimary))
                         Image(systemName: "magnifyingglass")
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(Color(hex: "#94A8BC"))
+                            .foregroundColor(Color(.textQuarternary))
                     }
                     .padding(.horizontal, 16)
                     .frame(height: 44)
-                    .background(Color(hex: "#E8F3FF"))
+                    .background(Color(.bgSecondary))
                     .cornerRadius(14)
 
                     if !searchText.isEmpty {
@@ -59,14 +59,14 @@ struct AddNewAddressView: View {
                                     HStack(spacing: 10) {
                                         Image(systemName: "magnifyingglass")
                                             .font(.system(size: 13))
-                                            .foregroundColor(Color(hex: "#1E3659"))
+                                            .foregroundColor(Color(.textPrimary))
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(suggestion)
                                                 .font(.system(size: 13, weight: .semibold))
-                                                .foregroundColor(Color(hex: "#1E3659"))
+                                                .foregroundColor(Color(.textPrimary))
                                             Text("Kuta, Kab. Badung, Bali")
                                                 .font(.system(size: 11))
-                                                .foregroundColor(Color(hex: "#94A8BC"))
+                                                .foregroundColor(Color(.textQuarternary))
                                         }
                                         Spacer()
                                     }
@@ -80,7 +80,7 @@ struct AddNewAddressView: View {
                                 }
                             }
                         }
-                        .background(Color(hex: "#E8F3FF"))
+                        .background(Color(.bgSecondary))
                         .cornerRadius(14)
                     }
                 }
@@ -89,7 +89,7 @@ struct AddNewAddressView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     Text("Label as")
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(Color(hex: "#1E3659"))
+                        .foregroundColor(Color(.textPrimary))
 
                     HStack(spacing: 12) {
                         ForEach(AddressLabel.allCases) { label in
@@ -107,7 +107,7 @@ struct AddNewAddressView: View {
                 HStack {
                     Text("Set as Primary Address")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(Color(hex: "#94A8BC"))
+                        .foregroundColor(Color(.textQuarternary))
                     Spacer()
                     EVEToggle(isOn: $isPrimary)
                 }
@@ -120,10 +120,10 @@ struct AddNewAddressView: View {
                 } label: {
                     Label("Save Address", systemImage: "square.and.arrow.down")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(Color(hex: "#E0ECF7"))
+                        .foregroundColor(Color(.textSecondary))
                         .frame(maxWidth: .infinity)
                         .frame(height: 44)
-                        .background(Color(hex: "#368BC8"))
+                        .background(Color.accentColor)
                         .cornerRadius(20)
                 }
                 .buttonStyle(.plain)
@@ -144,16 +144,16 @@ struct LabelTile: View {
         Button(action: onTap) {
             VStack(spacing: 8) {
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(isSelected ? Color(hex: "#0091FF") : Color(hex: "#C4D7EA"))
+                    .fill(isSelected ? Color.accentColor : Color(.bgTertiary))
                     .frame(height: 60)
                     .overlay(
                         Image(systemName: label.icon)
                             .font(.system(size: 24))
-                            .foregroundColor(isSelected ? .white : Color(hex: "#1E3659"))
+                            .foregroundColor(isSelected ? .white : Color(.textPrimary))
                     )
                 Text(label.rawValue)
                     .font(.system(size: 11))
-                    .foregroundColor(Color(hex: "#1E3659"))
+                    .foregroundColor(Color(.textPrimary))
             }
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())

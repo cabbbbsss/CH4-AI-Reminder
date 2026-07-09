@@ -1,32 +1,6 @@
 import SwiftUI
 import SwiftData
 
-extension Color {
-    init(hex: String) {
-        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        var int: UInt64 = 0
-        Scanner(string: hex).scanHexInt64(&int)
-        let a, r, g, b: UInt64
-        switch hex.count {
-        case 3: // RGB (12-bit)
-            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
-        case 6: // RGB (24-bit)
-            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
-        case 8: // RRGGBBAA (32-bit)
-            (r, g, b, a) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
-        default:
-            (a, r, g, b) = (255, 0, 0, 0)
-        }
-        self.init(
-            .sRGB,
-            red: Double(r) / 255,
-            green: Double(g) / 255,
-            blue:  Double(b) / 255,
-            opacity: Double(a) / 255
-        )
-    }
-}
-
 // Custom corner radius modifier
 struct RoundedCorner: Shape {
     var radius: CGFloat = .infinity
@@ -105,8 +79,8 @@ struct HomeView: View {
             ZStack {
                 LinearGradient(
                   stops: [
-                    .init(color: Color(hex: "#AACBEB"), location: 0.75),
-                    .init(color: Color(hex: "#E8F3FF"), location: 1.0)
+                    .init(color: Color(.bgPrimary), location: 0.75),
+                    .init(color: Color(.bgSecondary), location: 1.0)
                   ],
                   startPoint: .top,
                   endPoint: .bottom
@@ -114,14 +88,14 @@ struct HomeView: View {
                 .ignoresSafeArea()
 
                 Rectangle()
-                    .fill(Color.init(hex: "#3E6590"))
+                    .fill(Color(.textPrimary))
                     .cornerRadius(20)
                     .frame(width: 390, height: 490)
                     .ignoresSafeArea(edges: .top)
                     .frame(maxHeight: .infinity, alignment: .top)
 
                 Rectangle()
-                    .fill(Color.init(hex: "#1D3557"))
+                    .fill(Color(.textPrimary))
                     .cornerRadius(20)
                     .blur(radius: 100)
                     .frame(width: 400, height: 300)
@@ -135,7 +109,7 @@ struct HomeView: View {
                         HStack {
                             Text(greeting)
                                 .font(.system(size: 30, weight: .medium, design: .default))
-                                .foregroundColor(Color(hex: "#BCCFE3"))
+                                .foregroundColor(Color(.textTertiary))
                                 .padding(.leading, 30)
 
                             Spacer()
@@ -143,7 +117,7 @@ struct HomeView: View {
                             NavigationLink(destination: SettingsView()) {
                                 Image(systemName: "gearshape.fill")
                                     .font(.title2)
-                                    .foregroundStyle(Color.primaryEve)
+                                    .foregroundStyle(Color.accentColor)
                                     .padding(5)
                             }
                             .buttonStyle(.glassProminent)
@@ -173,11 +147,11 @@ struct HomeView: View {
                                 VStack(alignment: .leading) {
                                     Text(suggestionText)
                                         .font(.system(size: 15, weight: .medium))
-                                        .foregroundColor(.black)
+                                        .foregroundColor(Color(.textPrimary))
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                                 .padding(16)
-                                .background(Color(hex: "#C4D7EA"))
+                                .background(Color(.bgTertiary))
                                 .cornerRadius(20, corners: [.topRight, .bottomLeft, .bottomRight])
                                 .cornerRadius(4, corners: [.topLeft])
                             }
@@ -192,7 +166,7 @@ struct HomeView: View {
                         VStack(alignment: .leading, spacing: 16) {
                             Text("Today's Routine")
                                 .font(.system(size: 17, weight: .bold))
-                                .foregroundColor(Color(hex: "#1D3557"))
+                                .foregroundColor(Color(.textPrimary))
                                 .padding(.horizontal, 20)
                                 .padding(.top, 20)
 
@@ -200,7 +174,7 @@ struct HomeView: View {
                                 if todaysEvents.isEmpty {
                                     Text("No calendar events today.")
                                         .font(.system(size: 14))
-                                        .foregroundColor(Color(hex: "#1D3557").opacity(0.6))
+                                        .foregroundColor(Color(.textPrimary).opacity(0.6))
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .padding(.horizontal, 20)
                                         .padding(.vertical, 24)
@@ -230,7 +204,7 @@ struct HomeView: View {
                         // the text inside is hardcoded dark, so an adaptive
                         // background would turn near-black in Dark Mode and make
                         // the text unreadable. Matches every other card on this screen.
-                        .background(Color(hex: "#E8F3FF"))
+                        .background(Color(.bgSecondary))
                         .opacity(0.9)
                         .frame(height: 200)
                         .cornerRadius(10)
@@ -240,7 +214,7 @@ struct HomeView: View {
                         // Synced Reminders
                         Text("Synced Reminders")
                             .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(Color(hex: "#1D3557"))
+                            .foregroundColor(Color(.textPrimary))
                             .padding(.horizontal, 30)
                             .padding(.top, 40)
 
@@ -250,16 +224,16 @@ struct HomeView: View {
                                 VStack(alignment: .leading, spacing: 5) {
                                     Image(systemName: "location.fill")
                                         .font(.system(size: 30))
-                                        .foregroundColor(Color(hex: "#1D3557"))
+                                        .foregroundColor(Color(.textPrimary))
                                         .frame(maxWidth: .infinity, alignment: .center)
 
                                     Text("Location")
                                         .font(.system(size: 15, weight: .bold))
-                                        .foregroundColor(Color(hex: "#1D3557"))
+                                        .foregroundColor(Color(.textPrimary))
                                         .frame(maxWidth: .infinity, alignment: .center)
                                 }
                                 .padding(20)
-                                .background(Color(hex: "#E8F3FF"))
+                                .background(Color(.bgSecondary))
                                 .cornerRadius(20)
                             }
 
@@ -268,16 +242,16 @@ struct HomeView: View {
                                 VStack(alignment: .leading, spacing: 5) {
                                     Image(systemName: "calendar")
                                         .font(.system(size: 30))
-                                        .foregroundColor(Color(hex: "#1D3557"))
+                                        .foregroundColor(Color(.textPrimary))
                                         .frame(maxWidth: .infinity, alignment: .center)
 
                                     Text("Calendar")
                                         .font(.system(size: 15, weight: .bold))
-                                        .foregroundColor(Color(hex: "#1D3557"))
+                                        .foregroundColor(Color(.textPrimary))
                                         .frame(maxWidth: .infinity, alignment: .center)
                                 }
                                 .padding(20)
-                                .background(Color(hex: "#E8F3FF"))
+                                .background(Color(.bgSecondary))
                                 .cornerRadius(20)
                             }
                         }
@@ -295,10 +269,10 @@ struct HomeView: View {
                             NavigationLink(destination: InsightView()) {
                                 Text("View Insights")
                                     .font(.system(size: 14, weight: .bold))
-                                    .foregroundColor(Color(hex: "#E0ECF7"))
+                                    .foregroundColor(Color(.textSecondary))
                                     .padding(.vertical, 10)
                                     .padding(.horizontal, 20)
-                                    .background(Color(hex: "#368BC8"))
+                                    .background(Color.accentColor)
                                     .cornerRadius(20)
                             }
                         }
@@ -359,9 +333,9 @@ struct HomeView: View {
     /// Cycles through the three design accent colors for timeline dots.
     private func dotColor(for index: Int) -> Color {
         let palette = [
-            Color(hex: "#3FA9F5"),
-            Color(hex: "#4A60B2"),
-            Color(hex: "#E0ECF7")
+            Color.accentColor,
+            Color(.textPrimary),
+            Color(.bgTertiary)
         ]
         return palette[index % palette.count]
     }
@@ -383,11 +357,11 @@ struct TimelineItem: View {
     var onToggle: (() -> Void)? = nil
 
     private var textColor: Color {
-        isCurrent ? .white : Color(hex: "#1D3557")
+        isCurrent ? Color(.textSecondary) : Color(.textPrimary)
     }
 
     private var secondaryTextColor: Color {
-        isCurrent ? Color.white.opacity(0.8) : Color(hex: "#1D3557").opacity(0.6)
+        isCurrent ? Color(.textSecondary).opacity(0.8) : Color(.textPrimary).opacity(0.6)
     }
 
     var body: some View {
@@ -401,7 +375,7 @@ struct TimelineItem: View {
 
                 if !isLast {
                     Rectangle()
-                        .fill(Color(hex: "#E0ECF7"))
+                        .fill(Color(.bgSecondary))
                         .frame(width: 2)
                         .padding(.top, 8)
                 }
@@ -458,7 +432,7 @@ struct TimelineItem: View {
             .padding(.vertical, 12)
             .padding(.horizontal, 16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isCurrent ? Color(hex: "#1D3557") : Color.clear)
+            .background(isCurrent ? Color(.textPrimary) : Color.clear)
             .cornerRadius(12)
             .padding(.bottom, 8)
         }

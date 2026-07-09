@@ -6,7 +6,7 @@ struct PermissionView: View {
     
     var body: some View {
         ZStack {
-            Color(hex: "#1D3557").ignoresSafeArea()
+            Color(.textPrimary).ignoresSafeArea()
             
             Rectangle()
                 .fill(Color.white.opacity(0.8))
@@ -18,7 +18,7 @@ struct PermissionView: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Enhance \nYour Assistant")
                     .font(.system(size: 30, weight: .bold, design: .default))
-                    .foregroundColor(Color(hex: "#1D3557"))
+                    .foregroundColor(Color(.textPrimary))
                     .padding(.top, 60)
                     .padding(.horizontal, 24)
                 
@@ -32,7 +32,7 @@ struct PermissionView: View {
                     VStack(spacing: 20) {
                         PermissionRow(
                             icon: "apple.intelligence",
-                            iconColor: Color(hex: "#368BC8"),
+                            iconColor: Color.accentColor,
                             title: "Apple Intelligence",
                             description: "EVE builds unique patterns from your data.",
                             isGranted: permissionManager.isAIEnabled
@@ -42,7 +42,7 @@ struct PermissionView: View {
                         
                         PermissionRow(
                             icon: "location.fill",
-                            iconColor: Color(hex: "#368BC8"),
+                            iconColor: Color.accentColor,
                             title: "Location Reminders",
                             description: "EVE contextually reminds you at specific places.",
                             isGranted: permissionManager.isLocationGranted
@@ -52,7 +52,7 @@ struct PermissionView: View {
                         
                         PermissionRow(
                             icon: "bell.badge.fill",
-                            iconColor: Color(hex: "#368BC8"),
+                            iconColor: Color.accentColor,
                             title: "Proactive Notifications",
                             description: "Receives timely habit predictions and reminders.",
                             isGranted: permissionManager.isNotificationsGranted
@@ -62,7 +62,7 @@ struct PermissionView: View {
                         
                         PermissionRow(
                             icon: "calendar",
-                            iconColor: Color(hex: "#368BC8"),
+                            iconColor: Color.accentColor,
                             title: "Calendar & Reminders",
                             description: "Learns your schedules to avoid duplicate reminders.",
                             isGranted: permissionManager.isCalendarGranted && permissionManager.isReminderGranted
@@ -122,11 +122,11 @@ struct PermissionRow: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(title)
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(Color(hex: "#1D3557"))
+                    .foregroundColor(Color(.textPrimary))
                 
                 Text(description)
                     .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(Color(hex: "#1D3557"))
+                    .foregroundColor(Color(.textPrimary))
                     .fixedSize(horizontal: false, vertical: true)
             }
             
@@ -134,7 +134,7 @@ struct PermissionRow: View {
             
             if isGranted {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(Color(hex: "#30D158"))
+                    .foregroundColor(Color.green)
                     .font(.system(size: 24))
             } else {
                 Button(action: {
@@ -147,13 +147,13 @@ struct PermissionRow: View {
                         .foregroundColor(.white)
                         .padding(.vertical, 8)
                         .padding(.horizontal, 10)
-                        .background(Color(hex: "#368BC8"))
+                        .background(Color.accentColor)
                         .clipShape(Capsule())
                 }
             }
         }
         .padding(20)
-        .background(Color(hex: "#E8F3FF"))
+        .background(Color(.bgSecondary))
         .cornerRadius(20)
     }
 }

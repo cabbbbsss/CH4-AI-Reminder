@@ -27,7 +27,7 @@ struct AILearningView: View {
 
         Text(headline)
           .font(.system(size: 32, weight: .bold))
-          .foregroundColor(.white)
+          .foregroundColor(Color(.textSecondary))
           .multilineTextAlignment(.center)
           .animation(.easeInOut, value: isFinished)
           .animation(.easeInOut, value: aiMissing)
@@ -91,10 +91,10 @@ struct AILearningView: View {
   private var background: some View {
     LinearGradient(
       stops: [
-        .init(color: Color(hex: "#16273F"), location: 0.0),
-        .init(color: Color(hex: "#1D3557"), location: 0.35),
-        .init(color: Color(hex: "#5F7FA4"), location: 0.75),
-        .init(color: Color(hex: "#DCE8F4"), location: 1.0)
+        .init(color: Color(.gradientSecondaryStart), location: 0.0),
+        .init(color: Color(.textPrimary), location: 0.35),
+        .init(color: Color(.textQuarternary), location: 0.75),
+        .init(color: Color(.gradientPrimaryStart), location: 1.0)
       ],
       startPoint: .top,
       endPoint: .bottom
@@ -201,7 +201,7 @@ struct AILearningView: View {
 
       Image(systemName: "apple.intelligence")
         .font(.system(size: 40, weight: .regular))
-        .foregroundColor(Color(hex: "#1D3557"))
+        .foregroundColor(Color(.textPrimary))
 
       VStack(alignment: .leading, spacing: 2) {
 
@@ -217,7 +217,7 @@ struct AILearningView: View {
           .fixedSize(horizontal: false, vertical: true)
 
       }
-      .foregroundColor(Color(hex: "#1D3557"))
+      .foregroundColor(Color(.textPrimary))
 
       Button {
         if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -229,13 +229,13 @@ struct AILearningView: View {
           .foregroundColor(.white)
           .padding(.horizontal, 16)
           .padding(.vertical, 8)
-          .background(Color(hex: "#3B9CE2"), in: Capsule())
+          .background(Color.accentColor, in: Capsule())
       }
 
     }
     .padding(20)
     .background(
-      Color(hex: "#E7F0FA"),
+      Color(.bgSecondary),
       in: RoundedRectangle(cornerRadius: 22, style: .continuous)
     )
     .padding(.horizontal, 20)
@@ -253,10 +253,10 @@ struct AILearningView: View {
     } label: {
       Text("Continue to Home")
         .font(.system(size: 17, weight: .bold))
-        .foregroundColor(Color(hex: "#1D3557"))
+        .foregroundColor(Color(.textPrimary))
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
-        .background(Color.white, in: Capsule())
+        .background(Color(.bgSecondary), in: Capsule())
     }
     .padding(.horizontal, 32)
     .padding(.bottom, 24)
@@ -321,12 +321,12 @@ private struct LearningLogRow: View {
       VStack(spacing: 0) {
         ZStack {
           Circle()
-            .fill(Color.white)
+            .fill(Color(.bgSecondary))
             .frame(width: 28, height: 28)
 
           Image(systemName: icon)
             .font(.system(size: 12, weight: .bold))
-            .foregroundColor(Color(hex: "#1D3557"))
+            .foregroundColor(Color(.textPrimary))
         }
 
         // Tail line: full segment between rows, short stub under

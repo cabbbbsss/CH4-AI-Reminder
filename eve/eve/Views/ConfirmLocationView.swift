@@ -17,7 +17,7 @@ struct ConfirmLocationView: View {
 
                     Image(systemName: "mappin")
                         .font(.system(size: 32))
-                        .foregroundColor(Color(hex: "#FF4245"))
+                        .foregroundColor(Color.red)
                         .offset(y: -16)
                         .allowsHitTesting(false)
                 }
@@ -28,9 +28,9 @@ struct ConfirmLocationView: View {
                 } label: {
                     Text("Confirm Location")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(Color(hex: "#E0ECF7"))
+                        .foregroundColor(Color(.textSecondary))
                         .frame(width: 200, height: 40)
-                        .background(Color(hex: "#368BC8"))
+                        .background(Color.accentColor)
                         .cornerRadius(20)
                 }
                 .buttonStyle(.plain)
