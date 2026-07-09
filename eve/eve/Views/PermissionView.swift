@@ -67,7 +67,7 @@ struct PermissionView: View {
                             description: "Learns your schedules to avoid duplicate reminders.",
                             isGranted: permissionManager.isCalendarGranted && permissionManager.isReminderGranted
                         ) {
-                          Task { await permissionManager.requestCalendar() await permissionManager.requestReminders() }
+                          Task { await permissionManager.requestCalendar(); await permissionManager.requestReminders() }
                           
                         }
                     }
