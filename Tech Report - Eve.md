@@ -15,8 +15,8 @@ Going into this project, our primary assumption was that CoreML would be the fou
 ### What we browsed, and what surprised us:
 - CreateML, we notice that we can create and train an ML model with zero code in XCode.
 - Apple Intelligence uses powerful foundation models and connects them to the Apple ecosystem so they can understand our personal context.
-- As a developer, if we want to use the foundation models that are already built into Apple Intelligence, we don't have to deal with CoreML ourself.
-- The only time we would still need CoreML is if we want to bring our own completely custom or proprietary model (like a specific model we trained ourself on our own servers) and force it to run locally on the user's iPhone.
+- As a developer, if we want to use the foundation models that are already built into Apple Intelligence, we don't have to deal with CoreML ourselves.
+- The only time we would still need CoreML is if we want to bring our own completely custom or proprietary model (like a specific model we trained ourselves on our own servers) and force it to run locally on the user's iPhone.
 - If we are connecting our app to a third-party model running on a remote server (for example, using the OpenAI API, Anthropic API, or our own AWS/Hugging Face cloud server), we don't need CoreML. We can just use standard web networking code (URLSession in Swift) to send text to their server and get a response back.
 - Importing Foundation in Swift is completely different from 'Foundation Models' in AI. Foundation Models are large-scale machine learning models trained on broad data to perform varied AI tasks. In contrast, Swift's Foundation is a core software framework that provides essential base capabilities, like data storage, file management, networking, and date formatting, for Apple and Swift development.
 - The difference between action classification and activity classification is action for body movements so it needs video as an input meanwhile activity is for motion sensor.
@@ -24,7 +24,7 @@ Going into this project, our primary assumption was that CoreML would be the fou
 - AppIntent used to connects app's features to system-wide automation tools like the Shortcuts app, Siri, and Apple Intelligence. It allows us to expose specific actions from our app to the rest of the OS. For example, if we have a journaling app, we can create an AppIntent called "Create New Entry." Apple Intelligence or Siri can then trigger that action even when our app is closed.
 - CoreLocation is the GPS and geography engine.
 - UserNotification is the push notification manager.
-- We can use Playgrounds to test the performa of Foundation Models.
+- We can use Playgrounds to test the performance of Foundation Models.
 
 Moving forward, we decided to make the Foundation Models framework our primary area of exploration. It offers a massive amount of untapped potential, and we are eager to discover how its latest updates perform inside the iOS 27 Beta.
 
@@ -65,7 +65,7 @@ Moving forward, we decided to make the Foundation Models framework our primary a
 - We explored an automated journaling application that could process a user's prompt, pull matching media assets, and generate descriptive text into a digital scrapbook layout. We shelved this idea for two reasons: a competitive audit showed an over-saturation of AI journaling concepts since our initial stage, and the core value proposition of a scrapbook relies heavily on visual layout and scrapbook design, whereas this challenge strictly tasked us with exploring deep technical implementation of frameworks.
 
 ## 5. Real Limitations Hit
-We attempted to use the Foundation Models framework combined with `AVFoundation` to build an AI assistant video editor that could extract highlights based on emotional moods (like "sad," "cinematic," or "moody"). While the documentation states that the model excels at isolating actions and precise timestamps, it repeatedly struggled with these abstract requests. Because human definitions of a "vibe" vary, the model failed to return consistent, reliable results for subjective keywords. We dropped the dedicated app concept when we realized native Apple Intelligence features (like Memory Movies and advance Photos search) already handle this behavior.
+We attempted to use the Foundation Models framework combined with `AVFoundation` to build an AI assistant video editor that could extract highlights based on emotional moods (like "sad," "cinematic," or "moody"). While the documentation states that the model excels at isolating actions and precise timestamps, it repeatedly struggled with these abstract requests. Because human definitions of a "vibe" vary, the model failed to return consistent, reliable results for subjective keywords. We dropped the dedicated app concept when we realized native Apple Intelligence features (like Memory Movies and advanced Photos search) already handle this behavior.
 
 Besides that, we also notice that Foundation models can't solve a complex reasoning, long-context tasks, general world knowledge, code generation, and math. To maximize and isolate the true potential of Apple's Foundation Models framework, we made a deliberate architectural decision not to introduce or implement any external third-party models or cloud AI runtimes.
 
