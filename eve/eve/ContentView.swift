@@ -4,7 +4,17 @@ import SwiftData
 struct ContentView: View {
   @AppStorage("onboardingStep") private var currentStep: Int = 0
   @Bindable private var permissionManager = PermissionManager.shared
-  
+
+  @AppStorage("appThemePreference") private var themeRaw = AppThemePreference.system.rawValue
+
+  private var preferredScheme: ColorScheme? {
+    switch AppThemePreference(rawValue: themeRaw) ?? .system {
+    case .system: return nil        // follow device
+    case .light:  return .light
+    case .dark:   return .dark
+    }
+  }
+
   var body: some View {
     Group {
       if permissionManager.hasCompletedOnboarding {
@@ -25,6 +35,7 @@ struct ContentView: View {
       }
     }
     .animation(.easeInOut, value: currentStep)
+    .preferredColorScheme(preferredScheme)
   }
 }
 

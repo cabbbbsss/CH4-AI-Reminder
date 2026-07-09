@@ -1,10 +1,33 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Main Settings hub (Sketch artboard 5CF849E7)
+
+/// App-wide appearance preference. `system` follows the device until the user
+/// flips the Dark Mode toggle, which commits an explicit `light`/`dark` choice.
+enum AppThemePreference: String {
+    case system, light, dark
+}
 
 struct SettingsView: View {
     @Bindable var permissionManager = PermissionManager.shared
     @State private var name = "John"
+
+    @AppStorage("appThemePreference") private var themeRaw = AppThemePreference.system.rawValue
+    @Environment(\.colorScheme) private var systemScheme
+
+    private var isDarkMode: Binding<Bool> {
+        Binding(
+            get: {
+                switch AppThemePreference(rawValue: themeRaw) ?? .system {
+                case .system: return systemScheme == .dark
+                case .light:  return false
+                case .dark:   return true
+                }
+            },
+            set: { themeRaw = $0 ? AppThemePreference.dark.rawValue : AppThemePreference.light.rawValue }
+        )
+    }
 
     var body: some View {
         SettingsScaffold(title: "Settings") {
@@ -12,12 +35,28 @@ struct SettingsView: View {
                 // Allow EVE to Access
                 SettingsSection(header: "Allow EVE to Access") {
                     SettingsCard {
-                        SettingsNavRow(icon: "apple.intelligence", label: "Apple Intelligence") {
-                            AppleIntelligenceSettingsView()
+                        SettingsNavRow(icon: "calendar", label: "Calendar") {
+                            PermissionStatusSettingsView(
+                                title: "Calendar",
+                                statusKeyPath: \.isCalendarGranted,
+                                description: "EVE reads and updates your calendar events to build your routine and schedule reminders. Calendar access is managed by iOS — use the Settings app to change it."
+                            )
+                        }
+                        SettingsDivider()
+                        SettingsNavRow(icon: "checklist", label: "Reminder") {
+                            PermissionStatusSettingsView(
+                                title: "Reminder",
+                                statusKeyPath: \.isReminderGranted,
+                                description: "EVE reads and creates reminders so it can nudge you at the right time. Reminder access is managed by iOS — use the Settings app to change it."
+                            )
                         }
                         SettingsDivider()
                         SettingsNavRow(icon: "location.fill", label: "Location") {
-                            LocationSettingsView()
+                            PermissionStatusSettingsView(
+                                title: "Location",
+                                statusKeyPath: \.isLocationGranted,
+                                description: "EVE uses your location to send timely, location-based reminders. Location access is managed by iOS — use the Settings app to change it."
+                            )
                         }
                         SettingsDivider()
                         SettingsNavRow(icon: "bell.badge.fill", label: "Notification") {
@@ -26,14 +65,17 @@ struct SettingsView: View {
                     }
                 }
 
+                // Display & Appearance
+                SettingsSection(header: "Display & Appearance") {
+                    SettingsCard {
+                        SettingsToggleRow(label: "Dark Mode", isOn: isDarkMode)
+                    }
+                }
+
                 // Profile
                 SettingsSection(header: "Profile") {
                     SettingsCard {
                         SettingsValueRow(label: "Name", value: $name, trailingIcon: "pencil", isEditable: true)
-                        SettingsDivider()
-                        SettingsNavRow(label: "Saved Address") {
-                            SavedAddressView()
-                        }
                     }
                 }
 
@@ -60,6 +102,12 @@ struct SettingsScaffold<Content: View>: View {
     @ViewBuilder var content: Content
     @Environment(\.dismiss) private var dismiss
 
+    /// Restores the swipe-to-go-back gesture that the hidden nav bar below
+    /// suppresses, so a right-swipe pops the screen (Settings → Home, and each
+    /// settings sub-screen → the previous one). Every settings screen builds on
+    /// this scaffold, so wiring it here enables swipe-back across all of them.
+    @State private var popEnabler = PopGestureEnabler()
+
     var body: some View {
         ZStack {
             Color(.bgPrimary).ignoresSafeArea()
@@ -73,6 +121,15 @@ struct SettingsScaffold<Content: View>: View {
             }
         }
         .navigationBarHidden(true)
+        .onAppear {
+            popEnabler.enable()
+            // The nav hierarchy may not be fully wired on the first tick of a
+            // push; re-apply next runloop so we don't miss the recognizer.
+            DispatchQueue.main.async { popEnabler.enable() }
+        }
+        .onDisappear {
+            popEnabler.restore()
+        }
     }
 }
 
@@ -286,6 +343,115 @@ struct SettingsChoiceRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Swipe-back enabler
+
+/// Re-enables the interactive swipe-to-go-back gesture while a settings screen
+/// owns the display. `SettingsScaffold` hides the navigation bar
+/// (`.navigationBarHidden(true)`), and iOS blocks swipe-back whenever the bar
+/// is hidden — so without this the only way back is the chevron button.
+///
+/// This is the mirror image of `PopGestureGuard` in CalendarView: it enables
+/// the recognizers and installs a delegate that *permits* the pop, rather than
+/// disabling them and refusing it. iOS 26 splits swipe-back into two
+/// recognizers — the edge pan (`interactivePopGestureRecognizer`) and the
+/// full-content pan (`interactiveContentPopGestureRecognizer`) — so both are
+/// restored, with each recognizer's original state captured for `restore()`.
+private final class PopGestureEnabler: NSObject, UIGestureRecognizerDelegate {
+
+    /// One recognizer's original state, so `restore()` can put it back exactly.
+    private final class Capture {
+        weak var gesture: UIGestureRecognizer?
+        let wasEnabled: Bool
+        weak var previousDelegate: UIGestureRecognizerDelegate?
+        init(_ gesture: UIGestureRecognizer) {
+            self.gesture = gesture
+            self.wasEnabled = gesture.isEnabled
+            self.previousDelegate = gesture.delegate
+        }
+    }
+
+    private var captures: [Capture] = []
+    private var capturedIDs = Set<ObjectIdentifier>()
+
+    /// Permit the pop only when there's a screen to go back to, so a swipe on
+    /// the navigation root can't try to pop nothing.
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        for nav in Self.navigationControllers() {
+            if nav.interactivePopGestureRecognizer === gestureRecognizer
+                || nav.interactiveContentPopGestureRecognizer === gestureRecognizer {
+                return nav.viewControllers.count > 1
+            }
+        }
+        return false
+    }
+
+    /// Coexist with the scaffold's vertical ScrollView pan so scrolling still works.
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        true
+    }
+
+    func enable() {
+        for gesture in Self.popRecognizers() {
+            // Capture each recognizer's original state exactly once, before we
+            // touch it, so a repeated enable() never records our own values.
+            if capturedIDs.insert(ObjectIdentifier(gesture)).inserted {
+                captures.append(Capture(gesture))
+            }
+            gesture.isEnabled = true
+            gesture.delegate = self
+        }
+    }
+
+    func restore() {
+        for capture in captures {
+            guard let gesture = capture.gesture else { continue }
+            // Only revert if we're still the active delegate. When a settings
+            // sub-screen is pushed, its scaffold takes over the same recognizer
+            // before this parent scaffold disappears; reverting then would
+            // clobber the child's setup and kill swipe-back on the child.
+            guard gesture.delegate === self else { continue }
+            gesture.isEnabled = capture.wasEnabled
+            gesture.delegate = capture.previousDelegate
+        }
+        captures.removeAll()
+        capturedIDs.removeAll()
+    }
+
+    /// Every navigation controller in the app's window hierarchy, de-duplicated.
+    /// Sweeps all scenes rather than a single `navigationController`, since
+    /// SwiftUI may host our content outside the nav controller's subtree.
+    private static func navigationControllers() -> [UINavigationController] {
+        var result: [UINavigationController] = []
+        var seen = Set<ObjectIdentifier>()
+
+        func walk(_ viewController: UIViewController?) {
+            guard let viewController else { return }
+            if let nav = viewController as? UINavigationController,
+               seen.insert(ObjectIdentifier(nav)).inserted {
+                result.append(nav)
+            }
+            viewController.children.forEach(walk)
+            walk(viewController.presentedViewController)
+        }
+
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene else { continue }
+            for window in windowScene.windows {
+                walk(window.rootViewController)
+            }
+        }
+        return result
+    }
+
+    private static func popRecognizers() -> [UIGestureRecognizer] {
+        navigationControllers().flatMap { nav in
+            [nav.interactivePopGestureRecognizer, nav.interactiveContentPopGestureRecognizer]
+                .compactMap { $0 }
+        }
     }
 }
 
