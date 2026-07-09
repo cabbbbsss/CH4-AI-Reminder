@@ -117,7 +117,10 @@ struct HomeView: View {
                             NavigationLink(destination: SettingsView()) {
                                 Image(systemName: "gearshape.fill")
                                     .font(.title2)
-                                    .foregroundStyle(Color.accentColor)
+                                    // White, not accent: .glassProminent tints the button's
+                                    // background with the accent color, so an accent-colored
+                                    // gear was invisible against it. White reads in both modes.
+                                    .foregroundStyle(.white)
                                     .padding(5)
                             }
                             .buttonStyle(.glassProminent)
