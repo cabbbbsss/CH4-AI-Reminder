@@ -17,6 +17,8 @@ struct ContentView: View {
           PermissionView(currentStep: $currentStep)
         case 2:
           AILearningView(currentStep: $currentStep)
+        case 3:
+          OnboardingQuestionsView(currentStep: $currentStep)
         default:
           HomeView()
         }

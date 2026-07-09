@@ -91,6 +91,25 @@ struct ReminderDecision {
 
 }
 
+@Generable
+struct OnboardingQuestion {
+
+    @Guide(description: "A short yes/no question whose answer will improve reminders. Either confirms a concrete pattern from the user's data (e.g. 'You usually visit the gym on weekday evenings. Correct?') or asks about an important recurring need (e.g. 'Do you take medication on a regular schedule?').")
+    let question: String
+
+    @Guide(description: "One of: routine, health, pet, commute, work, preference")
+    let category: String
+
+}
+
+@Generable
+struct OnboardingQuestionSet {
+
+    @Guide(description: "5 to 6 concise yes/no onboarding questions, personalised to the context. Mix confirmations of patterns you can see with questions about important recurring needs such as medication, pets, commute, or exercise.")
+    let questions: [OnboardingQuestion]
+
+}
+
 /// The only gateway to Apple's on-device model.
 /// Input: ReminderContext. Output: ReminderDecision. Nothing else.
 final class FoundationModelService {
@@ -431,6 +450,48 @@ final class FoundationModelService {
         )
 
         return response.content.assignments
+
+    }
+
+    private let onboardingInstructions = """
+    You are Eve, an adaptive reminder assistant setting up on the user's device.
+
+    From the provided context (calendar, reminders, current place, current \
+    beliefs, recent activity), produce a short list of yes/no questions whose \
+    answers would MOST improve the reminders you give this user.
+
+    Rules:
+    - Every question must be answerable with a simple Yes or No.
+    - Prefer confirming concrete patterns you can actually see in the context.
+    - Also ask about important recurring needs a reminder app should know: \
+    medication schedules, caring for a pet, commuting to work, exercise, \
+    recurring appointments.
+    - Keep each question to one friendly sentence. Do not repeat questions.
+    """
+
+    /// Generates personalised onboarding questions from the prepared context.
+    func generateOnboardingQuestions(
+        from context: ReminderContext
+    ) async throws -> [OnboardingQuestion] {
+
+        switch SystemLanguageModel.default.availability {
+
+        case .available:
+            break
+
+        case .unavailable(let reason):
+            throw AIError.unavailable(String(describing: reason))
+
+        }
+
+        let session = LanguageModelSession(instructions: onboardingInstructions)
+
+        let response = try await session.respond(
+            to: context.promptText,
+            generating: OnboardingQuestionSet.self
+        )
+
+        return response.content.questions
 
     }
 

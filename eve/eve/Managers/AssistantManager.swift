@@ -42,7 +42,13 @@ final class AssistantManager {
         self.modelContext = context
     }
 
-    func runOnce(currentPlace: String?) async {
+    /// Runs one assistant cycle: build context → ask the model → apply
+    /// insights (and optionally schedule a notification).
+    ///
+    /// - Parameter notify: when false, the decision is still computed and
+    ///   insights are applied, but no notification is scheduled. Used during
+    ///   onboarding and for the silent suggestion refresh on the Home screen.
+    func runOnce(currentPlace: String?, notify: Bool = true) async {
 
         isThinking = true
         errorMessage = nil
@@ -76,7 +82,7 @@ final class AssistantManager {
 
             try? insightManager.apply(decision.proposedInsights)
 
-            if decision.shouldNotify {
+            if notify && decision.shouldNotify {
 
                 try? await notificationService.scheduleReminder(
                     title: decision.title,
@@ -93,29 +99,17 @@ final class AssistantManager {
 
     /// Onboarding pass: learn insights from the freshly-imported context,
     /// WITHOUT sending a notification (the user hasn't finished setup yet).
-    /// Reuses the same context → model → insights pipeline as `runOnce`.
     func generateInitialInsights(currentPlace: String?) async {
+        await runOnce(currentPlace: currentPlace, notify: false)
+    }
 
-        isThinking = true
-        errorMessage = nil
-
-        defer { isThinking = false }
-
+    /// Asks the model for personalised yes/no onboarding questions.
+    /// Returns [] on any failure — the caller supplies a fallback set.
+    func onboardingQuestions(currentPlace: String?) async -> [OnboardingQuestion] {
         let reminderContext = contextBuilder.build(currentPlace: currentPlace)
-
-        do {
-
-            let decision = try await foundationModel.decide(from: reminderContext)
-
-            lastDecision = decision
-            pendingQuestion = decision.followUpQuestion
-
-            try? insightManager.apply(decision.proposedInsights)
-
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-
+        return (try? await foundationModel.generateOnboardingQuestions(
+            from: reminderContext
+        )) ?? []
     }
 
     /// A short, event-specific prep checklist for one calendar event —
