@@ -19,12 +19,6 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
   var isReminderGranted: Bool = false
   var hasCompletedOnboarding: Bool = false
 
-  // Whether we've already prompted for each permission. Once asked, we
-  // don't offer to ask again — the user must change it in Settings.
-  var didAskLocation: Bool = false
-  var didAskNotifications: Bool = false
-  var didAskCalendar: Bool = false
-
   private let locationManager = CLLocationManager()
   private let eventStore = EKEventStore()
 
@@ -35,8 +29,19 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
   }
 
   private func checkInitialStatus() {
+    refreshStatuses()
+
+    self.isAIEnabled = UserDefaults.standard.bool(forKey: "isAIEnabled")
+    self.hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+  }
+
+  /// Re-reads the current OS authorization for every permission.
+  /// Call this whenever the app returns to the foreground so that a change
+  /// the user made in the Settings app is reflected immediately.
+  func refreshStatuses() {
     isLocationGranted = locationManager.authorizationStatus == .authorizedAlways || locationManager.authorizationStatus == .authorizedWhenInUse
     isCalendarGranted = EKEventStore.authorizationStatus(for: .event) == .fullAccess
+    isReminderGranted = EKEventStore.authorizationStatus(for: .reminder) == .fullAccess
 
     UNUserNotificationCenter.current().getNotificationSettings { settings in
       // Completion runs off the main actor; hop back on to touch state.
@@ -44,24 +49,13 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
         self.isNotificationsGranted = (settings.authorizationStatus == .authorized)
       }
     }
-
-    self.isAIEnabled = UserDefaults.standard.bool(forKey: "isAIEnabled")
-    self.hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
-
-    self.didAskLocation = UserDefaults.standard.bool(forKey: "didAskLocation")
-    self.didAskNotifications = UserDefaults.standard.bool(forKey: "didAskNotifications")
-    self.didAskCalendar = UserDefaults.standard.bool(forKey: "didAskCalendar")
   }
 
   func requestLocation() {
-    didAskLocation = true
-    UserDefaults.standard.set(true, forKey: "didAskLocation")
     locationManager.requestAlwaysAuthorization()
   }
 
   func requestCalendar() async {
-    didAskCalendar = true
-    UserDefaults.standard.set(true, forKey: "didAskCalendar")
     do {
       // Method is main-actor isolated, so we resume on main after await.
       isCalendarGranted = try await eventStore.requestFullAccessToEvents()
@@ -71,8 +65,6 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
   }
 
   func requestNotifications() async {
-    didAskNotifications = true
-    UserDefaults.standard.set(true, forKey: "didAskNotifications")
     do {
       isNotificationsGranted = try await UNUserNotificationCenter.current()
         .requestAuthorization(options: [.alert, .sound, .badge])
@@ -92,6 +84,18 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
   func enableAI() {
     isAIEnabled = true
     UserDefaults.standard.set(true, forKey: "isAIEnabled")
+  }
+
+  /// Requests every permission the app needs, in turn. Called from the
+  /// onboarding Next button: the informational PermissionView explains what
+  /// each is for, and this fires the actual OS prompts when the user proceeds.
+  /// iOS presents the system alerts one at a time.
+  func requestAllPermissions() async {
+    enableAI()                          // app-level consent (no OS prompt exists)
+    requestLocation()                   // prompt shown; result arrives via delegate
+    await requestNotifications()
+    await requestCalendar()
+    await requestReminders()
   }
 
   func completeOnboarding() {

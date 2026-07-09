@@ -31,7 +31,7 @@ struct AILearningView: View {
           .multilineTextAlignment(.center)
           .animation(.easeInOut, value: isFinished)
           .animation(.easeInOut, value: aiMissing)
-
+          
         if aiMissing {
 
           missingAICard
@@ -74,17 +74,20 @@ struct AILearningView: View {
       : "EVE is ingesting\nyour data..."
   }
 
-  /// The "Allow" action on the paused card.
+  /// The "Enable" action on the paused card.
   ///
-  /// Apple Intelligence itself can only be switched on in the iOS Settings
-  /// app — no in-app toggle can enable the OS feature. So we (1) record the
-  /// user's consent to let EVE learn via AI, then (2) send them to Settings.
-  /// Re-collection happens automatically on return (see `.onChange(scenePhase)`).
-  private func handleAllowTapped() {
+  /// Records the user's consent, then opens the top-level Settings page so
+  /// the user can navigate to Apple Intelligence & Siri and turn it on.
+  ///
+  /// NOTE: iOS gives third-party apps no PUBLIC deep link to a specific
+  /// Settings pane (a `root=` link just gets redirected to the app's own
+  /// page), so we open the Settings home via the private `App-Prefs:` scheme.
+  /// Not App Store-safe. Re-collection happens on return (`.onChange(scenePhase)`).
+  private func handleEnableTapped() {
     PermissionManager.shared.enableAI()
 
-    if let url = URL(string: UIApplication.openSettingsURLString) {
-      openURL(url)
+    if let settingsHome = URL(string: "App-Prefs:") {
+      openURL(settingsHome)
     }
   }
 
@@ -185,18 +188,22 @@ struct AILearningView: View {
   private var learningLog: some View {
     VStack(alignment: .leading, spacing: 0) {
 
-      ForEach(Array(engine.completedTasks.enumerated()), id: \.offset) { index, task in
+      ForEach(engine.completedSteps) { step in
         LearningLogRow(
-          icon: "checkmark",
-          text: task,
+          // ✓ when the step had data to work with, ✗ when nothing was
+          // available (the relevant permission wasn't granted).
+          icon: step.succeeded ? "checkmark" : "xmark",
+          iconColor: step.succeeded ? Color(hex: "#1D3557") : Color(hex: "#C0392B"),
+          text: step.text,
           isActive: false,
-          isLast: !engine.isAnalyzing && index == engine.completedTasks.count - 1
+          isLast: !engine.isAnalyzing && step.id == engine.completedSteps.last?.id
         )
       }
 
       if engine.isAnalyzing {
         LearningLogRow(
           icon: "ellipsis",
+          iconColor: Color(hex: "#1D3557"),
           text: engine.currentAnalysisTask.isEmpty
             ? "Processing..."
             : engine.currentAnalysisTask,
@@ -208,46 +215,56 @@ struct AILearningView: View {
     }
     .animation(
       .spring(response: 0.5, dampingFraction: 0.8),
-      value: engine.completedTasks.count
+      value: engine.completedSteps.count
     )
   }
 
   // MARK: - Missing Apple Intelligence
 
   private var missingAICard: some View {
-    HStack(alignment: .center, spacing: 16) {
+    
+      VStack(alignment: .leading, spacing: 5) {
+          
+          HStack(alignment: .center, spacing: 16) {
 
-      Image(systemName: "apple.intelligence")
-        .font(.system(size: 40, weight: .regular))
-        .foregroundColor(Color(hex: "#1D3557"))
+          Image(systemName: "apple.intelligence")
+            .font(.system(size: 40, weight: .regular))
+            .foregroundColor(Color(hex: "#1D3557"))
 
-      VStack(alignment: .leading, spacing: 2) {
-
-        Text("MISSING")
-          .font(.system(size: 13, weight: .heavy))
-
-        Text("Apple Intelligence.")
-          .font(.system(size: 15, weight: .bold))
-
-        Text("This is required for EVE to learn your routines from your daily context.")
-          .font(.system(size: 13, weight: .semibold))
-          .opacity(0.85)
-          .fixedSize(horizontal: false, vertical: true)
-
-      }
-      .foregroundColor(Color(hex: "#1D3557"))
-
-      Button {
-        handleAllowTapped()
-      } label: {
-        Text("Allow")
-          .font(.system(size: 14, weight: .bold))
-          .foregroundColor(.white)
-          .padding(.horizontal, 16)
-          .padding(.vertical, 8)
-          .background(Color(hex: "#3B9CE2"), in: Capsule())
-      }
-
+              VStack(alignment: .leading, spacing: 5) {
+                  
+                  Text("MISSING")
+                      .font(.system(size: 15, weight: .bold))
+                  
+                  Text("Apple Intelligence")
+                      .font(.system(size: 15, weight: .bold))
+                  
+                  Text("This is required for EVE to learn your routines from your daily context.")
+                      .font(.system(size: 15, weight: .regular))
+                      .opacity(0.85)
+                      .fixedSize(horizontal: false, vertical: true)
+                  
+                  Text("Go to Settings > Apple Intelligence & Siri > Turn on Apple Intelligence")
+                      .font(.system(size: 15, weight: .regular))
+                      .opacity(0.85)
+                      .fixedSize(horizontal: false, vertical: true)
+                      .padding(.bottom, 10)
+                  
+              }
+          }
+          
+          Button {
+            handleEnableTapped()
+          } label: {
+            Text("Enable")
+              .font(.system(size: 14, weight: .bold))
+              .foregroundColor(.white)
+              .frame(maxWidth: .infinity, alignment: .center)
+              .padding(.horizontal, 100)
+              .padding(.vertical, 10)
+              .background(Color(hex: "#3B9CE2"), in: Capsule())
+          }
+          .foregroundColor(Color(hex: "#1D3557"))
     }
     .padding(20)
     .background(
@@ -327,6 +344,7 @@ private struct ThoughtBubble: View {
 
 private struct LearningLogRow: View {
   let icon: String
+  var iconColor: Color = Color(hex: "#1D3557")
   let text: String
   var isActive: Bool = false
   var isLast: Bool = false
@@ -342,7 +360,7 @@ private struct LearningLogRow: View {
 
           Image(systemName: icon)
             .font(.system(size: 12, weight: .bold))
-            .foregroundColor(Color(hex: "#1D3557"))
+            .foregroundColor(iconColor)
         }
 
         // Tail line: full segment between rows, short stub under

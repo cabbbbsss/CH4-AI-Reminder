@@ -20,17 +20,15 @@ struct OnboardingQuestionsView: View {
   @State private var answers: [Bool?] = []
   @State private var isFinishing = false
 
-  /// Model-generated questions, or a small default set as a safety net.
-  private var questions: [OnboardingQuestion] {
-    engine.onboardingQuestions.isEmpty ? defaultQuestions : engine.onboardingQuestions
-  }
+  /// Which way we're navigating, so the slide transition matches:
+  /// forward = new question enters from the right, back = from the left.
+  @State private var goingForward = true
 
-  private var defaultQuestions: [OnboardingQuestion] {
-    [
-      OnboardingQuestion(question: "Do you take any medication on a regular schedule?", category: "health"),
-      OnboardingQuestion(question: "Do you have a pet that needs regular care?", category: "pet"),
-      OnboardingQuestion(question: "Do you commute to a workplace on weekdays?", category: "commute")
-    ]
+  /// Model-generated questions, or the engine's shared default set as a safety net.
+  private var questions: [OnboardingQuestion] {
+    engine.onboardingQuestions.isEmpty
+      ? AILearningEngine.fallbackQuestions
+      : engine.onboardingQuestions
   }
 
   var body: some View {
@@ -60,10 +58,7 @@ struct OnboardingQuestionsView: View {
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, 12)
             .id(index) // re-triggers the transition per question
-            .transition(.asymmetric(
-              insertion: .move(edge: .trailing).combined(with: .opacity),
-              removal: .move(edge: .leading).combined(with: .opacity)
-            ))
+            .transition(questionTransition)
 
           // Answers
           VStack(spacing: 16) {
@@ -75,18 +70,30 @@ struct OnboardingQuestionsView: View {
 
         Spacer()
 
-        // Back chevron
+        // Bottom bar: back chevron on the left.
         HStack {
-          Spacer()
           if index > 0 {
             Button {
+              goingForward = false
               withAnimation(.easeInOut) { index -= 1 }
             } label: {
               Image(systemName: "chevron.left")
                 .font(.system(size: 22, weight: .semibold))
-                .foregroundColor(Color(hex: "#E0ECF7").opacity(0.7))
+                .foregroundColor(Color(hex: "#E0ECF7").opacity(0.8))
             }
+            .disabled(isFinishing)
           }
+
+          Spacer()
+
+          Button {
+            skip()
+          } label: {
+            Text("Skip")
+              .font(.system(size: 16, weight: .semibold))
+              .foregroundColor(Color(hex: "#E0ECF7").opacity(0.8))
+          }
+          .disabled(isFinishing)
         }
         .padding(.bottom, 40)
       }
@@ -108,9 +115,20 @@ struct OnboardingQuestionsView: View {
     }
   }
 
+  /// Slide direction flips with navigation: forward slides right-to-left,
+  /// back slides left-to-right.
+  private var questionTransition: AnyTransition {
+    .asymmetric(
+      insertion: .move(edge: goingForward ? .trailing : .leading).combined(with: .opacity),
+      removal: .move(edge: goingForward ? .leading : .trailing).combined(with: .opacity)
+    )
+  }
+
   // MARK: - Answer button
 
   private func answerButton(title: String, value: Bool) -> some View {
+    // Both options start neutral; only the chosen one turns blue (+ a checkmark),
+    // which is what the user sees when they go back to an answered question.
     let isSelected = answers[safe: index].flatMap { $0 } == value
 
     return Button {
@@ -118,22 +136,29 @@ struct OnboardingQuestionsView: View {
     } label: {
       Text(title)
         .font(.system(size: 16, weight: .bold))
-        .foregroundColor(isSelected || value ? .white : Color(hex: "#1D3557"))
+        .foregroundColor(isSelected ? .white : Color(hex: "#1D3557"))
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
-        .background {
-          if value {
-            Capsule().fill(Color(hex: "#3B8FCB"))
-          } else {
-            Capsule()
-              .fill(isSelected ? Color(hex: "#3B8FCB") : Color.clear)
-              .overlay(
-                Capsule().stroke(Color(hex: "#1D3557").opacity(0.4), lineWidth: 1.5)
-              )
+        .overlay(alignment: .leading) {
+          if isSelected {
+            Image(systemName: "checkmark.circle.fill")
+              .font(.system(size: 15, weight: .bold))
+              .foregroundColor(.white)
+              .padding(.leading, 130)
           }
+        }
+        .background {
+          Capsule()
+            .fill(isSelected ? Color(hex: "#3B8FCB") : Color.clear)
+            .overlay {
+              if !isSelected {
+                Capsule().stroke(Color(hex: "#1D3557").opacity(0.4), lineWidth: 1.5)
+              }
+            }
         }
     }
     .disabled(isFinishing)
+    .animation(.easeInOut(duration: 0.2), value: isSelected)
   }
 
   // MARK: - Flow
@@ -144,6 +169,7 @@ struct OnboardingQuestionsView: View {
     }
 
     if index < questions.count - 1 {
+      goingForward = true
       withAnimation(.easeInOut) { index += 1 }
     } else {
       Task { await finish() }
@@ -155,6 +181,32 @@ struct OnboardingQuestionsView: View {
 
     isFinishing = true
 
+    persistAnswers()
+
+    // Now that Eve knows the answers, refine insights (no notification yet).
+    let assistant = AssistantManager(
+      context: modelContext,
+      notificationService: NotificationService()
+    )
+    await assistant.generateInitialInsights(currentPlace: engine.lastKnownPlace)
+
+    PermissionManager.shared.completeOnboarding()
+
+    isFinishing = false
+
+    withAnimation { currentStep = 4 }
+  }
+
+  /// Skips the remaining questions. Any answers already given are kept, but we
+  /// don't run the model refine — that happens later on Home — so it's instant.
+  private func skip() {
+    persistAnswers()
+    PermissionManager.shared.completeOnboarding()
+    withAnimation { currentStep = 4 }
+  }
+
+  /// Writes the answered questions to SwiftData + History. Unanswered are skipped.
+  private func persistAnswers() {
     let logger = HistoryLogger(context: modelContext)
 
     for (question, answer) in zip(questions, answers) {
@@ -169,19 +221,6 @@ struct OnboardingQuestionsView: View {
     }
 
     try? modelContext.save()
-
-    // Now that Eve knows the answers, refine insights (no notification yet).
-    let assistant = AssistantManager(
-      context: modelContext,
-      notificationService: NotificationService()
-    )
-    await assistant.generateInitialInsights(currentPlace: engine.lastKnownPlace)
-
-    PermissionManager.shared.completeOnboarding()
-
-    isFinishing = false
-
-    withAnimation { currentStep = 4 }
   }
 
   // MARK: - Background
