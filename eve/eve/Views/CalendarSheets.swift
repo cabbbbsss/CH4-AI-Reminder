@@ -70,3 +70,87 @@ struct CalendarReminderEditSheet: View {
     }
 
 }
+
+/// Manually add a reminder to a given day. `CalendarReminder.reminderDate`
+/// is always `eventDate - 1hr`, so the picked "remind me at" time is stored
+/// as `eventDate + 1hr` to make it land exactly where the user placed it.
+struct CalendarReminderAddSheet: View {
+
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+
+    /// The day this reminder is being added to (the Calendar screen's
+    /// currently selected date).
+    var date: Date
+
+    @State private var text: String = ""
+    @State private var eventTitle: String = ""
+    @State private var reminderTime: Date
+
+    init(date: Date) {
+        self.date = date
+        let calendar = Calendar.current
+        let defaultHour = calendar.component(.hour, from: .now)
+        _reminderTime = State(initialValue: calendar.date(
+            bySettingHour: min(defaultHour + 1, 23), minute: 0, second: 0, of: date
+        ) ?? date)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Reminder") {
+                    TextField("Text", text: $text)
+                }
+
+                Section("For") {
+                    TextField("Event title (optional)", text: $eventTitle)
+                }
+
+                Section("Time") {
+                    DatePicker("Remind me at", selection: $reminderTime, displayedComponents: [.hourAndMinute])
+                }
+            }
+            .navigationTitle("New Reminder")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        save()
+                        dismiss()
+                    }
+                    .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func save() {
+
+        let calendar = Calendar.current
+        let pickedTime = calendar.date(
+            bySettingHour: calendar.component(.hour, from: reminderTime),
+            minute: calendar.component(.minute, from: reminderTime),
+            second: 0,
+            of: date
+        ) ?? date
+
+        let trimmedTitle = eventTitle.trimmingCharacters(in: .whitespaces)
+
+        let reminder = CalendarReminder(
+            occurrenceID: "manual-\(UUID().uuidString)",
+            eventTitle: trimmedTitle.isEmpty ? "Personal reminder" : trimmedTitle,
+            eventDate: pickedTime.addingTimeInterval(3600),
+            text: text.trimmingCharacters(in: .whitespaces),
+            isSystemManaged: false
+        )
+
+        modelContext.insert(reminder)
+        try? modelContext.save()
+
+    }
+
+}
