@@ -112,10 +112,10 @@ struct AILearningView: View {
   private var background: some View {
     LinearGradient(
       stops: [
-        .init(color: Color(hex: "#16273F"), location: 0.0),
-        .init(color: Color(hex: "#1D3557"), location: 0.35),
-        .init(color: Color(hex: "#5F7FA4"), location: 0.75),
-        .init(color: Color(hex: "#DCE8F4"), location: 1.0)
+        .init(color: Color(.gradientPrimaryStart), location: 0.0),
+        .init(color: Color(.gradientPrimaryStart), location: 0.35),
+        .init(color: Color(.textTertiary), location: 0.75),
+        .init(color: Color(.gradientSecondaryStart), location: 1.0)
       ],
       startPoint: .top,
       endPoint: .bottom
@@ -193,7 +193,7 @@ struct AILearningView: View {
           // ✓ when the step had data to work with, ✗ when nothing was
           // available (the relevant permission wasn't granted).
           icon: step.succeeded ? "checkmark" : "xmark",
-          iconColor: step.succeeded ? Color(hex: "#1D3557") : Color(hex: "#C0392B"),
+          iconColor: step.succeeded ? Color(.textSecondary) : .red,
           text: step.text,
           isActive: false,
           isLast: !engine.isAnalyzing && step.id == engine.completedSteps.last?.id
@@ -203,7 +203,7 @@ struct AILearningView: View {
       if engine.isAnalyzing {
         LearningLogRow(
           icon: "ellipsis",
-          iconColor: Color(hex: "#1D3557"),
+          iconColor: Color(.textSecondary),
           text: engine.currentAnalysisTask.isEmpty
             ? "Processing..."
             : engine.currentAnalysisTask,
@@ -229,7 +229,7 @@ struct AILearningView: View {
 
           Image(systemName: "apple.intelligence")
             .font(.system(size: 40, weight: .regular))
-            .foregroundColor(Color(hex: "#1D3557"))
+            .foregroundColor(Color(.textSecondary))
 
               VStack(alignment: .leading, spacing: 5) {
                   
@@ -262,13 +262,13 @@ struct AILearningView: View {
               .frame(maxWidth: .infinity, alignment: .center)
               .padding(.horizontal, 100)
               .padding(.vertical, 10)
-              .background(Color(hex: "#3B9CE2"), in: Capsule())
+              .background(Color.accentColor, in: Capsule())
           }
-          .foregroundColor(Color(hex: "#1D3557"))
+          .foregroundColor(Color(.textSecondary))
     }
     .padding(20)
     .background(
-      Color(hex: "#E7F0FA"),
+      Color(.textPrimary),
       in: RoundedRectangle(cornerRadius: 22, style: .continuous)
     )
     .padding(.horizontal, 20)
@@ -286,7 +286,7 @@ struct AILearningView: View {
     } label: {
       Text("Continue")
         .font(.system(size: 17, weight: .bold))
-        .foregroundColor(Color(hex: "#1D3557"))
+        .foregroundColor(Color(.textSecondary))
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
         .background(Color.white, in: Capsule())
@@ -344,7 +344,7 @@ private struct ThoughtBubble: View {
 
 private struct LearningLogRow: View {
   let icon: String
-  var iconColor: Color = Color(hex: "#1D3557")
+  var iconColor: Color = Color(.textSecondary)
   let text: String
   var isActive: Bool = false
   var isLast: Bool = false

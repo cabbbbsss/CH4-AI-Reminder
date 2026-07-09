@@ -40,13 +40,13 @@ struct OnboardingQuestionsView: View {
         // Subtitle
         Text("EVE has a few questions to\nrefine your reminders.")
           .font(.system(size: 17, weight: .regular))
-          .foregroundColor(Color(hex: "#1D3557").opacity(0.55))
+          .foregroundColor(Color(.textSecondary).opacity(0.55))
           .padding(.top, 120)
 
         // Progress
         Text("\(min(index + 1, questions.count)) of \(questions.count)")
           .font(.system(size: 13, weight: .semibold))
-          .foregroundColor(Color(hex: "#1D3557").opacity(0.4))
+          .foregroundColor(Color(.textSecondary).opacity(0.4))
           .padding(.top, 24)
 
         if let question = questions[safe: index] {
@@ -54,7 +54,7 @@ struct OnboardingQuestionsView: View {
           // Question text
           Text(question.question)
             .font(.system(size: 22, weight: .bold))
-            .foregroundColor(Color(hex: "#1D3557"))
+            .foregroundColor(Color(.textSecondary))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, 12)
             .id(index) // re-triggers the transition per question
@@ -79,7 +79,7 @@ struct OnboardingQuestionsView: View {
             } label: {
               Image(systemName: "chevron.left")
                 .font(.system(size: 22, weight: .semibold))
-                .foregroundColor(Color(hex: "#E0ECF7").opacity(0.8))
+                .foregroundColor(Color(.textPrimary).opacity(0.8))
             }
             .disabled(isFinishing)
           }
@@ -91,7 +91,7 @@ struct OnboardingQuestionsView: View {
           } label: {
             Text("Skip")
               .font(.system(size: 16, weight: .semibold))
-              .foregroundColor(Color(hex: "#E0ECF7").opacity(0.8))
+              .foregroundColor(Color(.textPrimary).opacity(0.8))
           }
           .disabled(isFinishing)
         }
@@ -136,7 +136,7 @@ struct OnboardingQuestionsView: View {
     } label: {
       Text(title)
         .font(.system(size: 16, weight: .bold))
-        .foregroundColor(isSelected ? .white : Color(hex: "#1D3557"))
+        .foregroundColor(isSelected ? .white : Color(.textSecondary))
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
         .overlay(alignment: .leading) {
@@ -149,10 +149,10 @@ struct OnboardingQuestionsView: View {
         }
         .background {
           Capsule()
-            .fill(isSelected ? Color(hex: "#3B8FCB") : Color.clear)
+            .fill(isSelected ? Color.accentColor : Color.clear)
             .overlay {
               if !isSelected {
-                Capsule().stroke(Color(hex: "#1D3557").opacity(0.4), lineWidth: 1.5)
+                Capsule().stroke(Color(.textSecondary).opacity(0.4), lineWidth: 1.5)
               }
             }
         }
@@ -228,10 +228,10 @@ struct OnboardingQuestionsView: View {
   private var background: some View {
     LinearGradient(
       stops: [
-        .init(color: Color(hex: "#E4EDF6"), location: 0.0),
-        .init(color: Color(hex: "#B9CADD"), location: 0.35),
-        .init(color: Color(hex: "#5F7FA4"), location: 0.7),
-        .init(color: Color(hex: "#1D3557"), location: 1.0)
+        .init(color: Color(.gradientSecondaryStart), location: 0.0),
+        .init(color: Color(.gradientSecondaryStart), location: 0.35),
+        .init(color: Color(.textTertiary), location: 0.7),
+        .init(color: Color(.gradientPrimaryStart), location: 1.0)
       ],
       startPoint: .top,
       endPoint: .bottom

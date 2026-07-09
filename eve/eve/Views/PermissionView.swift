@@ -10,7 +10,7 @@ struct PermissionView: View {
 
     var body: some View {
         ZStack {
-            Color(hex: "#1D3557").ignoresSafeArea()
+            Color(.textPrimary).ignoresSafeArea()
 
             Rectangle()
                 .fill(Color.white.opacity(0.8))
@@ -22,13 +22,13 @@ struct PermissionView: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Enhance \nYour Assistant")
                     .font(.system(size: 30, weight: .bold, design: .default))
-                    .foregroundColor(Color(hex: "#1D3557"))
+                    .foregroundColor(Color(.textPrimary))
                     .padding(.top, 60)
                     .padding(.horizontal, 39)
 
                 Text("EVE works by understanding your world to remind you. All data stored on your device, never anywhere else.")
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(Color(hex: "#1D3557"))
+                    .foregroundColor(Color(.textPrimary))
                     .padding(.top, 10)
                     .padding(.horizontal, 39)
 
@@ -38,28 +38,28 @@ struct PermissionView: View {
                     VStack(spacing: 20) {
                         PermissionRow(
                             icon: "apple.intelligence",
-                            iconColor: Color(hex: "#368BC8"),
+                            iconColor: Color.accentColor,
                             title: "Apple Intelligence",
                             description: "Automatically creates personalised reminders for your days, based on your data and context."
                         )
 
                         PermissionRow(
                             icon: "location.fill",
-                            iconColor: Color(hex: "#368BC8"),
+                            iconColor: Color.accentColor,
                             title: "Location",
                             description: "Get reminders when you are at specific places."
                         )
                         
                         PermissionRow(
                             icon: "calendar",
-                            iconColor: Color(hex: "#368BC8"),
+                            iconColor: Color.accentColor,
                             title: "Calendar & Reminders",
                             description: "Get reminders based on your past and upcoming events and schedule."
                         )
 
                         PermissionRow(
                             icon: "bell.badge.fill",
-                            iconColor: Color(hex: "#368BC8"),
+                            iconColor: Color.accentColor,
                             title: "Notifications",
                             description: "Receives timely nudges and heads-ups so you’re always prepared."
                         )
@@ -83,7 +83,7 @@ struct PermissionView: View {
                             .fontWeight(.semibold)
                     }
                 }
-                .foregroundStyle(Color(hex: "#1D3557"))
+                .foregroundStyle(Color(.textPrimary))
                 .frame(width: 26, height: 26)
                 .padding(10)
             }
@@ -130,18 +130,18 @@ struct PermissionRow: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(title)
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(Color(hex: "#1D3557"))
+                    .foregroundColor(Color(.textPrimary))
 
                 Text(description)
                     .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(Color(hex: "#1D3557"))
+                    .foregroundColor(Color(.textPrimary))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer()
         }
         .padding(20)
-        .background(Color(hex: "#E8F3FF"))
+        .background(Color(.bgSecondary))
         .cornerRadius(20)
     }
 }
