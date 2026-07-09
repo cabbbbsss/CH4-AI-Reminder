@@ -259,11 +259,11 @@ struct AddLocationSheet: View {
 
             selectedCategory = item.pointOfInterestCategory
 
-            apply(
-                name: item.name ?? completion.title,
-                address: item.placemark.title ?? completion.subtitle,
-                coordinate: item.placemark.coordinate
-            )
+          apply(
+            name: item.name ?? completion.title,
+            address: item.placemark.title ?? completion.subtitle,
+            coordinate: item.placemark.coordinate
+          )
         }
     }
 

@@ -21,18 +21,29 @@ struct InsightView: View {
 
   var body: some View {
     ZStack {
-      Color(.bgPrimary).ignoresSafeArea()
+      LinearGradient(
+        stops: [
+          .init(color: Color(.bgPrimary), location: 0.75),
+          .init(color: Color(.bgSecondary), location: 1.0)
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+      )
+      .ignoresSafeArea()
 
       VStack(spacing: 0) {
-        // Top Nav
+        // ── Top Nav ──────────────────────────────────────────
         HStack {
           Button(action: {
             dismiss()
           }) {
             Image(systemName: "chevron.backward.circle.fill")
               .font(.system(size: 32))
-              .foregroundColor(Color(.textPrimary))
-              .background(Circle().fill(Color(.bgSecondary)))
+              .symbolRenderingMode(.palette)
+              .foregroundStyle(
+                Color(.textPrimary),
+                Color(.bgSecondary)
+              )
           }
 
           Spacer()
@@ -49,52 +60,29 @@ struct InsightView: View {
         .padding(.horizontal, 24)
         .padding(.top, 20)
 
-        // Character + Chat Bubble
+        // ── Character + Chat Bubble ─────────────────────────
         HStack(alignment: .center, spacing: 16) {
-          // Robot Face Group
-          ZStack {
-            Circle()
-              .fill(Color.clear)
-              .frame(width: 79, height: 79)
-
-            Circle()
-              .fill(Color.white)
-              .frame(width: 70, height: 70)
-
-            // Screen
-            Ellipse()
-              .fill(Color(.textPrimary))
-              .frame(width: 54, height: 36)
-              .offset(y: -2)
-
-            // Face details
-            VStack(spacing: 4) {
-              HStack(spacing: 14) {
-                Ellipse().fill(Color(.textSecondary)).frame(width: 5, height: 3)
-                Ellipse().fill(Color(.textSecondary)).frame(width: 5, height: 3)
-              }
-              Rectangle().fill(Color(.textSecondary)).frame(width: 13, height: 2)
-            }
-            .offset(y: -2)
-          }
+          // Avatar from xcassets
+          Image("Avatar")
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(width: 79, height: 79)
 
           // Chat Bubble
           ZStack(alignment: .leading) {
             // The triangle pointing left
-            Path { path in
-              path.move(to: CGPoint(x: 10, y: 15))
-              path.addLine(to: CGPoint(x: 0, y: 25))
-              path.addLine(to: CGPoint(x: 10, y: 35))
-            }
-            .fill(Color.white)
-            .offset(x: -8)
+//            Path { path in
+//              path.move(to: CGPoint(x: 10, y: 15))
+//              path.addLine(to: CGPoint(x: 0, y: 25))
+//              path.addLine(to: CGPoint(x: 10, y: 35))
+//            }
+//            .fill(Color(.bgSecondary))
+//            .offset(x: -8)
 
-            Text("Here’s what I’ve learned\nabout you!")
-              .font(.system(size: 13, weight: .bold))
-              .foregroundColor(Color(.textPrimary))
+            bubbleText
               .padding(.horizontal, 16)
               .padding(.vertical, 12)
-              .background(Color.white)
+              .background(Color(.bgSecondary))
               .cornerRadius(12)
           }
           Spacer()
@@ -103,13 +91,13 @@ struct InsightView: View {
         .padding(.top, 24)
         .padding(.bottom, 24)
 
-        // Dark Blue Container
+        // ── Insights Card Container ─────────────────────────
         ZStack(alignment: .top) {
-          Color(.textPrimary)
-            .cornerRadius(32, corners: [.topLeft, .topRight])
+          Color(.bgSecondary)
+            .cornerRadius(64, corners: [.topLeft, .topRight])
             .ignoresSafeArea(edges: .bottom)
 
-          VStack {
+          VStack(spacing: 0) {
             if insights.isEmpty {
               emptyState
             } else {
@@ -126,14 +114,15 @@ struct InsightView: View {
                 }
                 .padding(.top, 40)
                 .padding(.horizontal, 32)
+                .padding(.bottom, 16)
               }
             }
 
-            // Button
+            // View History button
             NavigationLink(destination: HistoryView()) {
               Text("View History")
                 .font(.system(size: 14, weight: .bold))
-                .foregroundColor(Color(.textSecondary))
+                .foregroundColor(.white)
                 .frame(width: 200, height: 44)
                 .background(Color.accentColor)
                 .cornerRadius(22)
@@ -150,17 +139,25 @@ struct InsightView: View {
     }
   }
 
+  // Chat bubble with partial bold text
+  private var bubbleText: some View {
+    Text("Here's what I've \(Text("learned").fontWeight(.bold))\nabout you!")
+      .font(.system(size: 13))
+      .foregroundColor(Color(.textPrimary))
+  }
+
+
   private var emptyState: some View {
     VStack(spacing: 12) {
       Image(systemName: "brain")
         .font(.system(size: 44))
-        .foregroundColor(Color(.textSecondary).opacity(0.6))
+        .foregroundColor(Color(.textQuarternary))
       Text("No insights yet")
         .font(.system(size: 18, weight: .bold))
-        .foregroundColor(Color(.textSecondary))
+        .foregroundColor(Color(.textPrimary))
       Text("Tap Eve on the home screen and I'll start learning your routine. What I learn appears here — always yours to correct.")
         .font(.system(size: 14))
-        .foregroundColor(Color(.textSecondary).opacity(0.7))
+        .foregroundColor(Color(.textTertiary))
         .multilineTextAlignment(.center)
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -170,35 +167,23 @@ struct InsightView: View {
   }
 }
 
-/// One belief, in the designed light-on-navy style, tappable to edit.
+/// One insight row with an accent-colored checkmark, matching the sketch design.
 struct InsightRow: View {
   let insight: AIInsight
 
   var body: some View {
     HStack(alignment: .top, spacing: 16) {
-      Image(systemName: insight.isUserEdited ? "checkmark.seal.fill" : "checkmark.circle")
-        .font(.system(size: 20))
-        .foregroundColor(Color(.textSecondary))
+      Image(systemName: "checkmark.circle.fill")
+        .font(.system(size: 24))
+        .foregroundColor(.accentColor)
         .padding(.top, 2)
 
-      VStack(alignment: .leading, spacing: 4) {
-        Text(insight.value)
-          .font(.system(size: 18, weight: .medium))
-          .foregroundColor(Color(.textSecondary))
-          .fixedSize(horizontal: false, vertical: true)
-          .frame(maxWidth: .infinity, alignment: .leading)
-
-        Text(insight.isUserEdited
-             ? "Confirmed by you"
-             : "\(Int(insight.confidence * 100))% confident")
-          .font(.system(size: 12, weight: .medium))
-          .foregroundColor(Color(.textTertiary))
-      }
-
-      Image(systemName: "chevron.right")
-        .font(.system(size: 12, weight: .bold))
-        .foregroundColor(Color(.textTertiary))
-        .padding(.top, 4)
+      Text(insight.value)
+        .font(.system(size: 16, weight: .regular))
+        .foregroundColor(Color(.textPrimary))
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .multilineTextAlignment(.leading)
     }
   }
 }
