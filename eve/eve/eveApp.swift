@@ -10,6 +10,7 @@ struct eveApp: App {
       HistoryItem.self,
       QuestionAnswer.self,
       CalendarEvent.self,
+      CalendarReminder.self,
       ReminderItem.self,
       SavedLocation.self,
       LocationReminder.self,
