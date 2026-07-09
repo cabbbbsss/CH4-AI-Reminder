@@ -1,16 +1,19 @@
+import Combine
 import SwiftData
 import SwiftUI
 
-/// A single row on the timeline: either an on-the-hour tick mark
-/// or an AI reminder, merged and sorted by their actual (shown) time.
+/// A single row on the timeline: an on-the-hour tick mark, an AI reminder,
+/// or the live "now" indicator — merged and sorted by their actual (shown) time.
 private enum CalendarTimelineEntry: Identifiable {
   case hour(Date)
   case reminder(CalendarReminder)
+  case now(Date)
 
   var id: String {
     switch self {
     case .hour(let date): return "hour-\(date.timeIntervalSince1970)"
     case .reminder(let reminder): return "reminder-\(reminder.id)"
+    case .now: return "now-line"
     }
   }
 
@@ -18,6 +21,76 @@ private enum CalendarTimelineEntry: Identifiable {
     switch self {
     case .hour(let date): return date
     case .reminder(let reminder): return reminder.reminderDate
+    case .now(let date): return date
+    }
+  }
+}
+
+/// A horizontally-paged carousel, forward-only: renders the current page
+/// (0) and the next one (1) side by side and slides to the next on a
+/// leftward drag, snapping to a full page instead of cross-fading in
+/// place. There is no backward page — swiping right is inert, so it can
+/// never be mistaken for, or fought over with, the system's edge
+/// swipe-to-go-back gesture.
+private struct SwipeCarousel<Content: View>: View {
+  let content: (Int) -> Content
+  let onCommit: () -> Void
+  var useSimultaneousGesture: Bool = false
+
+  @State private var dragOffset: CGFloat = 0
+  @State private var isAnimating = false
+
+  var body: some View {
+    GeometryReader { geo in
+      let width = max(geo.size.width, 1)
+
+      let pages = HStack(spacing: 0) {
+        content(0).frame(width: width, height: geo.size.height)
+        content(1).frame(width: width, height: geo.size.height)
+      }
+      .offset(x: dragOffset)
+
+      if useSimultaneousGesture {
+        pages.simultaneousGesture(dragGesture(width: width))
+      } else {
+        pages.gesture(dragGesture(width: width))
+      }
+    }
+  }
+
+  private func dragGesture(width: CGFloat) -> some Gesture {
+    DragGesture(minimumDistance: 16)
+      .onChanged { value in
+        guard !isAnimating else { return }
+        guard value.translation.width < 0 else { return }
+        guard abs(value.translation.width) > abs(value.translation.height) else { return }
+        dragOffset = value.translation.width
+      }
+      .onEnded { value in
+        guard !isAnimating else { return }
+        guard value.translation.width < 0,
+              abs(value.translation.width) > abs(value.translation.height) else {
+          withAnimation(.easeOut(duration: 0.2)) { dragOffset = 0 }
+          return
+        }
+        let threshold = width * 0.22
+        if value.translation.width < -threshold {
+          commit(width: width)
+        } else {
+          withAnimation(.easeOut(duration: 0.2)) { dragOffset = 0 }
+        }
+      }
+  }
+
+  private func commit(width: CGFloat) {
+    isAnimating = true
+    withAnimation(.easeOut(duration: 0.28)) {
+      dragOffset = -width
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+      onCommit()
+      dragOffset = 0
+      isAnimating = false
     }
   }
 }
@@ -34,18 +107,24 @@ struct CalendarView: View {
   @State private var isReloading = false
   @State private var isGenerating = false
   @State private var editingReminder: CalendarReminder?
+  @State private var isAddingReminder = false
+  @State private var currentTime: Date = .now
 
   @State private var reminderManager: CalendarReminderManager?
   @State private var syncManager: EventKitSyncManager?
 
-  private var todaysEvents: [CalendarEvent] {
-    events.filter { Calendar.current.isDate($0.startDate, inSameDayAs: selectedDate) }
+  private func dayEvents(_ date: Date) -> [CalendarEvent] {
+    events.filter { Calendar.current.isDate($0.startDate, inSameDayAs: date) }
   }
 
-  private var todaysReminders: [CalendarReminder] {
+  private func dayReminders(_ date: Date) -> [CalendarReminder] {
     reminders
-      .filter { Calendar.current.isDate($0.eventDate, inSameDayAs: selectedDate) }
+      .filter { Calendar.current.isDate($0.eventDate, inSameDayAs: date) }
       .sorted { $0.reminderDate < $1.reminderDate }
+  }
+
+  private func date(byAddingDays days: Int, to date: Date) -> Date {
+    Calendar.current.date(byAdding: .day, value: days, to: date) ?? date
   }
 
   private var isToday: Bool {
@@ -58,8 +137,8 @@ struct CalendarView: View {
     return formatter.string(from: selectedDate)
   }
 
-  private var timelineEntries: [CalendarTimelineEntry] {
-    guard let first = todaysReminders.first, let last = todaysReminders.last else { return [] }
+  private func timelineEntries(for date: Date, reminders dayReminders: [CalendarReminder]) -> [CalendarTimelineEntry] {
+    guard let first = dayReminders.first, let last = dayReminders.last else { return [] }
 
     let calendar = Calendar.current
 
@@ -81,7 +160,11 @@ struct CalendarView: View {
       cursor = calendar.date(byAdding: .hour, value: 1, to: cursor) ?? endHour.addingTimeInterval(3600)
     }
 
-    entries.append(contentsOf: todaysReminders.map { .reminder($0) })
+    entries.append(contentsOf: dayReminders.map { .reminder($0) })
+
+    if calendar.isDateInToday(date), currentTime >= startHour, currentTime <= endHour.addingTimeInterval(3600) {
+      entries.append(.now(currentTime))
+    }
 
     return entries.sorted { $0.sortDate < $1.sortDate }
    }
@@ -113,33 +196,18 @@ struct CalendarView: View {
             dateHeader
               .padding(.bottom, 20)
 
-            if todaysEvents.isEmpty {
-              Text("No events synced for this day.")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(Color(.textQuarternary))
-                .padding(.top, 20)
-              Spacer()
-            } else if todaysReminders.isEmpty && isGenerating {
-              HStack(spacing: 12) {
-                Image(systemName: "sparkles")
-                  .foregroundColor(Color(.textQuarternary))
-                Text("Eve is preparing your reminders…")
-                  .font(.system(size: 14, weight: .semibold))
-                  .foregroundColor(Color(.textQuarternary))
-              }
-              .padding(.top, 20)
-              Spacer()
-            } else if todaysReminders.isEmpty {
-              Text("Nothing to prepare for this day.")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(Color(.textQuarternary))
-                .padding(.top, 20)
-              Spacer()
-            } else {
-              timelineList
-            }
+            daySwipeArea
+              .frame(maxHeight: .infinity)
           }
         }
+      }
+      .overlay(alignment: .bottomLeading) {
+        if !isToday {
+          todayButton
+        }
+      }
+      .overlay(alignment: .bottomTrailing) {
+        addReminderButton
       }
       .navigationTitle("Calendar")
       .navigationBarTitleDisplayMode(.large)
@@ -182,8 +250,14 @@ struct CalendarView: View {
       .sheet(item: $editingReminder) { reminder in
         CalendarReminderEditSheet(reminder: reminder, manager: reminderManager)
       }
+      .sheet(isPresented: $isAddingReminder) {
+        CalendarReminderAddSheet(date: selectedDate)
+      }
       .onChange(of: selectedDate) { _, newDate in
         displayedWeekStart = Calendar.weekStart(containing: newDate)
+      }
+      .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { date in
+        currentTime = date
       }
       .task {
         if reminderManager == nil {
@@ -208,12 +282,25 @@ struct CalendarView: View {
   // MARK: - Week strip
 
   private var weekStrip: some View {
+    SwipeCarousel(
+      content: { offset in
+        weekRow(for: date(byAddingDays: offset * 7, to: displayedWeekStart))
+      },
+      onCommit: {
+        displayedWeekStart = date(byAddingDays: 7, to: displayedWeekStart)
+      }
+    )
+    .frame(height: 72)
+  }
+
+  private func weekRow(for weekStart: Date) -> some View {
     HStack(spacing: 0) {
       ForEach(0..<7, id: \.self) { offset in
-        let day = Calendar.current.date(byAdding: .day, value: offset, to: displayedWeekStart) ?? displayedWeekStart
+        let day = Calendar.current.date(byAdding: .day, value: offset, to: weekStart) ?? weekStart
         WeekDayCell(
           date: day,
-          isSelected: Calendar.current.isDate(day, inSameDayAs: selectedDate)
+          isSelected: Calendar.current.isDate(day, inSameDayAs: selectedDate),
+          isToday: Calendar.current.isDateInToday(day)
         )
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
@@ -225,32 +312,12 @@ struct CalendarView: View {
       }
     }
     .padding(.horizontal, 24)
-    .gesture(
-      DragGesture(minimumDistance: 20)
-        .onEnded { value in
-          let calendar = Calendar.current
-          if value.translation.width < -50 {
-            withAnimation(.easeInOut(duration: 0.2)) {
-              displayedWeekStart = calendar.date(byAdding: .day, value: 7, to: displayedWeekStart) ?? displayedWeekStart
-            }
-          } else if value.translation.width > 50 {
-            withAnimation(.easeInOut(duration: 0.2)) {
-              displayedWeekStart = calendar.date(byAdding: .day, value: -7, to: displayedWeekStart) ?? displayedWeekStart
-            }
-          }
-        }
-    )
   }
 
   // MARK: - Date header
 
   private var dateHeader: some View {
     VStack(spacing: 4) {
-      if isToday {
-        Text("Today")
-          .font(.system(size: 16, weight: .semibold))
-          .foregroundColor(Color(.textTertiary).opacity(0.5))
-      }
       Text(dateHeaderMainText)
         .font(.system(size: 26, weight: .black, design: .default))
         .foregroundColor(Color(.textTertiary))
@@ -260,15 +327,63 @@ struct CalendarView: View {
     .padding(.horizontal, 24)
   }
 
+  // MARK: - Day content (swipeable)
+
+  private var daySwipeArea: some View {
+    SwipeCarousel(
+      content: { offset in
+        dayContent(for: date(byAddingDays: offset, to: selectedDate))
+      },
+      onCommit: {
+        selectedDate = date(byAddingDays: 1, to: selectedDate)
+      },
+      useSimultaneousGesture: true
+    )
+  }
+
+  private func dayContent(for date: Date) -> some View {
+    let dayEventsForDate = dayEvents(date)
+    let dayRemindersForDate = dayReminders(date)
+    let generating = Calendar.current.isDate(date, inSameDayAs: selectedDate) && isGenerating
+
+    return VStack(spacing: 0) {
+      if dayEventsForDate.isEmpty {
+        Text("No events synced for this day.")
+          .font(.system(size: 14, weight: .medium))
+          .foregroundColor(Color(.textQuarternary))
+          .padding(.top, 20)
+        Spacer()
+      } else if dayRemindersForDate.isEmpty && generating {
+        HStack(spacing: 12) {
+          Image(systemName: "sparkles")
+            .foregroundColor(Color(.textQuarternary))
+          Text("Eve is preparing your reminders…")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundColor(Color(.textQuarternary))
+        }
+        .padding(.top, 20)
+        Spacer()
+      } else if dayRemindersForDate.isEmpty {
+        Text("Nothing to prepare for this day.")
+          .font(.system(size: 14, weight: .medium))
+          .foregroundColor(Color(.textQuarternary))
+          .padding(.top, 20)
+        Spacer()
+      } else {
+        timelineList(for: date, reminders: dayRemindersForDate)
+      }
+    }
+  }
+
   // MARK: - Timeline
 
-  private var timelineList: some View {
+  private func timelineList(for date: Date, reminders dayReminders: [CalendarReminder]) -> some View {
     List {
-      ForEach(timelineEntries) { entry in
+      ForEach(timelineEntries(for: date, reminders: dayReminders)) { entry in
         switch entry {
-        case .hour(let date):
+        case .hour(let hourDate):
           CalendarTimelineRow(
-            time: date.formatted(date: .omitted, time: .shortened),
+            time: hourDate.formatted(date: .omitted, time: .shortened),
             isMainTime: true
           )
           .listRowInsets(EdgeInsets())
@@ -287,14 +402,13 @@ struct CalendarView: View {
           .listRowBackground(Color.clear)
           .contentShape(Rectangle())
           .onTapGesture { editingReminder = reminder }
-          .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button(role: .destructive) {
-              reminderManager?.remove(reminder)
-            } label: {
-              Image(systemName: "trash")
-            }
-            .tint(.red)
-          }
+
+        case .now(let nowDate):
+          CalendarNowLineRow(time: nowDate.formatted(date: .omitted, time: .shortened))
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+            .allowsHitTesting(false)
         }
       }
 
@@ -308,6 +422,48 @@ struct CalendarView: View {
     .scrollContentBackground(.hidden)
     .scrollIndicators(.hidden)
     .background(Color.clear)
+  }
+
+  // MARK: - Floating buttons
+
+  /// Bottom-left "Today" button, mirroring native Calendar — only shown
+  /// once the user has navigated away from today, jumps straight back.
+  private var todayButton: some View {
+    Button {
+      withAnimation(.easeInOut(duration: 0.2)) {
+        selectedDate = .now
+      }
+    } label: {
+      Text("Today")
+        .font(.system(size: 15, weight: .bold))
+        .padding(.horizontal, 6)
+        .frame(height: 28)
+    }
+    .buttonStyle(.glass)
+    .buttonBorderShape(.capsule)
+    .controlSize(.large)
+    .tint(Color(.textPrimary))
+    .padding(.leading, 24)
+    .padding(.bottom, 24)
+    .transition(.opacity.combined(with: .move(edge: .leading)))
+  }
+
+  /// Bottom-right "+" button — opens a dedicated sheet to add a reminder
+  /// by hand for the day currently on screen.
+  private var addReminderButton: some View {
+    Button {
+      isAddingReminder = true
+    } label: {
+      Image(systemName: "plus")
+        .font(.system(size: 20, weight: .semibold))
+        .frame(width: 24, height: 24)
+    }
+    .buttonStyle(.glassProminent)
+    .buttonBorderShape(.circle)
+    .controlSize(.large)
+    .tint(Color.accentColor)
+    .padding(.trailing, 24)
+    .padding(.bottom, 24)
   }
 
   // MARK: - Actions
@@ -326,6 +482,7 @@ struct CalendarView: View {
   private struct WeekDayCell: View {
     var date: Date
     var isSelected: Bool
+    var isToday: Bool
 
     private var dayLetter: String {
       let formatter = DateFormatter()
@@ -339,6 +496,16 @@ struct CalendarView: View {
       return formatter.string(from: date)
     }
 
+    /// Selected takes priority (shown via the filled circle); otherwise
+    /// today is called out in red — the same red used by the live "now"
+    /// line on the timeline — since the accent tint read too close to the
+    /// default text color to register as a distinct state.
+    private var numberColor: Color {
+      if isSelected { return Color(.textPrimary) }
+      if isToday { return .red }
+      return Color(.textTertiary)
+    }
+
     var body: some View {
       VStack(spacing: 10) {
         Text(dayLetter)
@@ -347,7 +514,7 @@ struct CalendarView: View {
 
         Text(dayNumber)
           .font(.system(size: 20, weight: .bold))
-          .foregroundColor(isSelected ? Color(.textPrimary) : Color(.textTertiary))
+          .foregroundColor(numberColor)
           .frame(width: 36, height: 36)
           .background(
             Circle().fill(isSelected ? Color(.textTertiary) : Color.clear)
@@ -389,9 +556,17 @@ struct CalendarView: View {
         // Right Column: Event Box
         if let title = title {
           HStack(spacing: 0) {
-            Rectangle()
-              .fill(Color.accentColor)
-              .frame(width: 12, height: 1) // Connecting line
+            // Connecting line — ties this card to its exact dot/time on the
+            // spine so its time is never ambiguous, capped with a small
+            // node right at the card's edge.
+            HStack(spacing: 0) {
+              Rectangle()
+                .fill(Color.accentColor)
+                .frame(width: 20, height: 2)
+              Circle()
+                .fill(Color.accentColor)
+                .frame(width: 5, height: 5)
+            }
 
             VStack(alignment: .leading, spacing: 4) {
               Text(title)
@@ -410,7 +585,7 @@ struct CalendarView: View {
             .cornerRadius(8)
             .overlay(
               RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.accentColor, lineWidth: 1)
+                .stroke(Color.accentColor, lineWidth: 1.5)
             )
           }
           .padding(.trailing, 24)
@@ -421,6 +596,36 @@ struct CalendarView: View {
         }
       }
       .frame(minHeight: 60)
+    }
+  }
+
+  /// The live "current time" indicator, mirroring the red now-line in
+  /// Apple's Calendar app. Aligned to the same time/center columns as
+  /// `CalendarTimelineRow` so it reads as a line running through the day.
+  private struct CalendarNowLineRow: View {
+    var time: String
+
+    var body: some View {
+      HStack(alignment: .center, spacing: 0) {
+        Text(time)
+          .font(.system(size: 12, weight: .bold))
+          .foregroundColor(.red)
+          .frame(width: 80, alignment: .trailing)
+
+        ZStack {
+          Circle()
+            .fill(Color.red)
+            .frame(width: 8, height: 8)
+        }
+        .frame(width: 20)
+        .padding(.horizontal, 8)
+
+        Rectangle()
+          .fill(Color.red)
+          .frame(height: 1.5)
+          .padding(.trailing, 24)
+      }
+      .frame(minHeight: 20)
     }
   }
 }

@@ -133,12 +133,12 @@ struct LocationView: View {
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(Color(.textPrimary))
-                        .frame(width: 40, height: 40)
-                        .background(Circle().fill(Color(.bgSecondary).opacity(0.85)))
-                        .overlay(Circle().stroke(Color(.textPrimary).opacity(0.08), lineWidth: 1))
+                        .frame(width: 20, height: 20)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .controlSize(.large)
+                .tint(Color(.textPrimary))
 
                 ForEach(savedLocations) { location in
                     LocationChip(
@@ -264,12 +264,12 @@ struct LocationView: View {
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: 20, weight: .semibold))
-                .foregroundColor(.white)
-                .frame(width: 44, height: 44)
-                .background(Circle().fill(Color.accentColor))
-                .shadow(color: Color(.textPrimary).opacity(0.3), radius: 6, y: 3)
+                .frame(width: 24, height: 24)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .tint(Color.accentColor)
         // Equal inset from the screen's bottom and trailing edges, matching the
         // card's 24pt horizontal padding so the button sits at its corner.
         .padding(.trailing, 24)
@@ -297,12 +297,11 @@ struct LocationView: View {
             } label: {
                 Label("Add Location", systemImage: "plus")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Color(.textSecondary))
                     .frame(width: 200, height: 40)
-                    .background(Color.accentColor)
-                    .cornerRadius(20)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.capsule)
+            .tint(Color.accentColor)
             .padding(.top, 8)
         }
     }
