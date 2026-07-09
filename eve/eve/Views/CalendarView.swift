@@ -1,18 +1,34 @@
 import Combine
 import SwiftData
 import SwiftUI
+import UIKit
 
-/// A single row on the timeline: an on-the-hour tick mark, an AI reminder,
-/// or the live "now" indicator — merged and sorted by their actual (shown) time.
+/// All of one event's AI-generated prep reminders share an `occurrenceID`,
+/// `eventTitle`, and `eventDate` (and so the same `reminderDate` — it's
+/// derived from `eventDate`) — they're one notification's worth of prep
+/// items, not separate events, so the timeline shows them as one card.
+private struct CalendarReminderGroup: Identifiable {
+  var occurrenceID: String
+  var eventTitle: String
+  var eventDate: Date
+  var reminderDate: Date
+  var reminders: [CalendarReminder]
+
+  var id: String { occurrenceID }
+}
+
+/// A single row on the timeline: an on-the-hour tick mark, a group of
+/// reminders for one event occurrence, or the live "now" indicator —
+/// merged and sorted by their actual (shown) time.
 private enum CalendarTimelineEntry: Identifiable {
   case hour(Date)
-  case reminder(CalendarReminder)
+  case reminderGroup(CalendarReminderGroup)
   case now(Date)
 
   var id: String {
     switch self {
     case .hour(let date): return "hour-\(date.timeIntervalSince1970)"
-    case .reminder(let reminder): return "reminder-\(reminder.id)"
+    case .reminderGroup(let group): return "group-\(group.id)"
     case .now: return "now-line"
     }
   }
@@ -20,21 +36,21 @@ private enum CalendarTimelineEntry: Identifiable {
   var sortDate: Date {
     switch self {
     case .hour(let date): return date
-    case .reminder(let reminder): return reminder.reminderDate
+    case .reminderGroup(let group): return group.reminderDate
     case .now(let date): return date
     }
   }
 }
 
-/// A horizontally-paged carousel, forward-only: renders the current page
-/// (0) and the next one (1) side by side and slides to the next on a
-/// leftward drag, snapping to a full page instead of cross-fading in
-/// place. There is no backward page — swiping right is inert, so it can
-/// never be mistaken for, or fought over with, the system's edge
-/// swipe-to-go-back gesture.
+/// A horizontally-paged carousel: renders the previous/current/next page
+/// (offsets -1, 0, 1) side by side and slides between them on drag,
+/// snapping to a full page instead of cross-fading in place. Both
+/// directions are live — the system's edge swipe-to-go-back gesture is
+/// disabled separately (see `PopGestureGuard`) so a rightward swipe here
+/// can never be mistaken for backing out of Calendar.
 private struct SwipeCarousel<Content: View>: View {
   let content: (Int) -> Content
-  let onCommit: () -> Void
+  let onCommit: (Int) -> Void
   var useSimultaneousGesture: Bool = false
 
   @State private var dragOffset: CGFloat = 0
@@ -45,10 +61,11 @@ private struct SwipeCarousel<Content: View>: View {
       let width = max(geo.size.width, 1)
 
       let pages = HStack(spacing: 0) {
+        content(-1).frame(width: width, height: geo.size.height)
         content(0).frame(width: width, height: geo.size.height)
         content(1).frame(width: width, height: geo.size.height)
       }
-      .offset(x: dragOffset)
+      .offset(x: -width + dragOffset)
 
       if useSimultaneousGesture {
         pages.simultaneousGesture(dragGesture(width: width))
@@ -62,35 +79,146 @@ private struct SwipeCarousel<Content: View>: View {
     DragGesture(minimumDistance: 16)
       .onChanged { value in
         guard !isAnimating else { return }
-        guard value.translation.width < 0 else { return }
         guard abs(value.translation.width) > abs(value.translation.height) else { return }
         dragOffset = value.translation.width
       }
       .onEnded { value in
         guard !isAnimating else { return }
-        guard value.translation.width < 0,
-              abs(value.translation.width) > abs(value.translation.height) else {
+        guard abs(value.translation.width) > abs(value.translation.height) else {
           withAnimation(.easeOut(duration: 0.2)) { dragOffset = 0 }
           return
         }
         let threshold = width * 0.22
         if value.translation.width < -threshold {
-          commit(width: width)
+          commit(direction: 1, width: width)
+        } else if value.translation.width > threshold {
+          commit(direction: -1, width: width)
         } else {
           withAnimation(.easeOut(duration: 0.2)) { dragOffset = 0 }
         }
       }
   }
 
-  private func commit(width: CGFloat) {
+  private func commit(direction: Int, width: CGFloat) {
     isAnimating = true
     withAnimation(.easeOut(duration: 0.28)) {
-      dragOffset = -width
+      dragOffset = CGFloat(-direction) * width
     }
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
-      onCommit()
+      onCommit(direction)
       dragOffset = 0
       isAnimating = false
+    }
+  }
+}
+
+/// Suppresses the navigation controller's interactive swipe-to-go-back
+/// gesture while Calendar is on screen, restoring it on the way out.
+/// Calendar has its own full-width bidirectional swipe for day/week
+/// paging; without this, a swipe that merely starts near the left edge is
+/// sometimes claimed by the screen-edge pop gesture instead — popping back
+/// to Home when the user only meant to page to the previous day.
+///
+/// Mirrors what Apple's own Calendar does on its day view: no swipe ever
+/// navigates back to the month — horizontal swipes page days, and the only
+/// way back is the "< July" button.
+///
+/// Earlier, narrower attempts still let swipes through. Why each part of
+/// this version matters:
+///  - iOS 26 split swipe-back into TWO gesture recognizers: the classic
+///    edge pan (`interactivePopGestureRecognizer`) and a full-content-area
+///    pan (`interactiveContentPopGestureRecognizer`) that triggers a pop
+///    from a rightward swipe anywhere on screen. Both must be suppressed;
+///    disabling only the edge one is why right-swipes kept "sometimes"
+///    popping to Home.
+///  - Sweeps *every* `UINavigationController` reachable from all window
+///    scenes, not just `self.navigationController` — SwiftUI may host our
+///    content outside the nav controller's view-controller subtree, so
+///    resolving a single `navigationController` could land on nil / the
+///    wrong one, silently disabling nothing.
+///  - Sets `isEnabled = false` AND installs itself as each recognizer's
+///    delegate, returning false from `gestureRecognizerShouldBegin`.
+///    `NavigationStack` may flip `isEnabled` back on during its own layout
+///    passes, so the delegate refusal is the layer that holds.
+///  - Driven from the SwiftUI view's `onAppear`/`onDisappear` (plus a
+///    one-runloop retry and periodic re-asserts), rather than a hosted
+///    helper view controller whose lifecycle timing proved unreliable.
+private final class PopGestureGuard: NSObject, UIGestureRecognizerDelegate {
+
+  /// One recognizer's original state, so it can be restored faithfully
+  /// even if several nav controllers were swept.
+  private final class Capture {
+    weak var gesture: UIGestureRecognizer?
+    let wasEnabled: Bool
+    weak var previousDelegate: UIGestureRecognizerDelegate?
+    init(_ gesture: UIGestureRecognizer) {
+      self.gesture = gesture
+      self.wasEnabled = gesture.isEnabled
+      self.previousDelegate = gesture.delegate
+    }
+  }
+
+  private var captures: [Capture] = []
+  private var capturedIDs = Set<ObjectIdentifier>()
+
+  func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+    false
+  }
+
+  func disable() {
+    for gesture in Self.popRecognizers() {
+      // Capture each recognizer's original state exactly once, before we
+      // touch it, so a repeated disable() never records our own values.
+      if capturedIDs.insert(ObjectIdentifier(gesture)).inserted {
+        captures.append(Capture(gesture))
+      }
+      gesture.isEnabled = false
+      gesture.delegate = self
+    }
+  }
+
+  func restore() {
+    for capture in captures {
+      guard let gesture = capture.gesture else { continue }
+      gesture.isEnabled = capture.wasEnabled
+      gesture.delegate = capture.previousDelegate
+    }
+    captures.removeAll()
+    capturedIDs.removeAll()
+  }
+
+  /// Every navigation controller's pop recognizer anywhere in the app's
+  /// window hierarchy, de-duplicated.
+  private static func popRecognizers() -> [UIGestureRecognizer] {
+    var navigationControllers: [UINavigationController] = []
+    var seen = Set<ObjectIdentifier>()
+
+    func walk(_ viewController: UIViewController?) {
+      guard let viewController else { return }
+      if let nav = viewController as? UINavigationController,
+         seen.insert(ObjectIdentifier(nav)).inserted {
+        navigationControllers.append(nav)
+      }
+      viewController.children.forEach(walk)
+      walk(viewController.presentedViewController)
+    }
+
+    for scene in UIApplication.shared.connectedScenes {
+      guard let windowScene = scene as? UIWindowScene else { continue }
+      for window in windowScene.windows {
+        walk(window.rootViewController)
+      }
+    }
+
+    // iOS 26 split swipe-back into TWO recognizers: the classic edge pan
+    // (`interactivePopGestureRecognizer`) plus a new full-content-area pan
+    // (`interactiveContentPopGestureRecognizer`) that recognizes a
+    // rightward swipe ANYWHERE on screen. Suppressing only the edge one —
+    // all this guard did before — leaves every mid-screen right-swipe free
+    // to pop; that was exactly the intermittent escape-to-Home. Grab both.
+    return navigationControllers.flatMap { nav in
+      [nav.interactivePopGestureRecognizer, nav.interactiveContentPopGestureRecognizer]
+        .compactMap { $0 }
     }
   }
 }
@@ -112,6 +240,10 @@ struct CalendarView: View {
 
   @State private var reminderManager: CalendarReminderManager?
   @State private var syncManager: EventKitSyncManager?
+
+  /// Kills the swipe-to-go-back gesture while Calendar owns the screen, so
+  /// paging the date can't be misread as backing out. See `PopGestureGuard`.
+  @State private var popGuard = PopGestureGuard()
 
   private func dayEvents(_ date: Date) -> [CalendarEvent] {
     events.filter { Calendar.current.isDate($0.startDate, inSameDayAs: date) }
@@ -137,8 +269,27 @@ struct CalendarView: View {
     return formatter.string(from: selectedDate)
   }
 
+  /// Bundles same-occurrence reminders into one card, ordered by creation
+  /// so bullets stay in the order they were generated, then by reminderDate
+  /// so the groups themselves are chronological.
+  private func reminderGroups(from dayReminders: [CalendarReminder]) -> [CalendarReminderGroup] {
+    Dictionary(grouping: dayReminders, by: \.occurrenceID)
+      .compactMap { occurrenceID, items -> CalendarReminderGroup? in
+        guard let first = items.first else { return nil }
+        return CalendarReminderGroup(
+          occurrenceID: occurrenceID,
+          eventTitle: first.eventTitle,
+          eventDate: first.eventDate,
+          reminderDate: first.reminderDate,
+          reminders: items.sorted { $0.createdAt < $1.createdAt }
+        )
+      }
+      .sorted { $0.reminderDate < $1.reminderDate }
+  }
+
   private func timelineEntries(for date: Date, reminders dayReminders: [CalendarReminder]) -> [CalendarTimelineEntry] {
-    guard let first = dayReminders.first, let last = dayReminders.last else { return [] }
+    let groups = reminderGroups(from: dayReminders)
+    guard let first = groups.first, let last = groups.last else { return [] }
 
     let calendar = Calendar.current
 
@@ -152,15 +303,22 @@ struct CalendarView: View {
       minute: 0, second: 0, of: last.reminderDate
     ) ?? last.reminderDate
 
+    // A group already shows its own time next to its card — an hour tick
+    // for that same hour would just repeat the number right next to it,
+    // and reads worse the taller a multi-reminder card gets. Skip it.
+    let occupiedHours = Set(groups.map { calendar.component(.hour, from: $0.reminderDate) })
+
     var entries: [CalendarTimelineEntry] = []
     var cursor = startHour
 
     while cursor <= endHour {
-      entries.append(.hour(cursor))
+      if !occupiedHours.contains(calendar.component(.hour, from: cursor)) {
+        entries.append(.hour(cursor))
+      }
       cursor = calendar.date(byAdding: .hour, value: 1, to: cursor) ?? endHour.addingTimeInterval(3600)
     }
 
-    entries.append(contentsOf: dayReminders.map { .reminder($0) })
+    entries.append(contentsOf: groups.map { .reminderGroup($0) })
 
     if calendar.isDateInToday(date), currentTime >= startHour, currentTime <= endHour.addingTimeInterval(3600) {
       entries.append(.now(currentTime))
@@ -255,9 +413,13 @@ struct CalendarView: View {
       }
       .onChange(of: selectedDate) { _, newDate in
         displayedWeekStart = Calendar.weekStart(containing: newDate)
+        // NavigationStack can reassert gesture state during its own
+        // updates — re-suppress after every page so the guard never lapses.
+        popGuard.disable()
       }
       .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { date in
         currentTime = date
+        popGuard.disable()
       }
       .task {
         if reminderManager == nil {
@@ -276,6 +438,15 @@ struct CalendarView: View {
         await reminderManager?.ensureReminders(for: selectedDate)
         isGenerating = false
       }
+      .onAppear {
+        popGuard.disable()
+        // The nav hierarchy may not be fully wired on the first tick of a
+        // push; re-apply next runloop so we don't miss the recognizer.
+        DispatchQueue.main.async { popGuard.disable() }
+      }
+      .onDisappear {
+        popGuard.restore()
+      }
     }
   }
 
@@ -286,8 +457,8 @@ struct CalendarView: View {
       content: { offset in
         weekRow(for: date(byAddingDays: offset * 7, to: displayedWeekStart))
       },
-      onCommit: {
-        displayedWeekStart = date(byAddingDays: 7, to: displayedWeekStart)
+      onCommit: { direction in
+        displayedWeekStart = date(byAddingDays: direction * 7, to: displayedWeekStart)
       }
     )
     .frame(height: 72)
@@ -334,8 +505,8 @@ struct CalendarView: View {
       content: { offset in
         dayContent(for: date(byAddingDays: offset, to: selectedDate))
       },
-      onCommit: {
-        selectedDate = date(byAddingDays: 1, to: selectedDate)
+      onCommit: { direction in
+        selectedDate = date(byAddingDays: direction, to: selectedDate)
       },
       useSimultaneousGesture: true
     )
@@ -382,26 +553,21 @@ struct CalendarView: View {
       ForEach(timelineEntries(for: date, reminders: dayReminders)) { entry in
         switch entry {
         case .hour(let hourDate):
-          CalendarTimelineRow(
-            time: hourDate.formatted(date: .omitted, time: .shortened),
-            isMainTime: true
-          )
-          .listRowInsets(EdgeInsets())
-          .listRowSeparator(.hidden)
-          .listRowBackground(Color.clear)
+          CalendarTimelineRow(time: hourDate.formatted(date: .omitted, time: .shortened))
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
 
-        case .reminder(let reminder):
-          CalendarTimelineRow(
-            time: reminder.reminderDate.formatted(date: .omitted, time: .shortened),
-            title: reminder.text,
-            subtitle: "For \(reminder.eventTitle) at \(reminder.eventDate.formatted(date: .omitted, time: .shortened))",
-            isMainTime: false
+        case .reminderGroup(let group):
+          CalendarReminderGroupRow(
+            time: group.reminderDate.formatted(date: .omitted, time: .shortened),
+            subtitle: "For \(group.eventTitle) at \(group.eventDate.formatted(date: .omitted, time: .shortened))",
+            reminders: group.reminders,
+            onSelect: { reminder in editingReminder = reminder }
           )
           .listRowInsets(EdgeInsets())
           .listRowSeparator(.hidden)
           .listRowBackground(Color.clear)
-          .contentShape(Rectangle())
-          .onTapGesture { editingReminder = reminder }
 
         case .now(let nowDate):
           CalendarNowLineRow(time: nowDate.formatted(date: .omitted, time: .shortened))
@@ -496,12 +662,16 @@ struct CalendarView: View {
       return formatter.string(from: date)
     }
 
-    /// Selected takes priority (shown via the filled circle); otherwise
-    /// today is called out in red — the same red used by the live "now"
-    /// line on the timeline — since the accent tint read too close to the
-    /// default text color to register as a distinct state.
+    /// Today is always called out in red — the same red used by the live
+    /// "now" line on the timeline — whether or not it's also selected, so
+    /// selecting today doesn't lose that distinction.
+    private var circleFillColor: Color {
+      guard isSelected else { return .clear }
+      return isToday ? .red : Color(.textTertiary)
+    }
+
     private var numberColor: Color {
-      if isSelected { return Color(.textPrimary) }
+      if isSelected { return isToday ? .white : Color(.textPrimary) }
       if isToday { return .red }
       return Color(.textTertiary)
     }
@@ -517,83 +687,123 @@ struct CalendarView: View {
           .foregroundColor(numberColor)
           .frame(width: 36, height: 36)
           .background(
-            Circle().fill(isSelected ? Color(.textTertiary) : Color.clear)
+            Circle().fill(circleFillColor)
           )
       }
     }
   }
 
+  /// An on-the-hour tick: just the time and a spine segment. Suppressed
+  /// entirely for any hour a reminder group already occupies (see
+  /// `timelineEntries`), so it never duplicates a card's own time label.
   private struct CalendarTimelineRow: View {
     var time: String
-    var title: String?
-    var subtitle: String?
-    var isMainTime: Bool
-    var isImportant: Bool = false
 
     var body: some View {
       HStack(alignment: .center, spacing: 0) {
-        // Left Column: Time
+        // Dimmer than a reminder's own time label — this row is just a
+        // bare hour marker, nothing is actually scheduled on it.
         Text(time)
           .font(.system(size: 15, weight: .bold))
-          .foregroundColor(isMainTime ? Color(.textSecondary) : Color(.textSecondary).opacity(0.5))
+          .foregroundColor(Color(.textSecondary).opacity(0.5))
           .frame(width: 80, alignment: .trailing)
+
+        ZStack {
+          Rectangle()
+            .fill(Color(.textQuarternary))
+            .frame(width: 4)
+        }
+        .frame(width: 20)
+        .padding(.horizontal, 8)
+
+        Spacer()
+          .frame(maxWidth: .infinity)
+      }
+      .frame(minHeight: 60)
+    }
+  }
+
+  /// One card per event occurrence: every reminder generated for that
+  /// event (a single notification's worth of prep items) is listed inside
+  /// it as its own tappable row, rather than each getting a separate card
+  /// with a repeated time label.
+  private struct CalendarReminderGroupRow: View {
+    var time: String
+    var subtitle: String
+    var reminders: [CalendarReminder]
+    var onSelect: (CalendarReminder) -> Void
+
+    var body: some View {
+      HStack(alignment: .top, spacing: 0) {
+        // Left Column: Time — brighter than a bare hour tick, since this
+        // row actually has something scheduled on it.
+        Text(time)
+          .font(.system(size: 15, weight: .bold))
+          .foregroundColor(Color(.textSecondary))
+          .frame(width: 80, alignment: .trailing)
+          .padding(.top, 12)
 
         // Timeline Center
         ZStack {
           Rectangle()
             .fill(Color(.textQuarternary))
             .frame(width: 4)
-
-          if title != nil {
-            Circle()
-              .fill(Color.accentColor)
-              .frame(width: 10, height: 10)
-          }
+          Circle()
+            .fill(Color.accentColor)
+            .frame(width: 10, height: 10)
         }
         .frame(width: 20)
         .padding(.horizontal, 8)
+        .padding(.top, 12)
 
-        // Right Column: Event Box
-        if let title = title {
-          HStack(spacing: 0) {
-            // Connecting line — ties this card to its exact dot/time on the
-            // spine so its time is never ambiguous, capped with a small
-            // node right at the card's edge.
-            HStack(spacing: 0) {
-              Rectangle()
-                .fill(Color.accentColor)
-                .frame(width: 20, height: 2)
-              Circle()
-                .fill(Color.accentColor)
-                .frame(width: 5, height: 5)
-            }
+        // Right Column: Card. The connector to the spine is a stripe
+        // fused to the card's own leading edge, not a separately
+        // positioned floating shape — it's part of the card's body, so
+        // it can never misalign or fail to render independently of it.
+        VStack(alignment: .leading, spacing: 8) {
+          Text(subtitle)
+            .font(.system(size: 10, weight: .bold))
+            .foregroundColor(Color(.textQuarternary))
 
-            VStack(alignment: .leading, spacing: 4) {
-              Text(title)
-                .font(.system(size: 13, weight: isImportant ? .black : .bold))
-                .foregroundColor(Color(.textSecondary))
-              if let subtitle = subtitle {
-                Text(subtitle)
-                  .font(.system(size: 10, weight: .bold))
-                  .foregroundColor(Color(.textQuarternary))
+          VStack(alignment: .leading, spacing: 8) {
+            ForEach(reminders) { reminder in
+              HStack(alignment: .top, spacing: 8) {
+                Circle()
+                  .fill(Color.accentColor)
+                  .frame(width: 5, height: 5)
+                  .padding(.top, 5)
+                Text(reminder.text)
+                  .font(.system(size: 13, weight: .bold))
+                  .foregroundColor(Color(.textPrimary))
+                  .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
               }
+              .contentShape(Rectangle())
+              .onTapGesture { onSelect(reminder) }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.textPrimary))
-            .cornerRadius(8)
-            .overlay(
-              RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.accentColor, lineWidth: 1.5)
-            )
           }
-          .padding(.trailing, 24)
-          .padding(.vertical, 8)
-        } else {
-          Spacer()
-            .frame(maxWidth: .infinity)
         }
+        .padding(.leading, 20)
+        .padding(.trailing, 16)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // A card fill matching the surrounding panel would make the
+        // border pointless — bgSecondary is the panel's inverse in
+        // both light and dark mode, so the card always visibly pops.
+        .background(Color(.bgSecondary))
+        .cornerRadius(8)
+        .overlay(alignment: .leading) {
+          Capsule()
+            .fill(Color.accentColor)
+            .frame(width: 5)
+            .padding(.vertical, 8)
+        }
+        .overlay(
+          RoundedRectangle(cornerRadius: 8)
+            .stroke(Color.accentColor, lineWidth: 1.5)
+        )
+        .padding(.trailing, 24)
+        .padding(.vertical, 8)
       }
       .frame(minHeight: 60)
     }
