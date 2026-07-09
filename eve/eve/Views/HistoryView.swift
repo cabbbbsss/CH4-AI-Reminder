@@ -2,8 +2,6 @@ import SwiftUI
 import SwiftData
 
 struct HistoryView: View {
-    @Environment(\.dismiss) var dismiss
-
     // The unified activity timeline, newest first.
     @Query(sort: \HistoryItem.timestamp, order: .reverse)
     private var items: [HistoryItem]
@@ -13,83 +11,40 @@ struct HistoryView: View {
 
     var body: some View {
         ZStack {
-            Color(.bgPrimary).ignoresSafeArea()
+            LinearGradient(
+                colors: [Color(.gradientPrimaryStart), Color(.bgPrimary)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Top Nav
-                HStack {
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        Image(systemName: "chevron.backward.circle.fill")
-                            .font(.system(size: 32))
-                            .foregroundColor(Color(.textPrimary))
-                            .background(Circle().fill(Color(.bgSecondary)))
-                    }
-
-                    Text("History")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundColor(Color(.textPrimary))
-                        .padding(.leading, 12)
-
-                    Spacer()
-                }
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
-
                 // Character + Chat Bubble
                 HStack(alignment: .center, spacing: 16) {
-                    // Robot Face Group
-                    ZStack {
-                        Circle()
-                            .fill(Color.clear)
-                            .frame(width: 79, height: 79)
+                    Image("Avatar")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 75, height: 75)
 
-                        Circle()
-                            .fill(Color.white)
-                            .frame(width: 70, height: 70)
-
-                        // Screen
-                        Ellipse()
-                            .fill(Color(.textPrimary))
-                            .frame(width: 54, height: 36)
-                            .offset(y: -2)
-
-                        // Face details
-                        VStack(spacing: 4) {
-                            HStack(spacing: 14) {
-                                Ellipse().fill(Color(.textSecondary)).frame(width: 5, height: 3)
-                                Ellipse().fill(Color(.textSecondary)).frame(width: 5, height: 3)
-                            }
-                            Rectangle().fill(Color(.textSecondary)).frame(width: 13, height: 2)
+                    Text("I learn from your **interactions** and **adaptively** remind you.")
+                        .font(.system(size: 13))
+                        .foregroundColor(Color(.textPrimary))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(Color(.bgSecondary))
+                        .cornerRadius(14)
+                        .background(alignment: .leading) {
+                            BubbleTail()
+                                .fill(Color(.bgSecondary))
+                                .frame(width: 12, height: 18)
+                                .offset(x: -9)
                         }
-                        .offset(y: -2)
-                    }
 
-                    // Chat Bubble
-                    ZStack(alignment: .leading) {
-                        // The triangle pointing left
-                        Path { path in
-                            path.move(to: CGPoint(x: 10, y: 15))
-                            path.addLine(to: CGPoint(x: 0, y: 25))
-                            path.addLine(to: CGPoint(x: 10, y: 35))
-                        }
-                        .fill(Color.white)
-                        .offset(x: -8)
-
-                        Text("I learn from your interactions and adaptively remind you.")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(Color(.textPrimary))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(Color.white)
-                            .cornerRadius(12)
-                    }
                     Spacer()
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 24)
-                .padding(.bottom, 32)
+                .padding(.bottom, 48)
 
                 // Timeline
                 if items.isEmpty {
@@ -114,7 +69,7 @@ struct HistoryView: View {
                             ForEach(Array(items.enumerated()), id: \.element.persistentModelID) { index, item in
                                 HistoryTimelineRow(
                                     dateLabel: dateLabel(at: index),
-                                    timeLabel: timeLabel(for: item),
+                                    timeLabel: timeLabel(at: index),
                                     isExpanded: isExpanded(item),
                                     title: item.title,
                                     bodyText: bodyText(for: item),
@@ -128,7 +83,8 @@ struct HistoryView: View {
                 }
             }
         }
-        .navigationBarHidden(true)
+        .navigationTitle("History")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     // MARK: - Mapping HistoryItem → designed row
@@ -148,10 +104,26 @@ struct HistoryView: View {
         return item.timestamp.formatted(.dateTime.month(.abbreviated).day())
     }
 
-    /// "8:00 AM" rendered as two lines, matching the design.
-    private func timeLabel(for item: HistoryItem) -> String {
-        item.timestamp
-            .formatted(date: .omitted, time: .shortened)
+    /// "8:00 AM" rendered as two lines, matching the design. Hidden when it
+    /// would repeat the previous row's label (same day, same minute).
+    private func timeLabel(at index: Int) -> String? {
+        let item = items[index]
+        let label = formattedTime(item.timestamp)
+
+        if index > 0 {
+            let previous = items[index - 1]
+            if Calendar.current.isDate(previous.timestamp, inSameDayAs: item.timestamp),
+               formattedTime(previous.timestamp) == label {
+                return nil
+            }
+        }
+
+        return label
+    }
+
+    private func formattedTime(_ date: Date) -> String {
+        date.formatted(date: .omitted, time: .shortened)
+            .replacingOccurrences(of: "\u{202F}", with: "\n")
             .replacingOccurrences(of: " ", with: "\n")
     }
 
@@ -198,6 +170,24 @@ struct HistoryView: View {
     }
 }
 
+/// Rounded tail on the speech bubble, pointing left at the avatar.
+struct BubbleTail: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX, y: rect.midY),
+            control: CGPoint(x: rect.minX + rect.width * 0.2, y: rect.height * 0.2)
+        )
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.maxY),
+            control: CGPoint(x: rect.minX + rect.width * 0.2, y: rect.height * 0.8)
+        )
+        path.closeSubpath()
+        return path
+    }
+}
+
 struct HistoryTimelineRow: View {
     var dateLabel: String?
     var timeLabel: String?
@@ -237,8 +227,8 @@ struct HistoryTimelineRow: View {
 
                 Circle()
                     .fill(Color.accentColor)
-                    .frame(width: 10, height: 10)
-                    .offset(y: dateLabel != nil ? 54 : 14)
+                    .frame(width: dotSize, height: dotSize)
+                    .offset(y: dotOffset)
             }
             .frame(width: 24)
             .padding(.horizontal, 8)
@@ -251,7 +241,7 @@ struct HistoryTimelineRow: View {
                         .foregroundColor(Color(.textPrimary))
                     Spacer()
                     if hasBody {
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                             .foregroundColor(Color(.textTertiary))
                             .font(.system(size: 12, weight: .bold))
                     }
@@ -263,9 +253,10 @@ struct HistoryTimelineRow: View {
 
                 if isExpanded {
                     if let bodyText = bodyText {
-                        Text(bodyText)
+                        Text(markdown(bodyText))
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(Color(.textPrimary))
+                            .lineSpacing(3)
                             .padding(.horizontal, 16)
                             .padding(.bottom, 16)
                     }
@@ -274,21 +265,26 @@ struct HistoryTimelineRow: View {
                         VStack(alignment: .leading, spacing: 4) {
                             if let insightTitle = insightTitle {
                                 Text(insightTitle)
-                                    .font(.system(size: 11, weight: .black))
+                                    .font(.system(size: 12, weight: .bold))
                                     .foregroundColor(Color(.textPrimary))
                             }
-                            Text(insightBody)
-                                .font(.system(size: 11, weight: .medium))
+                            Text(markdown(insightBody))
+                                .font(.system(size: 12, weight: .medium))
                                 .foregroundColor(Color(.textPrimary))
+                                .lineSpacing(3)
                         }
-                        .padding(16)
+                        .padding(14)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color(.bgTertiary))
+                        .cornerRadius(10)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 14)
                     }
                 }
             }
             .background(Color(.bgSecondary))
-            .cornerRadius(12)
+            .cornerRadius(16)
+            .shadow(color: Color(.textPrimary).opacity(0.08), radius: 10, y: 4)
             .padding(.top, dateLabel != nil ? 40 : 0)
             .padding(.bottom, 24)
         }
@@ -297,6 +293,26 @@ struct HistoryTimelineRow: View {
 
     private var hasBody: Bool {
         bodyText != nil || insightBody != nil
+    }
+
+    /// Rows without a time label get the design's smaller dot.
+    private var dotSize: CGFloat {
+        timeLabel != nil ? 12 : 8
+    }
+
+    /// Keeps the dot's center where the 12pt dot would sit.
+    private var dotOffset: CGFloat {
+        let base: CGFloat = dateLabel != nil ? 54 : 14
+        return base + (12 - dotSize) / 2
+    }
+
+    /// Renders bold spans in the stored detail text, like the design's
+    /// emphasized quotes; falls back to plain text if parsing fails.
+    private func markdown(_ text: String) -> AttributedString {
+        (try? AttributedString(
+            markdown: text,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(text)
     }
 }
 
