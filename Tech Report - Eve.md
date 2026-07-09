@@ -67,20 +67,27 @@ Moving forward, we decided to make the Foundation Models framework our primary a
 ## 5. Real Limitations Hit
 We attempted to use the Foundation Models framework combined with `AVFoundation` to build an AI assistant video editor that could extract highlights based on emotional moods (like "sad," "cinematic," or "moody"). While the documentation states that the model excels at isolating actions and precise timestamps, it repeatedly struggled with these abstract requests. Because human definitions of a "vibe" vary, the model failed to return consistent, reliable results for subjective keywords. We dropped the dedicated app concept when we realized native Apple Intelligence features (like Memory Movies and advance Photos search) already handle this behavior.
 
-Besides of it, we also notice that Foundation models can't solve a complex reasoning, long-context tasks, general world knowledge, code generation, and math.
+Besides that, we also notice that Foundation models can't solve a complex reasoning, long-context tasks, general world knowledge, code generation, and math. To maximize and isolate the true potential of Apple's Foundation Models framework, we made a deliberate architectural decision not to introduce or implement any external third-party models or cloud AI runtimes.
 
-To maximize and isolate the true potential of Apple's Foundation Models framework, we made a deliberate architectural decision not to introduce or implement any external third-party models or cloud AI runtimes.
+Once we moved from research into an actual working build, several new realities surfaced that we hadn't fully anticipated during the exploration phase.
+- The model still halucinates. Even with a fully native pipeline, the Foundation Model occasionally hallucinates, most visibly by producing a reminder that doesn't match the context it was given (surfacing the wrong action). When we debugged these cases, we traced the likely causes to three layers:
+  * Prompt quality (developer side): vague, under-specified, or poorly structured prompts leave too much room for the model to guess.
+  * Context data available to the model: when the insight data we feed it is thin or ambiguous, the model fills the gaps with fabrications.
+  * Quality of the processed data: noisy, inconsistent, or poorly formatted input data degrades the reliability of the output.
+- Language support is narrower than expected. The Foundation Model does not reliably process every language. For non-English input, we effectively need a `Natural Language` framework as a translation step to convert the text into English before the model can reason over it, because several languages simply don't work well (or at all) with the on-device model yet.
+- The model has no long-term memory. The Foundation Model can't continuously remember or persist user data on its own. It is effectively stateless between calls.
 
 ## 6. The Revised Decision
 
 ### Final decision:
-We are building an AI-powered Adaptive Reminder Assistant that leverages a native framework pipeline consisting of **Foundation Models + EventKit + CoreLocation + UserNotifications.** The application is designed to passively learn user schedules, routines, and physical habits over time, delivering hyper-contextual, non-intrusive reminders that dynamically adapt based on real-world environment variables, behavioral cues, and lightweight, active user feedback loops.
+We are building an AI-powered Adaptive Reminder Assistant that leverages a native framework pipeline consisting of **Foundation Models + Natural Language + EventKit + CoreLocation + UserNotifications + SwiftData.** The application is designed to passively learn user schedules, routines, and physical habits over time, delivering hyper-contextual, non-intrusive reminders that dynamically adapt based on real-world environment variables, behavioral cues, and lightweight, active user feedback loops.
 
 ### What changed since Section 1, and why:
-Our core strategy completely pivoted to embrace an exclusive native architecture. While our initial ideations relied on heavy, design-dependent applications or complex multi-model pipelines, we discovered that the true potential of Apple's Foundation Models framework is best unlocked when it operates completely on its own, natively on-device. We explicitly dropped alternative ideas (like the AI video editor and automated scrapbook) because they either duplicated built-in Apple features or over-indexed on UI layout over deep technical experimentation.
+Our core strategy completely pivoted to embrace an exclusive native architecture. While our initial ideations relied on heavy, design-dependent applications or complex multi-model pipelines, we discovered that the true potential of Apple's Foundation Models framework is best unlocked when it operates completely on its own, natively on-device. We explicitly dropped alternative ideas (like the AI video editor and automated scrapbook) because they either duplicated built-in Apple features or over-indexed on UI layout over deep technical experimentation. By focusing on a smart context assistant, we harness the baseline strengths of Apple Intelligence: zero-latency local execution, complete on-device privacy, and direct integration with the operating system.
 
-By focusing on a smart context assistant, we harness the baseline strengths of Apple Intelligence: zero-latency local execution, complete on-device privacy, and direct integration with the operating system.
+During development, we decided to incorporate the **Natural Language** framework as an additional core framework. We found that the on-device Foundation Model currently has limited support for some non-English languages. By using the Natural Language framework to detect and translate non-English user input into English before passing it to the Foundation Model, we ensure that the model can reason over the input more accurately and consistently across different languages.
 
+We also discovered an important limitation of the on-device Foundation Model: it is stateless, meaning it cannot continuously remember or persist user information across interactions. Rather than relying on the model to retain the user's history, we store the assistant's learned understanding as AI Insights in **SwiftData**. The Foundation Model is invoked only when needed, and each time it runs, it reasons over the persisted insights and current context instead of relying on memory from previous sessions. In other words, the Foundation Model provides the reasoning, while SwiftData serves as the long-term memory.
 
 ## App Track Addendum
 ### About the frameworks
@@ -92,11 +99,16 @@ The secondary frameworks serve as the essential eyes, ears, and hands for the AI
 - UserNotifications: Because the core utility of an adaptive assistant relies entirely on timely engagement, this framework is critical. UserNotifications is the primary channel used to deliver the final adaptive reminders and request lightweight clarification prompts when the user is on the move.
 
 ### About accessibility and localization
-We focus on users with ADHD or executive dysfunction. The app targets "micro-habits"—small, vital routines frequently missed due to cognitive fatigue. By automating adaptive, non-intrusive timing, we reduce the mental friction caused by standard, rigid reminder apps.
+We designed EVE around the concept of micro-habits—small but important everyday actions that are easy to forget, such as bringing a water bottle, taking medication, charging a device, or picking up groceries before leaving work. These tasks often rely on prospective memory and context, making them particularly challenging for people with ADHD or executive dysfunction, who may struggle with initiating tasks, switching attention, or remembering intentions at the right moment. Rather than using fixed, repetitive reminders, EVE delivers adaptive reminders based on the user's current context, helping reduce the cognitive effort required to remember these small but essential routines.
 
-We do not support entirely disengaged users who use neither Apple's native Calendar/Reminders apps nor participate in our interactive notification questionnaires. Without passive EventKit telemetry or active feedback, the Foundation Model hits a "blank slate" constraint and cannot personalize routines.
+Because users with executive dysfunction can also experience cognitive overload when interacting with digital products, we intentionally designed EVE to minimize the effort required to use the app itself. Our design principles are:
+- Dark interface as an accessibility feature, giving users the option to reduce visual stimulation and improve comfort in low-light environments.
+- We minimize on-screen clutter and surface a single, clear primary action per screen, cutting the decision fatigue and task paralysis that often stall ADHD users.
+- Feedback loops are lightweight and tap-based rather than typing-heavy, so responding to the app never feels like a chore.
 
-The application will be natively developed and fully supported in English. If we scale the application to multiple languages, our first localization target will be Indonesian (Bahasa Indonesia).
+We do not support entirely disengaged users who use neither Apple's native Calendar/Reminders apps nor participate in our questionnaires. Without passive EventKit telemetry or active feedback, the Foundation Model hits a "blank slate" constraint and cannot personalize routines.
+
+The application will be natively developed and fully supported in English. As a direct consequence of the language limitation above, we reversed our earlier plan to localize into Bahasa Indonesia. The Foundation Model doesn't yet work reliably in Indonesian, so shipping an Indonesian experience would mean shipping a broken AI core. For now the app stays English-only, and Indonesian localization is deferred until on-device language support matures.
 
 ### About privacy
 Because we use Apple’s native Foundation Models framework, all data processing happens strictly on-device. We require three data channels:
