@@ -77,6 +77,9 @@ struct ReminderDecision {
     @Guide(description: "Should a reminder be shown right now?")
     let shouldNotify: Bool
 
+    @Guide(description: "The kind of reminder. One of: routine, insight, actionable. Use 'routine' for scheduled commitments and preparation; 'insight' when driven by a learned pattern/belief about the user; 'actionable' when asking the user to do a concrete task now.")
+    let category: String
+
     @Guide(description: "Notification title, short and friendly")
     let title: String
 
@@ -150,6 +153,10 @@ final class FoundationModelService {
     evidence. Give each a confidence that honestly reflects the evidence.
     - Ask a follow-up question only when a single answer would meaningfully \
     improve your understanding. Otherwise leave it empty.
+    - Classify each reminder with a category: 'routine' for scheduled \
+    commitments and preparation, 'insight' when it's driven by a learned \
+    pattern or belief about the user, 'actionable' when you're asking the \
+    user to do a concrete task right now.
     """
 
     private let preparationInstructions = """

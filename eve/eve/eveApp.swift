@@ -3,6 +3,12 @@ import SwiftData
 
 @main
 struct eveApp: App {
+  init() {
+    // Seed the default-ON notification category toggles so a fresh install
+    // honors them before the user ever opens the Notification settings screen.
+    NotificationPreferences.registerDefaults()
+  }
+
   var sharedModelContainer: ModelContainer = {
     let schema = Schema([
       UserProfile.self,

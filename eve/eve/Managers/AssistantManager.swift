@@ -63,6 +63,7 @@ final class AssistantManager {
         guard contextBuilder.hasAnyPendingCommitment() else {
             lastDecision = ReminderDecision(
                 shouldNotify: false,
+                category: "routine",
                 title: "All clear",
                 body: "Your day's wide open — I'll keep watch and let you know if anything comes up.",
                 followUpQuestion: nil,
@@ -82,7 +83,8 @@ final class AssistantManager {
 
             try? insightManager.apply(decision.proposedInsights)
 
-            if notify && decision.shouldNotify {
+            if notify && decision.shouldNotify
+                && NotificationPreferences.isEnabled(forCategory: decision.category) {
 
                 try? await notificationService.scheduleReminder(
                     title: decision.title,
