@@ -113,6 +113,14 @@ struct OnboardingQuestionSet {
 
 }
 
+@Generable
+struct InsightExtraction {
+
+    @Guide(description: "0 to 6 durable beliefs about the user, each grounded ONLY in the provided context — recurring calendar/reminder patterns and the user's onboarding answers. Empty if the context shows nothing durable.")
+    let insights: [ProposedInsight]
+
+}
+
 /// The only gateway to Apple's on-device model.
 /// Input: ReminderContext. Output: ReminderDecision. Nothing else.
 final class FoundationModelService {
@@ -153,6 +161,9 @@ final class FoundationModelService {
     evidence. Give each a confidence that honestly reflects the evidence.
     - Ask a follow-up question only when a single answer would meaningfully \
     improve your understanding. Otherwise leave it empty.
+    - If "User's name" is known (not "unknown"), you MAY occasionally open the \
+    reminder by addressing them by that name to feel warm and personal — but \
+    only once in a while, never in every message, and never when it feels forced.
     - Classify each reminder with a category: 'routine' for scheduled \
     commitments and preparation, 'insight' when it's driven by a learned \
     pattern or belief about the user, 'actionable' when you're asking the \
@@ -499,6 +510,60 @@ final class FoundationModelService {
         )
 
         return response.content.questions
+
+    }
+
+    private let insightExtractionInstructions = """
+    You are Eve, an adaptive reminder assistant running privately on the user's device.
+
+    Your job here is NOT to send a reminder. It is to distil durable, useful \
+    BELIEFS about the user from the given context, so future reminders can be \
+    personalised. Draw ONLY from:
+    - Recurring patterns in the calendar events and pending reminders (e.g. a \
+    workplace that appears every weekday, a regular gym slot, a weekly class).
+    - The user's onboarding answers, shown as "Q: … — A: Yes/No". These are \
+    explicit, high-value evidence.
+
+    Rules:
+    - Ground every insight in something explicitly present in the context. Never \
+    invent or assume beyond it.
+    - Turn a "Yes" answer into a positive belief (e.g. Q "Do you take medication \
+    on a schedule?" A "Yes" → "You take medication on a regular schedule."). \
+    Skip questions answered "No" unless the "No" itself is clearly informative.
+    - Each insight's `value` must be a complete second-person sentence ("You …").
+    - Pick a fitting category (routine, place, preference, behavior) and an honest \
+    confidence. Do not duplicate a belief already listed in the context's insights.
+    - NEVER create an insight about missing, unknown, or unspecified information \
+    (e.g. do NOT say "You haven't specified your location/name"). Absence of data \
+    is not a belief — simply omit it.
+    - If nothing durable can be grounded, return an empty list.
+    """
+
+    /// Extracts durable AI Insights from the prepared context — calendar/reminder
+    /// patterns plus the user's onboarding answers. Used during onboarding and
+    /// whenever we want to grow beliefs without composing a reminder.
+    func extractInsights(
+        from context: ReminderContext
+    ) async throws -> [ProposedInsight] {
+
+        switch SystemLanguageModel.default.availability {
+
+        case .available:
+            break
+
+        case .unavailable(let reason):
+            throw AIError.unavailable(String(describing: reason))
+
+        }
+
+        let session = LanguageModelSession(instructions: insightExtractionInstructions)
+
+        let response = try await session.respond(
+            to: context.promptText,
+            generating: InsightExtraction.self
+        )
+
+        return response.content.insights
 
     }
 

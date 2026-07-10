@@ -26,6 +26,7 @@ final class ReminderContextBuilder {
         ReminderContext(
             currentDate: .now,
             currentPlace: currentPlace.flatMap(englishOrNil),
+            userName: userName(),
             nextUrgentItem: nextUrgentItem(),
             upcomingEvents: upcomingEvents(),
             pendingReminders: pendingReminders(),
@@ -34,6 +35,13 @@ final class ReminderContextBuilder {
             answeredQuestions: answeredQuestions()
         )
 
+    }
+
+    /// The user's chosen name from their profile, or nil if unset.
+    private func userName() -> String? {
+        let profile = try? context.fetch(FetchDescriptor<UserProfile>()).first
+        let name = profile?.name ?? ""
+        return name.isEmpty ? nil : name
     }
 
     /// A deliberately narrow context for one event's prep checklist.

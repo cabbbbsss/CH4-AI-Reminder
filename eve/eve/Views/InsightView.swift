@@ -18,6 +18,7 @@ struct InsightView: View {
   private var insights: [AIInsight]
 
   @State private var editingInsight: AIInsight?
+  @State private var expandedInsightID: PersistentIdentifier?
 
   var body: some View {
     ZStack {
@@ -104,12 +105,13 @@ struct InsightView: View {
               ScrollView(showsIndicators: false) {
                 VStack(spacing: 28) {
                   ForEach(insights) { insight in
-                    Button {
-                      editingInsight = insight
-                    } label: {
-                      InsightRow(insight: insight)
-                    }
-                    .buttonStyle(.plain)
+                    InsightRow(
+                      insight: insight,
+                      isExpanded: expandedInsightID == insight.persistentModelID,
+                      onTap: { toggle(insight) },
+                      onEdit: { editingInsight = insight },
+                      onDelete: { delete(insight) }
+                    )
                   }
                 }
                 .padding(.top, 40)
@@ -137,6 +139,19 @@ struct InsightView: View {
     .sheet(item: $editingInsight) { insight in
       InsightEditSheet(insight: insight)
     }
+  }
+
+  /// Expand one insight at a time to reveal its reasoning.
+  private func toggle(_ insight: AIInsight) {
+    withAnimation(.easeInOut(duration: 0.2)) {
+      expandedInsightID = expandedInsightID == insight.persistentModelID
+        ? nil
+        : insight.persistentModelID
+    }
+  }
+
+  private func delete(_ insight: AIInsight) {
+    try? InsightManager(context: modelContext).delete(insight)
   }
 
   // Chat bubble with partial bold text
@@ -167,23 +182,91 @@ struct InsightView: View {
   }
 }
 
-/// One insight row with an accent-colored checkmark, matching the sketch design.
+/// One insight: a tappable headline + confidence that reveals the AI's
+/// reasoning (and edit/delete) when expanded.
 struct InsightRow: View {
   let insight: AIInsight
+  var isExpanded: Bool
+  var onTap: () -> Void
+  var onEdit: () -> Void
+  var onDelete: () -> Void
+
+  /// "Confirmed by you" once the user has corrected it, otherwise the model's confidence.
+  private var confidenceText: String {
+    insight.isUserEdited
+      ? "Confirmed by you"
+      : "\(Int((insight.confidence * 100).rounded()))% confident"
+  }
 
   var body: some View {
-    HStack(alignment: .top, spacing: 16) {
-      Image(systemName: "checkmark.circle.fill")
-        .font(.system(size: 24))
-        .foregroundColor(.accentColor)
-        .padding(.top, 2)
+    VStack(alignment: .leading, spacing: 0) {
 
-      Text(insight.value)
-        .font(.system(size: 16, weight: .regular))
-        .foregroundColor(Color(.textPrimary))
-        .fixedSize(horizontal: false, vertical: true)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .multilineTextAlignment(.leading)
+      // ── Header (tap to expand) ─────────────────────────────
+      Button(action: onTap) {
+        HStack(alignment: .top, spacing: 16) {
+          Image(systemName: "checkmark.circle.fill")
+            .font(.system(size: 24))
+            .foregroundColor(.accentColor)
+            .padding(.top, 2)
+
+          VStack(alignment: .leading, spacing: 4) {
+            Text(insight.value)
+              .font(.system(size: 17, weight: .regular))
+              .foregroundColor(Color(.textPrimary))
+              .fixedSize(horizontal: false, vertical: true)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .multilineTextAlignment(.leading)
+
+            Text(confidenceText)
+              .font(.system(size: 13))
+              .foregroundColor(Color(.textTertiary))
+          }
+
+          Image(systemName: "chevron.right")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundColor(Color(.textTertiary))
+            .rotationEffect(.degrees(isExpanded ? 90 : 0))
+            .padding(.top, 6)
+        }
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+
+      // ── Expanded reasoning + actions ───────────────────────
+      if isExpanded {
+        VStack(alignment: .leading, spacing: 14) {
+
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Why Eve believes this")
+              .font(.system(size: 12, weight: .semibold))
+              .foregroundColor(Color(.textTertiary))
+
+            Text(insight.sourceSummary)
+              .font(.system(size: 14))
+              .foregroundColor(Color(.textPrimary))
+              .fixedSize(horizontal: false, vertical: true)
+              .frame(maxWidth: .infinity, alignment: .leading)
+          }
+
+          HStack(spacing: 20) {
+            Button(action: onEdit) {
+              Label("Edit", systemImage: "pencil")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.accentColor)
+            }
+            Button(role: .destructive, action: onDelete) {
+              Label("Delete", systemImage: "trash")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.red)
+            }
+            Spacer()
+          }
+          .buttonStyle(.plain)
+        }
+        .padding(.leading, 40)
+        .padding(.top, 12)
+        .transition(.opacity.combined(with: .move(edge: .top)))
+      }
     }
   }
 }

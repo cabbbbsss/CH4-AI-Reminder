@@ -103,7 +103,9 @@ final class AILearningEngine {
     await runStep("Learning your routines…", progress: 0.8) {
       let hasRoutineData = sync.hasCalendarAccess == true || sync.hasReminderAccess == true
       if hasRoutineData {
-        await assistant.generateInitialInsights(currentPlace: location.currentPlace)
+        // Extract durable beliefs from the imported calendar/reminders,
+        // not a reminder decision — so learning actually produces insights.
+        await assistant.learnInsights(currentPlace: location.currentPlace)
       }
       return hasRoutineData
     }
