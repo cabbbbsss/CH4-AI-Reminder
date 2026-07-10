@@ -199,40 +199,85 @@ private struct InsightEditSheet: View {
   @State private var value = ""
 
   var body: some View {
-    NavigationStack {
-      Form {
-        Section("What Eve believes") {
-          LabeledContent("Title", value: insight.title)
-          TextField("Value", text: $value)
-        }
+    ZStack {
+      Color(.bgPrimary)
+        .ignoresSafeArea()
 
-        Section("Why Eve believes this") {
-          Text(insight.sourceSummary)
-        }
+      NavigationStack {
+        Form {
+          // ── What Eve believes ──────────────────────────────
+          Section {
+            LabeledContent("Title", value: insight.title)
+              .foregroundColor(Color(.textPrimary))
 
-        Section {
-          Button("Delete this insight", role: .destructive) {
-            try? InsightManager(context: modelContext).delete(insight)
-            dismiss()
+            LabeledContent("Answer") {
+              TextField("Enter answer", text: $value)
+                .multilineTextAlignment(.trailing)
+                .foregroundColor(Color(.textTertiary))
+            }
+            .foregroundColor(Color(.textPrimary))
+          } header: {
+            Text("What Eve believes")
+              .foregroundColor(Color(.textTertiary))
+          }
+          .listRowBackground(Color(.bgSecondary))
+
+          // ── Why Eve believes this (read-only AI reasoning) ─
+          Section {
+            HStack(alignment: .top, spacing: 12) {
+              Image(systemName: "brain.head.profile")
+                .font(.system(size: 20))
+                .foregroundColor(Color(.textTertiary))
+                .padding(.top, 2)
+
+              VStack(alignment: .leading, spacing: 4) {
+                Text("Eve's reasoning")
+                  .font(.system(size: 12, weight: .semibold))
+                  .foregroundColor(Color(.textTertiary))
+                  .textCase(nil)
+
+                Text(insight.sourceSummary)
+                  .font(.system(size: 14))
+                  .foregroundColor(Color(.textPrimary))
+                  .fixedSize(horizontal: false, vertical: true)
+              }
+            }
+            .padding(.vertical, 4)
+          } header: {
+            Text("Why Eve believes this")
+              .foregroundColor(Color(.textTertiary))
+          }
+          .listRowBackground(Color(.bgSecondary))
+
+          // ── Delete ─────────────────────────────────────────
+          Section {
+            Button("Delete this insight", role: .destructive) {
+              try? InsightManager(context: modelContext).delete(insight)
+              dismiss()
+            }
+          }
+          .listRowBackground(Color(.bgSecondary))
+        }
+        .scrollContentBackground(.hidden)
+        .navigationTitle("Edit Insight")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+          ToolbarItem(placement: .cancellationAction) {
+            Button("Cancel") { dismiss() }
+              .foregroundColor(Color(.textPrimary))
+          }
+          ToolbarItem(placement: .confirmationAction) {
+            Button("Save") {
+              try? InsightManager(context: modelContext)
+                .recordUserEdit(insight, newValue: value)
+              dismiss()
+            }
+            .disabled(value.isEmpty)
+            .foregroundColor(.accentColor)
           }
         }
+        .onAppear { value = insight.value }
       }
-      .navigationTitle("Edit Insight")
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") { dismiss() }
-        }
-        ToolbarItem(placement: .confirmationAction) {
-          Button("Save") {
-            try? InsightManager(context: modelContext)
-              .recordUserEdit(insight, newValue: value)
-            dismiss()
-          }
-          .disabled(value.isEmpty)
-        }
-      }
-      .onAppear { value = insight.value }
     }
   }
 }

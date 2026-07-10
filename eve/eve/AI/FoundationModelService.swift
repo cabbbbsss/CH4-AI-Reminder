@@ -14,10 +14,10 @@ struct ProposedInsight {
     @Guide(description: "One of: routine, place, preference, behavior")
     let category: String
 
-    @Guide(description: "Short name of the belief, e.g. 'Workplace' or 'Reminder Timing'")
+    @Guide(description: "Short internal key for this belief, used only for matching and editing — never displayed as standalone text in the UI. Examples: 'Workplace', 'Meeting Format', 'Morning Exercise'")
     let title: String
 
-    @Guide(description: "The believed value, e.g. 'Apple Developer Academy'")
+    @Guide(description: "A complete, natural-language sentence in second person ('You …') that combines the belief topic and its answer into one self-contained, human-readable statement. This is the ONLY text shown to the user in the insight list, so it must make sense without the title. Keep it concise (max ~15 words). Never output a raw answer like 'Yes', 'No', or a bare noun. Examples: 'You review your notes before every meeting.', 'Your meetings are usually held virtually via Zoom.', 'You often study at a café on weekdays.'")
     let value: String
 
     @Guide(description: "Confidence between 0.0 and 1.0")
