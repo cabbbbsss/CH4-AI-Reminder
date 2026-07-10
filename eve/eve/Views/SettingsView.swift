@@ -165,7 +165,12 @@ struct SettingsScaffold<Content: View>: View {
 
     var body: some View {
         ZStack {
-            Color(.bgPrimary).ignoresSafeArea()
+            LinearGradient(
+                colors: [Color(.gradientPrimaryStart), Color(.bgPrimary)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 SettingsNavBar(title: title) { dismiss() }

@@ -31,14 +31,15 @@ struct HistoryView: View {
                         .foregroundColor(Color(.textPrimary))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
-                        .background(Color(.bgSecondary))
-                        .cornerRadius(14)
-                        .background(alignment: .leading) {
-                            BubbleTail()
-                                .fill(Color(.bgSecondary))
-                                .frame(width: 12, height: 18)
-                                .offset(x: -9)
-                        }
+                        .background(Color(.bgTertiary))
+                        .cornerRadius(10, corners: [.topRight, .bottomLeft, .bottomRight])
+                        .cornerRadius(4, corners: [.topLeft])
+//                        .background(alignment: .leading) {
+//                            BubbleTail()
+//                                .fill(Color(.bgSecondary))
+//                                .frame(width: 12, height: 18)
+//                                .offset(x: -9)
+//                        }
 
                     Spacer()
                 }

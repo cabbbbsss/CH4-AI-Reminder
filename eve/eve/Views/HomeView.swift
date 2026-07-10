@@ -99,14 +99,14 @@ struct HomeView: View {
                 .ignoresSafeArea()
 
                 Rectangle()
-                    .fill(Color(.textPrimary))
+                    .fill(Color(.bgSecondary))
                     .cornerRadius(20)
                     .frame(width: 390, height: 490)
                     .ignoresSafeArea(edges: .top)
                     .frame(maxHeight: .infinity, alignment: .top)
 
                 Rectangle()
-                    .fill(Color(.textPrimary))
+                    .fill(Color(.bgPrimary))
                     .cornerRadius(20)
                     .blur(radius: 100)
                     .frame(width: 400, height: 300)
@@ -120,7 +120,7 @@ struct HomeView: View {
                         HStack {
                             Text(greeting)
                                 .font(.system(size: 26, weight: .medium, design: .default))
-                                .foregroundColor(Color(.textTertiary))
+                                .foregroundColor(Color(.textPrimary))
                                 .padding(.leading, 30)
 
                             Spacer()
@@ -131,10 +131,13 @@ struct HomeView: View {
                                     // White, not accent: .glassProminent tints the button's
                                     // background with the accent color, so an accent-colored
                                     // gear was invisible against it. White reads in both modes.
+                                    .foregroundColor(Color(.textPrimary))
                                     .foregroundStyle(.white)
                                     .padding(5)
                             }
-                            .buttonStyle(.glassProminent)
+                            .buttonStyle(.glass)
+                            .buttonBorderShape(.circle)
+                            .background(Color(.bgTertiary))
                             .clipShape(Circle())
                             .frame(maxHeight: .infinity, alignment: .topTrailing)
                             .padding(20)
@@ -165,7 +168,7 @@ struct HomeView: View {
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                                 .padding(16)
-                                .background(Color(.bgTertiary))
+                                .background(Color(.bgSecondary))
                                 .cornerRadius(20, corners: [.topRight, .bottomLeft, .bottomRight])
                                 .cornerRadius(4, corners: [.topLeft])
                             }

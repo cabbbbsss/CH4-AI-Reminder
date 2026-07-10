@@ -27,7 +27,15 @@ struct SavedAddressView: View {
 
     var body: some View {
         ZStack {
-            Color(.bgPrimary).ignoresSafeArea()
+            LinearGradient(
+              stops: [
+                .init(color: Color(.bgPrimary), location: 0.75),
+                .init(color: Color(.bgSecondary), location: 1.0)
+              ],
+              startPoint: .bottom,
+              endPoint: .top
+            )
+            .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 SettingsNavBar(title: "Saved Address") { dismiss() }
@@ -138,13 +146,13 @@ struct AddressCard: View {
             }
 
             Text(item.address)
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: 13, weight: .medium))
                 .foregroundColor(Color(.textQuarternary))
                 .fixedSize(horizontal: false, vertical: true)
 
             if item.isPrimary {
                 Text("Primary")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(Color.accentColor)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)

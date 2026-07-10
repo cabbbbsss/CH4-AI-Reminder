@@ -10,10 +10,10 @@ struct PermissionView: View {
 
     var body: some View {
         ZStack {
-            Color(.textPrimary).ignoresSafeArea()
+            Color(.bgPrimary).ignoresSafeArea()
 
             Rectangle()
-                .fill(Color.white.opacity(0.8))
+                .fill(Color.bgSecondary.opacity(0.8))
                 .frame(width: 800, height: 500)
                 .blur(radius: 150)
                 .position(x: 200, y: 150)
@@ -28,6 +28,7 @@ struct PermissionView: View {
 
                 Text("EVE works by understanding your world to remind you. All data stored on your device, never anywhere else.")
                     .font(.system(size: 15, weight: .medium))
+                    .opacity(0.7)
                     .foregroundColor(Color(.textPrimary))
                     .padding(.top, 10)
                     .padding(.horizontal, 39)
@@ -89,6 +90,8 @@ struct PermissionView: View {
             }
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
+            .background(Color(.bgSecondary))
+            .clipShape(Circle())
             .disabled(isRequesting)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             .padding()
