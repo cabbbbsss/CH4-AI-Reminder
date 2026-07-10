@@ -5,10 +5,10 @@ struct WelcomeView: View {
     
     var body: some View {
         ZStack {
-            Color(.textPrimary).ignoresSafeArea()
+            Color(.bgPrimary).ignoresSafeArea()
             
             Rectangle()
-                .fill(Color.white.opacity(0.8))
+                .fill(Color.bgSecondary.opacity(0.8))
                 .frame(width: 800, height: 500)
                 .blur(radius: 100)
                 .position(x: 200, y: 400)

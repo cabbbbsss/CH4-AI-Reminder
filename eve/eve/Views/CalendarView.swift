@@ -329,20 +329,25 @@ struct CalendarView: View {
 
   var body: some View {
     ZStack {
-      Color(.bgPrimary).ignoresSafeArea()
+        LinearGradient(
+            colors: [Color(.gradientPrimaryStart), Color(.bgPrimary)],
+            startPoint: .bottom,
+            endPoint: .top
+        )
+        .ignoresSafeArea()
 
-      GeometryReader { proxy in
-        Ellipse()
-          .fill(Color(.bgSecondary))
-          .frame(width: proxy.size.width * 2.5, height: proxy.size.height * 1.2)
-          .position(x: proxy.size.width / 2, y: -proxy.size.height * 0.1)
-      }
-      .ignoresSafeArea()
+//      GeometryReader { proxy in
+//        Ellipse()
+//          .fill(Color(.bgSecondary))
+//          .frame(width: proxy.size.width * 2.5, height: proxy.size.height * 1.2)
+//          .position(x: proxy.size.width / 2, y: -proxy.size.height * 0.1)
+//      }
+//      .ignoresSafeArea()
 
       VStack(spacing: 0) {
         // Timeline Container
         ZStack(alignment: .top) {
-          Color(.textPrimary)
+          Color(.bgSecondary)
             .cornerRadius(32, corners: [.topLeft, .topRight])
             .ignoresSafeArea(edges: .bottom)
 
@@ -624,10 +629,11 @@ struct CalendarView: View {
         .font(.system(size: 20, weight: .semibold))
         .frame(width: 24, height: 24)
     }
-    .buttonStyle(.glassProminent)
+    .buttonStyle(.glass)
     .buttonBorderShape(.circle)
+    .background(Color(.bgSecondary))
+    .clipShape(Circle())
     .controlSize(.large)
-    .tint(Color.accentColor)
     .padding(.trailing, 24)
     .padding(.bottom, 24)
   }
