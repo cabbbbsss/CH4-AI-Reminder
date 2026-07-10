@@ -10,7 +10,6 @@ import SwiftUI
 import SwiftData
 
 struct InsightView: View {
-  @Environment(\.dismiss) var dismiss
   @Environment(\.modelContext) private var modelContext
 
   // Everything Eve believes about the user — newest first.
@@ -32,34 +31,6 @@ struct InsightView: View {
       .ignoresSafeArea()
 
       VStack(spacing: 0) {
-        // ── Top Nav ──────────────────────────────────────────
-        HStack {
-          Button(action: {
-            dismiss()
-          }) {
-            Image(systemName: "chevron.backward.circle.fill")
-              .font(.system(size: 32))
-              .symbolRenderingMode(.palette)
-              .foregroundStyle(
-                Color(.textPrimary),
-                Color(.bgSecondary)
-              )
-          }
-
-          Spacer()
-
-          Text("Insight")
-            .font(.system(size: 17, weight: .bold))
-            .foregroundColor(Color(.textPrimary))
-
-          Spacer()
-
-          // placeholder to balance the back button
-          Color.clear.frame(width: 32, height: 32)
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 20)
-
         // ── Character + Chat Bubble ─────────────────────────
         HStack(alignment: .center, spacing: 16) {
           // Avatar from xcassets
@@ -133,7 +104,9 @@ struct InsightView: View {
         }
       }
     }
-    .navigationBarHidden(true)
+    .navigationTitle("Insight")
+    .navigationBarTitleDisplayMode(.inline)
+    .toolbarBackground(.hidden, for: .navigationBar)
     .sheet(item: $editingInsight) { insight in
       InsightEditSheet(insight: insight)
     }
