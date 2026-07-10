@@ -13,6 +13,10 @@ struct SettingsView: View {
     @Bindable var permissionManager = PermissionManager.shared
     @State private var name = "John"
 
+    // TEMPORARY — state for the notification preview demo. Delete with the section below.
+    @State private var notificationService = NotificationService()
+    @State private var demoRunning = false
+
     @AppStorage("appThemePreference") private var themeRaw = AppThemePreference.system.rawValue
     @Environment(\.colorScheme) private var systemScheme
 
@@ -85,6 +89,36 @@ struct SettingsView: View {
                         SettingsRow(label: "Language")
                         SettingsDivider()
                         SettingsRow(label: "Legal & Privacy")
+                    }
+                }
+
+                // TEMPORARY — Notification preview demo. Delete this whole section when done.
+                SettingsSection(header: "Notification Preview (Demo)") {
+                    SettingsCard {
+                        Button {
+                            demoRunning = true
+                            Task { await notificationService.startDemoNotifications() }
+                        } label: {
+                            SettingsRow(icon: "bell.badge.fill", label: "Start demo (fires every 10s)", showChevron: false)
+                        }
+                        .buttonStyle(.plain)
+
+                        SettingsDivider()
+
+                        Button {
+                            demoRunning = false
+                            notificationService.cancelDemoNotifications()
+                        } label: {
+                            SettingsRow(icon: "bell.slash.fill", label: "Stop demo", showChevron: false)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if demoRunning {
+                        Text("Sending sample event, reminder, and location notifications every 10 seconds for ~5 minutes. Lock your phone or leave the app to see them on the lock screen.")
+                            .font(.system(size: 13))
+                            .foregroundColor(Color(.textTertiary))
+                            .padding(.horizontal, 24)
                     }
                 }
             }
