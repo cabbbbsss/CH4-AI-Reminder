@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 562" width="680" role="img" aria-label="EVE actual screen flow">
+<title>EVE actual screen flow</title>
+<desc>Welcome splash to permission explanation, iOS permission prompts (deny limits or pauses features), AI learning, onboarding questions, then the Homepage which leads to Settings and to Insights and History.</desc>
+<style>
+  .t  { font: 500 14px -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; fill:#1f2328; }
+  .s  { font: 400 12px -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; fill:#57606a; }
+  .box  { fill:#f6f8fa; stroke:#d0d7de; stroke-width:1; }
+  .sys  { fill:#f6f8fa; stroke:#8b949e; stroke-width:1; stroke-dasharray:4 3; }
+  .note { fill:#fdf1d6; stroke:#e3b341; stroke-width:1; }
+  .note-t { font: 500 14px -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; fill:#7a5b00; }
+  .note-s { font: 400 12px -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; fill:#9a7b1a; }
+  .ln  { stroke:#8b949e; stroke-width:0.75; }
+  .arr { stroke:#8b949e; stroke-width:1.5; fill:none; }
+  .arrhead { stroke:#8b949e; stroke-width:1.5; fill:none; }
+  @media (prefers-color-scheme: dark) {
+    .t  { fill:#e6edf3; }
+    .s  { fill:#9198a1; }
+    .box  { fill:#161b22; stroke:#30363d; }
+    .sys  { fill:#161b22; stroke:#6e7681; }
+    .note { fill:#3a2d0a; stroke:#9e7b1a; }
+    .note-t { fill:#f2cc60; }
+    .note-s { fill:#d9b23a; }
+    .ln  { stroke:#6e7681; }
+    .arr, .arrhead { stroke:#8b949e; }
+  }
+</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrhead" d="M2 1L8 5L2 9" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+
+<line class="arr" x1="229" y1="130" x2="284" y2="130" marker-end="url(#arrow)"/>
+<line class="arr" x1="388" y1="196" x2="388" y2="230" marker-end="url(#arrow)"/>
+<line class="arr" x1="286" y1="292" x2="231" y2="292" marker-end="url(#arrow)"/>
+<line class="arr" x1="491" y1="292" x2="510" y2="292" marker-end="url(#arrow)"/>
+<line class="arr" x1="126" y1="352" x2="126" y2="386" marker-end="url(#arrow)"/>
+<line class="arr" x1="229" y1="461" x2="284" y2="461" marker-end="url(#arrow)"/>
+<line class="arr" x1="491" y1="419" x2="510" y2="419" marker-end="url(#arrow)"/>
+<line class="arr" x1="491" y1="493" x2="510" y2="493" marker-end="url(#arrow)"/>
+
+<rect class="box" x="24" y="64" width="205" height="132" rx="8"/>
+<text class="t" x="38" y="90">Welcome</text>
+<line class="ln" x1="38" y1="95" x2="98" y2="95"/>
+<text class="s" x="38" y="122">Splash screen</text>
+<text class="s" x="38" y="144">– Logo &amp; tagline</text>
+<text class="s" x="38" y="164">– Auto-continues (2s)</text>
+
+<rect class="box" x="286" y="64" width="205" height="132" rx="8"/>
+<text class="t" x="300" y="90">Permission explanation</text>
+<line class="ln" x1="300" y1="95" x2="466" y2="95"/>
+<text class="s" x="300" y="118">– Apple Intelligence</text>
+<text class="s" x="300" y="136">– Location</text>
+<text class="s" x="300" y="154">– Calendar &amp; Reminders</text>
+<text class="s" x="300" y="172">– Notifications</text>
+
+<rect class="sys" x="286" y="232" width="205" height="120" rx="8"/>
+<text class="t" x="300" y="258">Permission prompts</text>
+<line class="ln" x1="300" y1="263" x2="436" y2="263"/>
+<text class="s" x="300" y="288">Shown by iOS on Next</text>
+<text class="s" x="300" y="306">Grant or deny access</text>
+
+<rect class="box" x="24" y="232" width="205" height="120" rx="8"/>
+<text class="t" x="38" y="258">AI learning</text>
+<line class="ln" x1="38" y1="263" x2="122" y2="263"/>
+<text class="s" x="38" y="288">– Ingests your data</text>
+<text class="s" x="38" y="306">– Live source checklist</text>
+<text class="s" x="38" y="324">– Needs Apple Intelligence</text>
+
+<rect class="note" x="512" y="232" width="160" height="120" rx="8"/>
+<text class="note-t" x="526" y="258">If denied</text>
+<text class="note-s" x="526" y="286">Those features get</text>
+<text class="note-s" x="526" y="304">limited or paused</text>
+<text class="note-s" x="526" y="322">(app still opens)</text>
+
+<rect class="box" x="24" y="388" width="205" height="146" rx="8"/>
+<text class="t" x="38" y="414">Onboarding questions</text>
+<line class="ln" x1="38" y1="419" x2="190" y2="419"/>
+<text class="s" x="38" y="444">– Refine your reminders</text>
+<text class="s" x="38" y="464">– Yes / no, one by one</text>
+<text class="s" x="38" y="484">– Skippable</text>
+
+<rect class="box" x="286" y="388" width="205" height="146" rx="8"/>
+<text class="t" x="300" y="414">Homepage</text>
+<line class="ln" x1="300" y1="419" x2="362" y2="419"/>
+<circle cx="470" cy="408" r="7" fill="none" stroke="#8b949e" stroke-width="1"/>
+<circle cx="470" cy="408" r="2" fill="#8b949e"/>
+<text class="s" x="300" y="442">– Greeting by name</text>
+<text class="s" x="300" y="460">– Tap Eve for a tip</text>
+<text class="s" x="300" y="478">– Today's routine + prep</text>
+<text class="s" x="300" y="496">– Synced reminders</text>
+<text class="s" x="300" y="514">– View insights</text>
+
+<rect class="box" x="512" y="388" width="160" height="62" rx="8"/>
+<text class="t" x="526" y="414">Settings</text>
+<line class="ln" x1="526" y1="419" x2="586" y2="419"/>
+<text class="s" x="526" y="438">Profile · access · theme</text>
+
+<rect class="box" x="512" y="462" width="160" height="62" rx="8"/>
+<text class="t" x="526" y="488">Insights → history</text>
+<line class="ln" x1="526" y1="493" x2="656" y2="493"/>
+<text class="s" x="526" y="512">Beliefs + reminder log</text>
+</svg>

@@ -98,6 +98,11 @@ EVE targets *micro-habits* — small, easily-forgotten actions whose value depen
 
 It is worth being honest about a precondition: this ideal walkthrough only holds when EVE has sufficiently rich, high-level context to reason over — reasonably detailed calendar entries, a captured "buy groceries" task, and enough location history to recognize the "leaving work" moment. When that context is thin, EVE degrades to simpler, less situational reminders (see the graceful-degradation strategy under *About privacy*). The quality of the nudge is directly bounded by the quality and richness of the data it is given.
 
+### User flow:
+The diagram below reflects the current build. A brief Welcome splash leads into the permission explanation; tapping *Next* fires the iOS system permission prompts (denying them limits or pauses the affected features rather than blocking the app). EVE then runs its on-device learning pass, asks a few skippable questions to refine its understanding, and lands on the Homepage — from which the user can reach Settings and the Insights/History views.
+
+![EVE screen-by-screen user flow](assets/eve-user-flow.svg)
+
 ### What changed since Section 1, and why:
 Our core strategy completely pivoted to embrace an exclusive native architecture. While our initial ideations relied on heavy, design-dependent applications or complex multi-model pipelines, we discovered that the true potential of Apple's Foundation Models framework is best unlocked when it operates completely on its own, natively on-device. We explicitly dropped alternative ideas (like the AI video editor and automated scrapbook) because they either duplicated built-in Apple features or over-indexed on UI layout over deep technical experimentation. By focusing on a smart context assistant, we harness the baseline strengths of Apple Intelligence: zero-latency local execution, complete on-device privacy, and direct integration with the operating system.
 
