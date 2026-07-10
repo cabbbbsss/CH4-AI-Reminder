@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import UIKit
 
 // MARK: - Main Settings hub (Sketch artboard 5CF849E7)
@@ -11,7 +12,23 @@ enum AppThemePreference: String {
 
 struct SettingsView: View {
     @Bindable var permissionManager = PermissionManager.shared
-    @State private var name = "John"
+
+    @Environment(\.modelContext) private var modelContext
+    @State private var profile: UserProfile?
+
+    /// Edits flow straight through to the persisted UserProfile and save,
+    /// so the name survives relaunches and is visible to Home + notifications.
+    private var nameBinding: Binding<String> {
+        Binding(
+            get: { profile?.name ?? "" },
+            set: { newValue in
+                let target = profile ?? UserProfile.current(in: modelContext)
+                profile = target
+                target.name = newValue
+                try? modelContext.save()
+            }
+        )
+    }
 
     // TEMPORARY — state for the notification preview demo. Delete with the section below.
     @State private var notificationService = NotificationService()
@@ -36,6 +53,14 @@ struct SettingsView: View {
     var body: some View {
         SettingsScaffold(title: "Settings") {
             VStack(spacing: 28) {
+                
+                // Profile
+                SettingsSection(header: "Profile") {
+                    SettingsCard {
+                        SettingsValueRow(label: "Name", value: nameBinding, trailingIcon: "pencil", isEditable: true)
+                    }
+                }
+                
                 // Allow EVE to Access
                 SettingsSection(header: "Allow EVE to Access") {
                     SettingsCard {
@@ -76,21 +101,14 @@ struct SettingsView: View {
                     }
                 }
 
-                // Profile
-                SettingsSection(header: "Profile") {
-                    SettingsCard {
-                        SettingsValueRow(label: "Name", value: $name, trailingIcon: "pencil", isEditable: true)
-                    }
-                }
-
-                // General App
-                SettingsSection(header: "General App") {
-                    SettingsCard {
-                        SettingsRow(label: "Language")
-                        SettingsDivider()
-                        SettingsRow(label: "Legal & Privacy")
-                    }
-                }
+//                // General App
+//                SettingsSection(header: "General App") {
+//                    SettingsCard {
+//                        SettingsRow(label: "Language")
+//                        SettingsDivider()
+//                        SettingsRow(label: "Legal & Privacy")
+//                    }
+//                }
 
                 // TEMPORARY — Notification preview demo. Delete this whole section when done.
                 SettingsSection(header: "Notification Preview (Demo)") {
@@ -124,6 +142,9 @@ struct SettingsView: View {
             }
             .padding(.top, 16)
             .padding(.bottom, 40)
+        }
+        .task {
+            profile = UserProfile.current(in: modelContext)
         }
     }
 }

@@ -105,6 +105,29 @@ final class AssistantManager {
         await runOnce(currentPlace: currentPlace, notify: false)
     }
 
+    /// Distils durable AI Insights from the current context — calendar/reminder
+    /// patterns and the user's onboarding answers — and applies them. Unlike
+    /// `generateInitialInsights`, this uses the dedicated insight-extraction
+    /// prompt (no reminder decision), so it reliably produces beliefs even when
+    /// there's no urgent event to react to. Used at the end of onboarding.
+    func learnInsights(currentPlace: String?) async {
+
+        isThinking = true
+        errorMessage = nil
+
+        defer { isThinking = false }
+
+        let reminderContext = contextBuilder.build(currentPlace: currentPlace)
+
+        do {
+            let proposed = try await foundationModel.extractInsights(from: reminderContext)
+            try? insightManager.apply(proposed)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+    }
+
     /// Asks the model for personalised yes/no onboarding questions.
     /// Returns [] on any failure — the caller supplies a fallback set.
     func onboardingQuestions(currentPlace: String?) async -> [OnboardingQuestion] {

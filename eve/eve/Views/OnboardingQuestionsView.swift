@@ -18,7 +18,6 @@ struct OnboardingQuestionsView: View {
 
   @State private var index = 0
   @State private var answers: [Bool?] = []
-  @State private var isFinishing = false
 
   /// Which way we're navigating, so the slide transition matches:
   /// forward = new question enters from the right, back = from the left.
@@ -81,30 +80,21 @@ struct OnboardingQuestionsView: View {
                 .font(.system(size: 22, weight: .semibold))
                 .foregroundColor(Color(.textPrimary).opacity(0.8))
             }
-            .disabled(isFinishing)
           }
 
           Spacer()
 
           Button {
-            skip()
+            complete()
           } label: {
             Text("Skip")
               .font(.system(size: 16, weight: .semibold))
               .foregroundColor(Color(.textPrimary).opacity(0.8))
           }
-          .disabled(isFinishing)
         }
         .padding(.bottom, 40)
       }
       .padding(.horizontal, 36)
-
-      if isFinishing {
-        Color.black.opacity(0.15).ignoresSafeArea()
-        ProgressView()
-          .tint(.white)
-          .scaleEffect(1.4)
-      }
     }
     .preferredColorScheme(.dark)
     .onAppear {
@@ -157,7 +147,6 @@ struct OnboardingQuestionsView: View {
             }
         }
     }
-    .disabled(isFinishing)
     .animation(.easeInOut(duration: 0.2), value: isSelected)
   }
 
@@ -172,36 +161,33 @@ struct OnboardingQuestionsView: View {
       goingForward = true
       withAnimation(.easeInOut) { index += 1 }
     } else {
-      Task { await finish() }
+      complete()
     }
   }
 
-  /// Persists every answer, folds them into insights, and enters Home.
-  private func finish() async {
-
-    isFinishing = true
+  /// Finishes onboarding: persists answers, enters Home immediately, and
+  /// extracts insights in the BACKGROUND so the user never waits on the model.
+  ///
+  /// The extraction runs in an unstructured Task (not tied to this view's
+  /// lifecycle, so it survives navigating away). InsightView is @Query-backed,
+  /// so the new beliefs appear there as soon as they're saved.
+  private func complete() {
 
     persistAnswers()
 
-    // Now that Eve knows the answers, refine insights (no notification yet).
-    let assistant = AssistantManager(
-      context: modelContext,
-      notificationService: NotificationService()
-    )
-    await assistant.generateInitialInsights(currentPlace: engine.lastKnownPlace)
+    let context = modelContext
+    let place = engine.lastKnownPlace
+
+    Task {
+      let assistant = AssistantManager(
+        context: context,
+        notificationService: NotificationService()
+      )
+      await assistant.learnInsights(currentPlace: place)
+    }
 
     PermissionManager.shared.completeOnboarding()
 
-    isFinishing = false
-
-    withAnimation { currentStep = 4 }
-  }
-
-  /// Skips the remaining questions. Any answers already given are kept, but we
-  /// don't run the model refine — that happens later on Home — so it's instant.
-  private func skip() {
-    persistAnswers()
-    PermissionManager.shared.completeOnboarding()
     withAnimation { currentStep = 4 }
   }
 

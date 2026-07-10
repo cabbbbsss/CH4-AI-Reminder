@@ -31,6 +31,10 @@ struct HomeView: View {
     @Query(sort: \CalendarEvent.startDate)
     private var events: [CalendarEvent]
 
+    // The user's profile (for the personalised greeting). @Query keeps the
+    // greeting in sync when the name is changed in Settings.
+    @Query private var profiles: [UserProfile]
+
     // Which Today's Routine row is expanded, and its AI-generated prep
     // checklist once fetched. Keyed by occurrenceID so each event caches
     // independently and re-expanding doesn't re-ask the model.
@@ -45,11 +49,18 @@ struct HomeView: View {
     }
 
     private var greeting: String {
+        let timeOfDay: String
         switch Calendar.current.component(.hour, from: Date()) {
-        case 0..<12: "Good morning!"
-        case 12..<17: "Good afternoon!"
-        default: "Good evening!"
+        case 0..<12: timeOfDay = "Good morning"
+        case 12..<17: timeOfDay = "Good afternoon"
+        default: timeOfDay = "Good evening"
         }
+
+        // Personalise with the name from Settings once it's set.
+        if let name = profiles.first?.name, !name.isEmpty {
+            return "\(timeOfDay), \(name)!"
+        }
+        return "\(timeOfDay)!"
     }
 
     /// The AI suggestion bubble text: Eve's latest decision if it has
@@ -108,7 +119,7 @@ struct HomeView: View {
                         // Header
                         HStack {
                             Text(greeting)
-                                .font(.system(size: 30, weight: .medium, design: .default))
+                                .font(.system(size: 26, weight: .medium, design: .default))
                                 .foregroundColor(Color(.textTertiary))
                                 .padding(.leading, 30)
 

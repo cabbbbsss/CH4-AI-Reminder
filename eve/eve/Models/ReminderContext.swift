@@ -16,6 +16,10 @@ struct ReminderContext {
 
     let currentPlace: String?
 
+    /// What the user likes to be called. Lets the model occasionally
+    /// address them by name in a reminder. nil/empty when unset.
+    let userName: String?
+
     /// The single most time-urgent upcoming calendar event or dated
     /// reminder, found by escalating the search window hour by hour
     /// (next hour, then the hour after, ...) up to 24 hours out. nil when
@@ -44,6 +48,7 @@ struct ReminderContext {
         return """
         Current date and time: \(currentDate.formatted(date: .complete, time: .shortened))
         Current place: \(currentPlace ?? "unknown")
+        User's name: \((userName?.isEmpty == false ? userName : nil) ?? "unknown")
 
         Most urgent upcoming commitment: \(nextUrgentItem ?? "none within the next 24 hours")
 
