@@ -42,9 +42,10 @@ final class TodayViewModel {
         await location.start()
     }
 
+    /// Refreshes the Home suggestion bubble without scheduling a notification.
+    /// The bubble is a dashboard preview; OS notifications are driven elsewhere.
     func askEve() async {
-        await notifications.requestPermission()
-        await assistant.runOnce(currentPlace: location.currentPlace)
+        await assistant.generateInitialInsights(currentPlace: location.currentPlace)
     }
 
 }

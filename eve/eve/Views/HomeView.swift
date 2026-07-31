@@ -86,219 +86,37 @@ struct HomeView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                LinearGradient(
-                  stops: [
-                    .init(color: Color(.bgPrimary), location: 0.75),
-                    .init(color: Color(.bgSecondary), location: 1.0)
-                  ],
-                  startPoint: .top,
-                  endPoint: .bottom
-                )
-                .ignoresSafeArea()
-
-                Rectangle()
-                    .fill(Color(.bgSecondary))
-                    .cornerRadius(20)
-                    .frame(width: 390, height: 490)
-                    .ignoresSafeArea(edges: .top)
-                    .frame(maxHeight: .infinity, alignment: .top)
-
-                Rectangle()
-                    .fill(Color(.bgPrimary))
-                    .cornerRadius(20)
-                    .blur(radius: 100)
-                    .frame(width: 400, height: 300)
-                    .ignoresSafeArea(edges: .top)
-                    .ignoresSafeArea(edges: .horizontal)
-                    .frame(maxHeight: .infinity, alignment: .top)
-
-
-                    VStack(alignment: .leading, spacing: 0) {
-                        // Header
-                        HStack {
-                            Text(greeting)
-                                .font(.system(size: 26, weight: .medium, design: .default))
-                                .foregroundColor(Color(.textPrimary))
-                                .padding(.leading, 30)
-
-                            Spacer()
-
-                            NavigationLink(destination: SettingsView()) {
-                                Image(systemName: "gearshape.fill")
-                                    .font(.title2)
-                                    // White, not accent: .glassProminent tints the button's
-                                    // background with the accent color, so an accent-colored
-                                    // gear was invisible against it. White reads in both modes.
-                                    .foregroundColor(Color(.textPrimary))
-                                    .foregroundStyle(.white)
-                                    .padding(5)
-                            }
-                            .buttonStyle(.glass)
-                            .buttonBorderShape(.circle)
-                            .background(Color(.bgTertiary))
-                            .clipShape(Circle())
-                            .frame(maxHeight: .infinity, alignment: .topTrailing)
-                            .padding(20)
-                        }
-                        .padding(.top, 20)
-
-                        // AI Suggestion Bubble — tap anywhere here (avatar or bubble) to run one assistant cycle.
-                        Button {
-                            Task { await viewModel?.askEve() }
-                        } label: {
-                            HStack(alignment: .top, spacing: 10) {
-                                ZStack {
-                                    Image("Avatar")
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: 70, height: 70)
-
-                                    if viewModel?.assistant.isThinking == true {
-                                        ProgressView()
-                                            .tint(.white)
-                                    }
-                                }
-
-                                VStack(alignment: .leading) {
-                                    Text(suggestionText)
-                                        .font(.system(size: 15, weight: .medium))
-                                        .foregroundColor(Color(.textPrimary))
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                                .padding(16)
-                                .background(Color(.bgSecondary))
-                                .cornerRadius(20, corners: [.topRight, .bottomLeft, .bottomRight])
-                                .cornerRadius(4, corners: [.topLeft])
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(viewModel == nil || viewModel?.assistant.isThinking == true)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 20)
-                        .animation(.easeInOut, value: suggestionText)
-
-                        // Today's Routine
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("Today's Routine")
-                                .font(.system(size: 17, weight: .bold))
-                                .foregroundColor(Color(.textPrimary))
-                                .padding(.horizontal, 20)
-                                .padding(.top, 20)
-
-                            ScrollView(.vertical, showsIndicators: true) {
-                                if todaysEvents.isEmpty {
-                                    Text("No calendar events today.")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(Color(.textPrimary).opacity(0.6))
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(.horizontal, 20)
-                                        .padding(.vertical, 24)
-                                } else {
-                                    VStack(spacing: 0) {
-                                        ForEach(Array(todaysEvents.enumerated()), id: \.element.occurrenceID) { index, event in
-                                            TimelineItem(
-                                                time: event.startDate.formatted(date: .omitted, time: .shortened),
-                                                title: event.title,
-                                                location: event.notes ?? "",
-                                                isCurrent: isNow(event),
-                                                dotColor: dotColor(for: index),
-                                                isLast: index == todaysEvents.count - 1,
-                                                isExpanded: expandedEventID == event.occurrenceID,
-                                                isLoadingPreparation: loadingPreparationEventID == event.occurrenceID,
-                                                preparationItems: preparationByEvent[event.occurrenceID],
-                                                onToggle: { toggleExpand(event) }
-                                            )
-                                        }
-                                    }
-                                    .padding(.horizontal, 20)
-                                    .padding(.bottom, 20)
-                                }
-                            }
-                        }
-                        // Fixed light color, not the adaptive system background —
-                        // the text inside is hardcoded dark, so an adaptive
-                        // background would turn near-black in Dark Mode and make
-                        // the text unreadable. Matches every other card on this screen.
-                        .background(Color(.bgSecondary))
-                        .opacity(0.9)
-                        .frame(height: 200)
-                        .cornerRadius(10)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 20)
-
-                        // Synced Reminders
-                        Text("Synced Reminders")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(Color(.textPrimary))
-                            .padding(.horizontal, 30)
-                            .padding(.top, 40)
-
-                        HStack(spacing: 20) {
-                            // Location Card
-                            NavigationLink(destination: LocationView()) {
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Image(systemName: "location.fill")
-                                        .font(.system(size: 30))
-                                        .foregroundColor(Color(.textPrimary))
-                                        .frame(maxWidth: .infinity, alignment: .center)
-
-                                    Text("Location")
-                                        .font(.system(size: 15, weight: .bold))
-                                        .foregroundColor(Color(.textPrimary))
-                                        .frame(maxWidth: .infinity, alignment: .center)
-                                }
-                                .padding(20)
-                                .background(Color(.bgSecondary))
-                                .cornerRadius(20)
-                            }
-
-                            // Calendar Card
-                            NavigationLink(destination: CalendarView()) {
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Image(systemName: "calendar")
-                                        .font(.system(size: 30))
-                                        .foregroundColor(Color(.textPrimary))
-                                        .frame(maxWidth: .infinity, alignment: .center)
-
-                                    Text("Calendar")
-                                        .font(.system(size: 15, weight: .bold))
-                                        .foregroundColor(Color(.textPrimary))
-                                        .frame(maxWidth: .infinity, alignment: .center)
-                                }
-                                .padding(20)
-                                .background(Color(.bgSecondary))
-                                .cornerRadius(20)
-                            }
-                        }
-                        .padding(.horizontal, 24)
-                        .padding(.top, 10)
-
-                        // Bottom Area
-                        VStack(spacing: 10) {
-                            // Robot floating icon
-                            Image("Avatar")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 130, height: 130)
-
-                            NavigationLink(destination: InsightView()) {
-                                Text("View Insights")
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundColor(Color(.textSecondary))
-                                    .padding(.vertical, 10)
-                                    .padding(.horizontal, 20)
-                                    .background(Color.accentColor)
-                                    .cornerRadius(20)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
-                    }
+        TabView {
+            NavigationStack {
+                homeTab
+                    .navigationBarHidden(true)
             }
-            .navigationBarHidden(true)
+            .tabItem {
+                Label("Dashboard", systemImage: "house.fill")
+            }
+
+            NavigationStack {
+                LocationView()
+            }
+            .tabItem {
+                Label("Location", systemImage: "location.fill")
+            }
+
+            NavigationStack {
+                CalendarView()
+            }
+            .tabItem {
+                Label("Calendar", systemImage: "calendar")
+            }
+
+            NavigationStack {
+                InsightView()
+            }
+            .tabItem {
+                Label("Insight", systemImage: "sparkles")
+            }
         }
+        .tint(Color.accentColor)
         .task {
             // Create the managers once, then start syncing + monitoring.
             guard viewModel == nil else { return }
@@ -309,6 +127,151 @@ struct HomeView: View {
             // Populate the suggestion bubble with a real reminder on first
             // appear — silently, so opening Home doesn't fire a notification.
             await vm.assistant.generateInitialInsights(currentPlace: vm.location.currentPlace)
+        }
+    }
+
+    private var homeTab: some View {
+        ZStack {
+            LinearGradient(
+              stops: [
+                .init(color: Color(.bgPrimary), location: 0.75),
+                .init(color: Color(.bgSecondary), location: 1.0)
+              ],
+              startPoint: .top,
+              endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            Rectangle()
+                .fill(Color(.bgSecondary))
+                .cornerRadius(20)
+                .frame(width: 390, height: 490)
+                .ignoresSafeArea(edges: .top)
+                .frame(maxHeight: .infinity, alignment: .top)
+
+            Rectangle()
+                .fill(Color(.bgPrimary))
+                .cornerRadius(20)
+                .blur(radius: 100)
+                .frame(width: 400, height: 300)
+                .ignoresSafeArea(edges: .top)
+                .ignoresSafeArea(edges: .horizontal)
+                .frame(maxHeight: .infinity, alignment: .top)
+
+            VStack(alignment: .leading, spacing: 0) {
+                // Header
+                HStack {
+                    Text(greeting)
+                        .font(.system(size: 26, weight: .medium, design: .default))
+                        .foregroundColor(Color(.textPrimary))
+                        .padding(.leading, 30)
+
+                    Spacer()
+
+                    NavigationLink(destination: SettingsView()) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.title2)
+                            // White, not accent: .glassProminent tints the button's
+                            // background with the accent color, so an accent-colored
+                            // gear was invisible against it. White reads in both modes.
+                            .foregroundColor(Color(.textPrimary))
+                            .foregroundStyle(.white)
+                            .padding(5)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .background(Color(.bgTertiary))
+                    .clipShape(Circle())
+                    .frame(maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(20)
+                }
+                .padding(.top, 20)
+
+                // AI Suggestion Bubble — tap to refresh Eve's read on your day (dashboard only, no notification).
+                Button {
+                    Task { await viewModel?.askEve() }
+                } label: {
+                    HStack(alignment: .top, spacing: 10) {
+                        ZStack {
+                            Image("Avatar")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 70, height: 70)
+
+                            if viewModel?.assistant.isThinking == true {
+                                ProgressView()
+                                    .tint(.white)
+                            }
+                        }
+
+                        VStack(alignment: .leading) {
+                            Text(suggestionText)
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundColor(Color(.textPrimary))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(16)
+                        .background(Color(.bgSecondary))
+                        .cornerRadius(20, corners: [.topRight, .bottomLeft, .bottomRight])
+                        .cornerRadius(4, corners: [.topLeft])
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel == nil || viewModel?.assistant.isThinking == true)
+                .padding(.horizontal, 24)
+                .padding(.top, 20)
+                .animation(.easeInOut, value: suggestionText)
+
+                // Today's Routine
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Today's Routine")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundColor(Color(.textPrimary))
+                        .padding(.horizontal, 20)
+                        .padding(.top, 20)
+
+                    ScrollView(.vertical, showsIndicators: true) {
+                        if todaysEvents.isEmpty {
+                            Text("No calendar events today.")
+                                .font(.system(size: 14))
+                                .foregroundColor(Color(.textPrimary).opacity(0.6))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 24)
+                        } else {
+                            VStack(spacing: 0) {
+                                ForEach(Array(todaysEvents.enumerated()), id: \.element.occurrenceID) { index, event in
+                                    TimelineItem(
+                                        time: event.startDate.formatted(date: .omitted, time: .shortened),
+                                        title: event.title,
+                                        location: event.notes ?? "",
+                                        isCurrent: isNow(event),
+                                        dotColor: dotColor(for: index),
+                                        isLast: index == todaysEvents.count - 1,
+                                        isExpanded: expandedEventID == event.occurrenceID,
+                                        isLoadingPreparation: loadingPreparationEventID == event.occurrenceID,
+                                        preparationItems: preparationByEvent[event.occurrenceID],
+                                        onToggle: { toggleExpand(event) }
+                                    )
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 20)
+                        }
+                    }
+                }
+                // Fixed light color, not the adaptive system background —
+                // the text inside is hardcoded dark, so an adaptive
+                // background would turn near-black in Dark Mode and make
+                // the text unreadable. Matches every other card on this screen.
+                .background(Color(.bgSecondary))
+                .opacity(0.9)
+                .frame(maxHeight: .infinity)
+                .cornerRadius(10)
+                .padding(.horizontal, 24)
+                .padding(.top, 20)
+                .padding(.bottom, 8)
+            }
         }
     }
 
