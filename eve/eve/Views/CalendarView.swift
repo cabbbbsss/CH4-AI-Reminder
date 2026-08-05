@@ -23,12 +23,14 @@ private struct CalendarReminderGroup: Identifiable {
 private enum CalendarTimelineEntry: Identifiable {
   case hour(Date)
   case reminderGroup(CalendarReminderGroup)
+  case event(CalendarEvent)
   case now(Date)
 
   var id: String {
     switch self {
     case .hour(let date): return "hour-\(date.timeIntervalSince1970)"
     case .reminderGroup(let group): return "group-\(group.id)"
+    case .event(let event): return "event-\(event.occurrenceID)"
     case .now: return "now-line"
     }
   }
@@ -37,6 +39,7 @@ private enum CalendarTimelineEntry: Identifiable {
     switch self {
     case .hour(let date): return date
     case .reminderGroup(let group): return group.reminderDate
+    case .event(let event): return event.startDate
     case .now(let date): return date
     }
   }
@@ -287,26 +290,27 @@ struct CalendarView: View {
       .sorted { $0.reminderDate < $1.reminderDate }
   }
 
-  private func timelineEntries(for date: Date, reminders dayReminders: [CalendarReminder]) -> [CalendarTimelineEntry] {
+  private func timelineEntries(for date: Date, events dayEvents: [CalendarEvent], reminders dayReminders: [CalendarReminder]) -> [CalendarTimelineEntry] {
     let groups = reminderGroups(from: dayReminders)
-    guard let first = groups.first, let last = groups.last else { return [] }
-
     let calendar = Calendar.current
 
+    let eventDates = dayEvents.map { $0.startDate }
+    let reminderDates = groups.map { $0.reminderDate }
+    let allDates = eventDates + reminderDates
+
+    guard let firstDate = allDates.min(), let lastDate = allDates.max() else { return [] }
+
     let startHour = calendar.date(
-      bySettingHour: calendar.component(.hour, from: first.reminderDate),
-      minute: 0, second: 0, of: first.reminderDate
-    ) ?? first.reminderDate
+      bySettingHour: calendar.component(.hour, from: firstDate),
+      minute: 0, second: 0, of: firstDate
+    ) ?? firstDate
 
     let endHour = calendar.date(
-      bySettingHour: calendar.component(.hour, from: last.reminderDate),
-      minute: 0, second: 0, of: last.reminderDate
-    ) ?? last.reminderDate
+      bySettingHour: calendar.component(.hour, from: lastDate),
+      minute: 0, second: 0, of: lastDate
+    ) ?? lastDate
 
-    // A group already shows its own time next to its card — an hour tick
-    // for that same hour would just repeat the number right next to it,
-    // and reads worse the taller a multi-reminder card gets. Skip it.
-    let occupiedHours = Set(groups.map { calendar.component(.hour, from: $0.reminderDate) })
+    let occupiedHours = Set(allDates.map { calendar.component(.hour, from: $0) })
 
     var entries: [CalendarTimelineEntry] = []
     var cursor = startHour
@@ -319,6 +323,7 @@ struct CalendarView: View {
     }
 
     entries.append(contentsOf: groups.map { .reminderGroup($0) })
+    entries.append(contentsOf: dayEvents.map { .event($0) })
 
     if calendar.isDateInToday(date), currentTime >= startHour, currentTime <= endHour.addingTimeInterval(3600) {
       entries.append(.now(currentTime))
@@ -529,33 +534,33 @@ struct CalendarView: View {
           .foregroundColor(Color(.textQuarternary))
           .padding(.top, 20)
         Spacer()
-      } else if dayRemindersForDate.isEmpty && generating {
-        HStack(spacing: 12) {
-          Image(systemName: "sparkles")
-            .foregroundColor(Color(.textQuarternary))
-          Text("Eve is preparing your reminders…")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundColor(Color(.textQuarternary))
-        }
-        .padding(.top, 20)
-        Spacer()
-      } else if dayRemindersForDate.isEmpty {
-        Text("Nothing to prepare for this day.")
-          .font(.system(size: 14, weight: .medium))
-          .foregroundColor(Color(.textQuarternary))
-          .padding(.top, 20)
-        Spacer()
       } else {
-        timelineList(for: date, reminders: dayRemindersForDate)
+        if dayRemindersForDate.isEmpty && generating {
+          HStack(spacing: 12) {
+            Image(systemName: "sparkles")
+              .foregroundColor(Color(.textQuarternary))
+            Text("Eve is preparing your reminders…")
+              .font(.system(size: 14, weight: .semibold))
+              .foregroundColor(Color(.textQuarternary))
+          }
+          .padding(.top, 20)
+        } else if dayRemindersForDate.isEmpty {
+          Text("Nothing to prepare for this day.")
+            .font(.system(size: 14, weight: .medium))
+            .foregroundColor(Color(.textQuarternary))
+            .padding(.top, 20)
+        }
+        
+        timelineList(for: date, events: dayEventsForDate, reminders: dayRemindersForDate)
       }
     }
   }
 
   // MARK: - Timeline
 
-  private func timelineList(for date: Date, reminders dayReminders: [CalendarReminder]) -> some View {
+  private func timelineList(for date: Date, events dayEvents: [CalendarEvent], reminders dayReminders: [CalendarReminder]) -> some View {
     List {
-      ForEach(timelineEntries(for: date, reminders: dayReminders)) { entry in
+      ForEach(timelineEntries(for: date, events: dayEvents, reminders: dayReminders)) { entry in
         switch entry {
         case .hour(let hourDate):
           CalendarTimelineRow(time: hourDate.formatted(date: .omitted, time: .shortened))
@@ -569,6 +574,16 @@ struct CalendarView: View {
             subtitle: "For \(group.eventTitle) at \(group.eventDate.formatted(date: .omitted, time: .shortened))",
             reminders: group.reminders,
             onSelect: { reminder in editingReminder = reminder }
+          )
+          .listRowInsets(EdgeInsets())
+          .listRowSeparator(.hidden)
+          .listRowBackground(Color.clear)
+          
+        case .event(let event):
+          CalendarEventRow(
+            time: event.startDate.formatted(date: .omitted, time: .shortened),
+            title: event.title,
+            location: event.location
           )
           .listRowInsets(EdgeInsets())
           .listRowSeparator(.hidden)
@@ -808,6 +823,68 @@ struct CalendarView: View {
           RoundedRectangle(cornerRadius: 8)
             .stroke(Color.accentColor, lineWidth: 1.5)
         )
+        .padding(.trailing, 24)
+        .padding(.vertical, 8)
+      }
+      .frame(minHeight: 60)
+    }
+  }
+
+  private struct CalendarEventRow: View {
+    var time: String
+    var title: String
+    var location: String?
+
+    var body: some View {
+      HStack(alignment: .top, spacing: 0) {
+        // Left Column: Time
+        Text(time)
+          .font(.system(size: 15, weight: .bold))
+          .foregroundColor(Color(.textPrimary)) // Brighter for actual events
+          .frame(width: 80, alignment: .trailing)
+          .padding(.top, 12)
+
+        // Timeline Center
+        ZStack {
+          Rectangle()
+            .fill(Color(.textQuarternary))
+            .frame(width: 4)
+          Circle()
+            .fill(Color(.textPrimary))
+            .frame(width: 10, height: 10)
+        }
+        .frame(width: 20)
+        .padding(.horizontal, 8)
+        .padding(.top, 12)
+
+        // Right Column: Card
+        VStack(alignment: .leading, spacing: 4) {
+          Text(title)
+            .font(.system(size: 15, weight: .bold))
+            .foregroundColor(Color(.textPrimary))
+
+          if let location = location, !location.isEmpty {
+            HStack(spacing: 4) {
+              Image(systemName: "location.fill")
+                .font(.system(size: 10))
+              Text(location)
+                .font(.system(size: 13))
+            }
+            .foregroundColor(Color(.textSecondary))
+          }
+        }
+        .padding(.leading, 20)
+        .padding(.trailing, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.bgTertiary))
+        .cornerRadius(8)
+        .overlay(alignment: .leading) {
+          Capsule()
+            .fill(Color(.textPrimary))
+            .frame(width: 5)
+            .padding(.vertical, 8)
+        }
         .padding(.trailing, 24)
         .padding(.vertical, 8)
       }

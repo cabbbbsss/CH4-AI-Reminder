@@ -33,7 +33,7 @@ final class CalendarService {
         // the app's own language settings, which breaks the on-device
         // model's language check when their titles end up in the AI prompt.
         let calendars = eventStore.calendars(for: .event)
-            .filter(\.allowsContentModifications)
+            .filter { $0.allowsContentModifications || $0.type == .subscription }
 
         let now = Date()
 
