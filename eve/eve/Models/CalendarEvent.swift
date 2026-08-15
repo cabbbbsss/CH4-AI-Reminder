@@ -25,11 +25,23 @@ final class CalendarEvent {
 
     var endDate: Date
 
+    /// The event's free-text notes (EKEvent.notes).
+    ///
+    /// Sent to the model by `ReminderContextBuilder.buildPreparationContext`
+    /// — a prep checklist is only useful if it can see the agenda. This is the
+    /// largest attacker-reachable span in the whole prompt (anyone who can send
+    /// the user an invite writes it), so it is wrapped by `UntrustedText`
+    /// before it reaches the model. It is *not* part of the wide
+    /// `ReminderContext` used by `decide(from:)`.
     var notes: String?
 
-    /// The event's location text, if any (EKEvent.location). Display-only —
-    /// deliberately NOT included in the AI prompt, since venue names are
-    /// often non-English and would trip the on-device model's language check.
+    /// The event's location text, if any (EKEvent.location).
+    ///
+    /// Sent to the model alongside `notes` in `buildPreparationContext`, and
+    /// wrapped by `UntrustedText` the same way. Venue names are often
+    /// non-English, so it passes through `englishOrNil` first — a non-English
+    /// value is dropped rather than tripping the on-device model's language
+    /// check. Like `notes`, it is not part of the wide `ReminderContext`.
     var location: String?
 
     init(event: EKEvent) {

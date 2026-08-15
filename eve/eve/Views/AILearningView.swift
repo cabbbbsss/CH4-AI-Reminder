@@ -13,6 +13,10 @@ struct AILearningView: View {
   @State private var aiMissing = false
   @State private var hasStartedAnalysis = false
 
+  /// True when the pass that ran did so without Apple Intelligence, so it can
+  /// be re-run once if the user goes and turns it on.
+  @State private var analyzedWithoutAI = false
+
   private var isFinished: Bool {
     !engine.isAnalyzing && engine.analysisProgress >= 1.0
   }
@@ -76,32 +80,50 @@ struct AILearningView: View {
 
   /// The "Enable" action on the paused card.
   ///
-  /// Records the user's consent, then opens the top-level Settings page so
-  /// the user can navigate to Apple Intelligence & Siri and turn it on.
+  /// Records the user's consent, then opens Settings so the user can turn on
+  /// Apple Intelligence & Siri.
   ///
-  /// NOTE: iOS gives third-party apps no PUBLIC deep link to a specific
-  /// Settings pane (a `root=` link just gets redirected to the app's own
-  /// page), so we open the Settings home via the private `App-Prefs:` scheme.
-  /// Not App Store-safe. Re-collection happens on return (`.onChange(scenePhase)`).
+  /// NOTE: iOS gives third-party apps no public deep link to a *specific*
+  /// Settings pane, so this lands on Eve's own Settings page and the user
+  /// navigates up from there. The card's body text tells them where to go.
+  /// (The private `App-Prefs:` scheme would open the Settings home directly,
+  /// but it is grounds for rejection under App Review Guideline 2.5.1 — don't
+  /// reintroduce it.) Re-collection happens on return (`.onChange(scenePhase)`).
   private func handleEnableTapped() {
     PermissionManager.shared.enableAI()
 
-    if let settingsHome = URL(string: "App-Prefs:") {
-      openURL(settingsHome)
+    if let appSettings = URL(string: UIApplication.openSettingsURLString) {
+      openURL(appSettings)
     }
   }
 
-  /// Checks Apple Intelligence availability and, if ready, runs the real
-  /// data-collection pass exactly once. Called on first appear AND every
-  /// time the app returns to the foreground — so enabling Apple Intelligence
-  /// in Settings and coming back re-triggers collection on its own.
+  /// Runs the data-collection pass. Called on first appear AND every time the
+  /// app returns to the foreground — so enabling Apple Intelligence in
+  /// Settings and coming back re-triggers collection on its own.
+  ///
+  /// The pass runs whether or not Apple Intelligence is available. It already
+  /// degrades by itself — insight extraction yields nothing and the question
+  /// step falls back to `AILearningEngine.fallbackQuestions` — so refusing to
+  /// start it only stranded the user. That mattered: this screen gates the
+  /// entire app (the Continue button needs `isFinished`, which needs the pass
+  /// to complete), and more than half of iPhones cannot run Apple Intelligence
+  /// at all. The `aiMissing` card still explains what they're missing; it just
+  /// no longer stops them reaching Eve.
   private func startIfPossible() async {
 
-    aiMissing = !engine.isAppleIntelligenceAvailable
+    let isAvailable = engine.isAppleIntelligenceAvailable
 
-    guard !aiMissing, !hasStartedAnalysis, !engine.isAnalyzing else { return }
+    aiMissing = !isAvailable
+
+    // Allow exactly one re-run if Apple Intelligence was switched on after a
+    // degraded pass — otherwise enabling it in Settings would leave the user
+    // on the static fallback questions permanently.
+    let shouldRetryWithAI = isAvailable && analyzedWithoutAI
+
+    guard !engine.isAnalyzing, !hasStartedAnalysis || shouldRetryWithAI else { return }
 
     hasStartedAnalysis = true
+    analyzedWithoutAI = !isAvailable
 
     await engine.analyzeUserRoutines(context: modelContext)
 

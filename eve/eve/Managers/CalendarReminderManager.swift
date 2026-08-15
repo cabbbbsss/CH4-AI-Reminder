@@ -23,11 +23,29 @@ final class CalendarReminderManager {
 
     private let contextBuilder: ReminderContextBuilder
 
-    private let foundationModel = FoundationModelService()
+    // No shared FoundationModelService: generation runs in a task group and
+    // each task makes its own (see `prepItems(for:)`).
 
     init(context: ModelContext) {
         self.context = context
         self.contextBuilder = ReminderContextBuilder(context: context)
+    }
+
+    /// One event's prep generation, reduced to plain values so it can cross
+    /// into a task group. Nothing SwiftData-backed goes with it.
+    private struct PrepJob {
+        let occurrenceID: String
+        let eventTitle: String
+        let eventDate: Date
+        let promptText: String
+
+        /// Carried alongside the prompt so the grounding check can run inside
+        /// the task group, on the same values the prompt was built from.
+        let groundingTerms: Set<String>
+
+        /// Title-only terms, so an item that just restates the event name
+        /// ("Bring breakfast" for "Breakfast") can be discarded.
+        let subjectTerms: Set<String>
     }
 
     /// Generates reminders for any event on `date` that doesn't have one
@@ -40,11 +58,119 @@ final class CalendarReminderManager {
 
         let coveredOccurrenceIDs = Set(existingReminders(for: date).map(\.occurrenceID))
 
-        for event in events where !coveredOccurrenceIDs.contains(event.occurrenceID) {
-            await generate(for: event)
+        // Three phases, deliberately: read SwiftData and build every prompt
+        // here, run the model calls off-actor, then insert back here. The
+        // ModelContext never crosses a task boundary.
+        //
+        // This used to await one model call per event in series behind the
+        // Calendar screen's blocking spinner, and `.task(id: selectedDate)`
+        // re-runs it on *every* date change — so an eight-event day cost
+        // eight sequential round-trips before anything appeared.
+        let jobs: [PrepJob] = events
+            .filter { !coveredOccurrenceIDs.contains($0.occurrenceID) }
+            .compactMap { event in
+
+                guard let prompt = contextBuilder.buildPreparationContext(
+                    eventTitle: event.title,
+                    eventDate: event.startDate,
+                    eventNotes: event.notes,
+                    eventLocation: event.location
+                ) else { return nil }
+
+                return PrepJob(
+                    occurrenceID: event.occurrenceID,
+                    eventTitle: event.title,
+                    eventDate: event.startDate,
+                    promptText: prompt.promptText,
+                    groundingTerms: prompt.groundingTerms,
+                    subjectTerms: prompt.subjectTerms
+                )
+
+            }
+
+        guard !jobs.isEmpty else { return }
+
+        let itemsByOccurrence = await Self.generatePrep(for: jobs)
+
+        for job in jobs {
+            for text in (itemsByOccurrence[job.occurrenceID] ?? []).prefix(4) {
+                context.insert(
+                    CalendarReminder(
+                        occurrenceID: job.occurrenceID,
+                        eventTitle: job.eventTitle,
+                        eventDate: job.eventDate,
+                        text: text,
+                        isSystemManaged: true
+                    )
+                )
+            }
         }
 
         try? context.save()
+
+    }
+
+    /// Runs the prep calls concurrently, at most `maxConcurrent` in flight.
+    ///
+    /// The cap is deliberate. The on-device model serialises requests
+    /// internally, so an unbounded group mostly just queues them — while
+    /// still holding one live `LanguageModelSession` per event. Four keeps
+    /// the screen responsive on a heavy day without piling sessions up.
+    ///
+    /// Each task builds its own `FoundationModelService`; the type holds only
+    /// instruction strings, so this is cheap and keeps anything non-Sendable
+    /// from being captured across the boundary.
+    private static func generatePrep(
+        for jobs: [PrepJob],
+        maxConcurrent: Int = 4
+    ) async -> [String: [String]] {
+
+        await withTaskGroup(of: (String, [String]).self) { group in
+
+            var results: [String: [String]] = [:]
+            var next = 0
+
+            while next < min(maxConcurrent, jobs.count) {
+                let job = jobs[next]
+                group.addTask { await Self.prepItems(for: job) }
+                next += 1
+            }
+
+            for await (occurrenceID, items) in group {
+
+                results[occurrenceID] = items
+
+                if next < jobs.count {
+                    let job = jobs[next]
+                    group.addTask { await Self.prepItems(for: job) }
+                    next += 1
+                }
+
+            }
+
+            return results
+
+        }
+
+    }
+
+    private static func prepItems(for job: PrepJob) async -> (String, [String]) {
+
+        let service = FoundationModelService()
+
+        let items = (try? await service.suggestPreparation(forPromptText: job.promptText)) ?? []
+
+        // Gated here rather than at the insert below, so a dropped item never
+        // becomes a `CalendarReminder` row — these persist and are shown as
+        // Eve's own suggestions.
+        let grounded = OutputGrounding.filterLogging(
+            items,
+            groundedIn: job.groundingTerms,
+            notRestating: job.subjectTerms,
+            label: "prep/\(job.eventTitle)"
+        )
+
+        return (job.occurrenceID, grounded)
 
     }
 
@@ -66,33 +192,6 @@ final class CalendarReminderManager {
     func remove(_ reminder: CalendarReminder) {
         context.delete(reminder)
         try? context.save()
-    }
-
-    // MARK: - Generation
-
-    private func generate(for event: CalendarEvent) async {
-
-        guard let promptText = contextBuilder.buildPreparationContext(
-            eventTitle: event.title,
-            eventDate: event.startDate,
-            eventNotes: event.notes,
-            eventLocation: event.location
-        ) else { return }
-
-        let items = (try? await foundationModel.suggestPreparation(forPromptText: promptText)) ?? []
-
-        for text in items.prefix(4) {
-            context.insert(
-                CalendarReminder(
-                    occurrenceID: event.occurrenceID,
-                    eventTitle: event.title,
-                    eventDate: event.startDate,
-                    text: text,
-                    isSystemManaged: true
-                )
-            )
-        }
-
     }
 
     // MARK: - Fetching

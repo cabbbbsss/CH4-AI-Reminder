@@ -37,6 +37,32 @@ struct ReminderContext {
 
     let answeredQuestions: [String]
 
+    /// Content words drawn from everything this context puts in front of the
+    /// model, so its output can be held to the same material.
+    ///
+    /// Built from the fields rather than from `promptText`, which by then has
+    /// section headers and `<untrusted>` tags mixed into the content — those
+    /// would ground a proposed belief on the word "untrusted".
+    ///
+    /// `currentDate` is left out deliberately: every generated sentence tends
+    /// to carry a weekday or month, so including it would ground almost
+    /// anything on the calendar date alone.
+    var groundingTerms: Set<String> {
+
+        var terms = Set<String>()
+
+        for text in [currentPlace, userName, nextUrgentItem].compactMap({ $0 }) {
+            terms.formUnion(OutputGrounding.contentTerms(of: UntrustedText.strip(text)))
+        }
+
+        for line in upcomingEvents + pendingReminders + insights + recentHistory + answeredQuestions {
+            terms.formUnion(OutputGrounding.contentTerms(of: UntrustedText.strip(line)))
+        }
+
+        return terms
+
+    }
+
     /// Renders the context as the prompt text sent to the model.
     var promptText: String {
 
