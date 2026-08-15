@@ -25,7 +25,7 @@ final class ReminderContextBuilder {
 
         ReminderContext(
             currentDate: .now,
-            currentPlace: currentPlace.flatMap(englishOrNil),
+            currentPlace: currentPlace.flatMap(englishOrNil).map { UntrustedText.delimit($0) },
             userName: userName(),
             nextUrgentItem: nextUrgentItem(),
             upcomingEvents: upcomingEvents(),
@@ -44,11 +44,36 @@ final class ReminderContextBuilder {
         return name.isEmpty ? nil : name
     }
 
+    /// One event's prep prompt, plus the vocabulary of everything that went
+    /// into it.
+    ///
+    /// `groundingTerms` exists so the *output* can be checked against the
+    /// same material the model was given — see `OutputGrounding`. Rendering
+    /// the prompt loses that: by the time it's one string, there's no way to
+    /// tell an event title from a date separator. So the builder, which is
+    /// the only thing that knows what it selected, hands the vocabulary out
+    /// alongside the text.
+    struct PreparationPrompt {
+
+        let promptText: String
+
+        /// Content words drawn from every line that reached `promptText` —
+        /// the event itself, and the reminders and beliefs that survived
+        /// filtering. Already lowercased and stopword-stripped.
+        let groundingTerms: Set<String>
+
+        /// Content words of the event *title* alone. Lets the gate discard an
+        /// item that merely restates the title ("Bring breakfast" for an event
+        /// called "Breakfast") — grounded, well formed, and useless.
+        let subjectTerms: Set<String>
+
+    }
+
     /// A deliberately narrow context for one event's prep checklist.
     ///
     /// Unlike `build(currentPlace:)`, this does NOT include the day's full
     /// list of other calendar events, and reminders/insights are filtered
-    /// to ones that share a keyword with the event — not just handed over
+    /// to ones that are relevant to the event — not just handed over
     /// wholesale with an instruction to "only use if related." The model
     /// doesn't reliably self-filter irrelevant items from a list it's
     /// shown (confirmed: it surfaced an unrelated reminder for one event
@@ -59,7 +84,7 @@ final class ReminderContextBuilder {
         eventDate: Date,
         eventNotes: String?,
         eventLocation: String?
-    ) -> String? {
+    ) -> PreparationPrompt? {
 
         // The event title is the prompt's subject and can't be filtered
         // out. If it's non-English, the on-device model rejects the whole
@@ -72,88 +97,134 @@ final class ReminderContextBuilder {
             return "\(header):\n" + lines.map { "- \($0)" }.joined(separator: "\n")
         }
 
-        var eventLine = "\(eventTitle) — \(eventDate.formatted(date: .omitted, time: .shortened))"
+        // Title, location, and notes all come from EventKit — an invite the
+        // user merely received can carry anything in them, so each is marked
+        // untrusted before it reaches the model. Notes are the largest and
+        // freest-form of the three and the likeliest injection carrier.
+        var eventLine = "\(UntrustedText.delimit(eventTitle)) — \(eventDate.formatted(date: .omitted, time: .shortened))"
 
         if let eventLocation, let safeLocation = englishOrNil(eventLocation) {
-            eventLine += "\nLocation: \(safeLocation)"
+            eventLine += "\nLocation: \(UntrustedText.delimit(safeLocation))"
         }
 
         if let eventNotes, let safeNotes = englishOrNil(eventNotes) {
-            eventLine += "\nEvent notes: \(safeNotes)"
+            eventLine += "\nEvent notes: \(UntrustedText.delimit(safeNotes))"
         }
 
+        // The content words of the event, which every match is made against.
+        let titleKeywords = keywords(from: eventTitle)
         let eventKeywords = keywords(from: "\(eventTitle) \(eventNotes ?? "")")
 
-        return """
+        var reminders = relevantReminders(to: eventKeywords)
+        var beliefs = relevantInsights(to: eventKeywords)
+
+        // Eve's own corpus: what this *kind* of activity usually needs. The
+        // user's rows say a gym session is happening; these say it implies
+        // gear. Fires only on an explicit trigger word, so an event the corpus
+        // doesn't cover — "Sleep" — correctly retrieves nothing.
+        var knowledge = KnowledgeStore
+            .facts(matching: eventKeywords)
+            .map(\.text)
+
+        // Everything above is ranked but not yet bounded. The window is 4096
+        // tokens shared with the instructions, the schema and the response
+        // (TN3193), so trim to a budget rather than trusting per-section caps
+        // to add up to something safe.
+        (reminders, beliefs, knowledge) = Self.fitToBudget(
+            reminders: reminders,
+            beliefs: beliefs,
+            knowledge: knowledge
+        )
+
+        var promptText = """
         Event: \(eventLine)
 
-        \(section("Reminders that specifically match this event", relevantReminders(to: eventKeywords)))
+        \(section("Reminders that specifically match this event", reminders))
 
-        \(section("Beliefs about the user that specifically match this event", relevantInsights(to: eventKeywords)))
+        \(section("Beliefs about the user that specifically match this event", beliefs))
         """
+
+        // Only added when non-empty: an explicit "none" here invites the model
+        // to remark on the absence, and the strict prep instructions already
+        // treat an empty answer as correct.
+        if !knowledge.isEmpty {
+            promptText += "\n\n" + section(
+                "General knowledge about this kind of activity",
+                knowledge
+            )
+        }
+
+        // Everything the model was actually shown, so the gate can hold its
+        // output to it. The event's location counts even though it isn't part
+        // of `eventKeywords` — a prep item naming the venue is grounded.
+        //
+        // Knowledge chunks MUST be included. Leaving them out was the main
+        // predicted regression of this change: the model would correctly use a
+        // retrieved chunk, and `OutputGrounding` would then drop the item for
+        // naming something it couldn't find in the context.
+        var groundingTerms = eventKeywords
+        groundingTerms.formUnion(keywords(from: eventLocation ?? ""))
+        for line in reminders + beliefs + knowledge {
+            groundingTerms.formUnion(keywords(from: UntrustedText.strip(line)))
+        }
+
+        return PreparationPrompt(
+            promptText: promptText,
+            groundingTerms: groundingTerms,
+            subjectTerms: titleKeywords
+        )
 
     }
 
-    /// A place-scoped context for the Locations screen's AI-curated
-    /// reminders. Same principle as `buildPreparationContext`: calendar
-    /// events, reminders, and beliefs are filtered before anything reaches
-    /// the prompt — never handed over wholesale for the model to self-filter.
+    // MARK: - Token budget
+
+    /// Characters per token, for estimating prompt size without an API call.
     ///
-    /// Matching has two tiers:
-    /// 1. Strong — the place's name/address literally appears in the
-    ///    event/reminder's own location text, or shares a keyword with its
-    ///    title (expanded with Home/Work synonyms for places recognized as
-    ///    such — see `placeKind`).
-    /// 2. Weak (Home/Work places only) — no textual overlap, but the event
-    ///    falls in a time window typical for that kind of place (evenings/
-    ///    weekends for Home, weekday work-hours for Work). Flagged as
-    ///    "likely" in the prompt so the model treats it as a softer signal.
-    /// Custom places ("Gym", etc.) have no recognized kind, so they stay on
-    /// strong matching only — a time heuristic wouldn't generalize to them.
-    func buildPlaceContext(placeName: String, address: String? = nil) -> String? {
+    /// Apple gives 3–4 characters per token for Latin scripts (TN3193); 3.5 is
+    /// the midpoint. iOS 26.4 added `tokenCount(for:)` for an exact answer, but
+    /// Eve deploys to 26.2, so an estimate is what's available. Erring low is
+    /// deliberate — over-estimating tokens trims context that would have fit,
+    /// which is cheaper than `exceededContextWindowSize`.
+    private static let charactersPerToken = 3.5
 
-        // The place name is the prompt's subject and can't be filtered out.
-        // Reverse-geocoded names are often non-English (e.g. "Kabupaten
-        // Badung") even with an en_US locale, since that only affects
-        // street *types*, not proper nouns. A non-English subject makes the
-        // on-device model reject the whole prompt, so skip the call and let
-        // the caller show "nothing learned yet".
-        guard isEnglishSafe(placeName) else { return nil }
+    /// Tokens allowed for retrieved context in a prep prompt.
+    ///
+    /// Roughly a quarter of the 4096 window, leaving the rest for the
+    /// instructions, the event itself, `EventPreparation`'s schema, and the
+    /// response.
+    private static let retrievalTokenBudget = 900
 
-        func section(_ header: String, _ lines: [String]) -> String {
-            guard !lines.isEmpty else { return "\(header):\n- none" }
-            return "\(header):\n" + lines.map { "- \($0)" }.joined(separator: "\n")
+    /// Trims the three retrieved sections to fit `retrievalTokenBudget`,
+    /// interleaved by priority rather than section.
+    ///
+    /// Order matters: the user's own reminders and beliefs outrank Eve's
+    /// general knowledge, so a crowded event keeps the personal rows and drops
+    /// the generic ones. Taking whole sections in turn would instead let a long
+    /// reminder list starve the knowledge entirely, or vice versa.
+    private static func fitToBudget(
+        reminders: [String],
+        beliefs: [String],
+        knowledge: [String]
+    ) -> (reminders: [String], beliefs: [String], knowledge: [String]) {
+
+        var budget = Int(Double(retrievalTokenBudget) * charactersPerToken)
+
+        func take(_ lines: [String]) -> [String] {
+            var kept: [String] = []
+            for line in lines {
+                let cost = line.count + 3   // "- " and the newline
+                guard cost <= budget else { break }
+                budget -= cost
+                kept.append(line)
+            }
+            return kept
         }
 
-        var placeKeywords = keywords(from: placeName)
-        if let address {
-            placeKeywords.formUnion(keywords(from: address))
-        }
+        let keptReminders = take(reminders)
+        let keptBeliefs = take(beliefs)
+        let keptKnowledge = take(knowledge)
 
-        let kind = placeKind(for: placeName)
-
-        switch kind {
-        case .home: placeKeywords.formUnion(Self.homeSynonyms)
-        case .work: placeKeywords.formUnion(Self.workSynonyms)
-        case .other: break
-        }
-
-        let visits = visitCount(for: placeName)
-
-        let visitLine = visits > 0
-            ? "Visited \(visits) time\(visits == 1 ? "" : "s")"
-            : "Not yet visited"
-
-        return """
-        Place: \(placeName)
-        \(visitLine)
-
-        \(section("Calendar events at or about this place", placeRelatedEvents(placeName: placeName, address: address, keywords: placeKeywords, kind: kind)))
-
-        \(section("Reminders at or about this place", placeRelatedReminders(placeName: placeName, address: address, keywords: placeKeywords)))
-
-        \(section("Beliefs about the user that specifically match this place", relevantInsights(to: placeKeywords)))
-        """
+        return (keptReminders, keptBeliefs, keptKnowledge)
 
     }
 
@@ -217,24 +288,6 @@ final class ReminderContextBuilder {
         return isWeekday && isWorkHours
     }
 
-    private func visitCount(for placeName: String) -> Int {
-
-        let items = (try? context.fetch(FetchDescriptor<HistoryItem>())) ?? []
-        let prefix = "Arrived near "
-
-        let matching = items.filter { item in
-            guard item.type == .locationVisited else { return false }
-            let name = item.title.hasPrefix(prefix) ? String(item.title.dropFirst(prefix.count)) : item.title
-            return name.caseInsensitiveCompare(placeName) == .orderedSame
-        }
-
-        return matching.count
-
-    }
-
-    /// Whether/how strongly one event matches a place. `true` = strong
-    /// (textual overlap — the real signal), `false` = weak (time-of-day
-    /// fallback only, Home/Work places only), `nil` = no match at all.
     private func matchTier(
         for event: CalendarEvent,
         placeName: String,
@@ -267,59 +320,6 @@ final class ReminderContextBuilder {
 
     }
 
-    private func placeRelatedEvents(placeName: String, address: String?, keywords placeKeywords: Set<String>, kind: PlaceKind, limit: Int = 10) -> [String] {
-
-        let allEvents = (try? context.fetch(FetchDescriptor<CalendarEvent>())) ?? []
-        let now = Date.now
-
-        var strong: [CalendarEvent] = []
-        var weak: [CalendarEvent] = []
-
-        for event in allEvents {
-            switch matchTier(for: event, placeName: placeName, address: address, placeKeywords: placeKeywords, kind: kind) {
-            case true: strong.append(event)
-            case false: weak.append(event)
-            case nil: continue
-            }
-        }
-
-        // Prefer events closest to now (most relevant), then fill any
-        // remaining slots with the closest weak (time-only) matches.
-        func closestFirst(_ events: [CalendarEvent]) -> [CalendarEvent] {
-            events.sorted { abs($0.startDate.timeIntervalSince(now)) < abs($1.startDate.timeIntervalSince(now)) }
-        }
-
-        let selectedStrong = Array(closestFirst(strong).prefix(limit))
-        let remainingSlots = max(0, limit - selectedStrong.count)
-        let selectedWeak = Array(closestFirst(weak).prefix(remainingSlots))
-
-        let combined = (selectedStrong.map { ($0, true) } + selectedWeak.map { ($0, false) })
-            .sorted { $0.0.startDate < $1.0.startDate }
-
-        let lines: [String] = combined.map { event, isStrong in
-            let base = "\(event.title) — \(event.startDate.formatted(date: .abbreviated, time: .shortened))"
-            return isStrong ? base : "\(base) (likely — based on usual time at this place, not explicit)"
-        }
-
-        return englishOnly(lines)
-
-    }
-
-    /// Assigns each upcoming calendar event to **at most one** saved place —
-    /// computed once across all places together, unlike per-place matching,
-    /// which let the same event win a strong match at one place (e.g. "Cook"
-    /// → Home, via keyword) *and* a weak time-of-day match at another (e.g.
-    /// the same event happening at 11am on a weekday → Office, via the work
-    /// hours fallback) independently, showing it twice.
-    ///
-    /// Priority per event: a user-confirmed override (ground truth, see
-    /// `LocationRoutingManager.confirmAssignment`) > a strong textual match
-    /// at any place > a weak time-of-day match, but only if exactly one
-    /// place's window applies. Restricted to what's still **upcoming** (a
-    /// past "Cook lunch" doesn't need a reminder anymore) and deduplicated
-    /// by title so a daily recurring event only contributes its nearest
-    /// occurrence. Feeds the Locations screen's per-event prep-reminder
-    /// generation (see `LocationRoutingManager`).
     func matchedEventsByLocation(
         _ locations: [(id: UUID, name: String, address: String?)],
         limit: Int = 6
@@ -406,98 +406,49 @@ final class ReminderContextBuilder {
 
     }
 
-    private func placeRelatedReminders(placeName: String, address: String?, keywords placeKeywords: Set<String>, limit: Int = 10) -> [String] {
-
-        let allReminders = (try? context.fetch(FetchDescriptor<ReminderItem>())) ?? []
-
-        let matching = allReminders.filter { reminder in
-            let locationMatches = reminder.location.map { location in
-                location.caseInsensitiveCompare(placeName) == .orderedSame
-                    || (address.map { location.caseInsensitiveCompare($0) == .orderedSame } ?? false)
-                    || sharesKeyword(location, with: placeKeywords)
-            } ?? false
-            let titleMatches = sharesKeyword(reminder.title, with: placeKeywords)
-            let notesMatch = reminder.notes.map { sharesKeyword($0, with: placeKeywords) } ?? false
-            return locationMatches || titleMatches || notesMatch
-        }
-
-        let sorted = matching.sorted { first, second in
-            (first.dueDate ?? .distantFuture) < (second.dueDate ?? .distantFuture)
-        }
-
-        let lines: [String] = sorted.prefix(limit).map { reminder in
-            guard let dueDate = reminder.dueDate else {
-                return "\(reminder.title) — no due date"
-            }
-            return "\(reminder.title) — due \(dueDate.formatted(date: .abbreviated, time: .shortened))"
-        }
-
-        return englishOnly(lines)
-
-    }
-
-    /// Prompt for the Locations screen's item→place classifier. Given the
-    /// user's saved places, prior user-confirmed assignments (as few-shot
-    /// examples), and a batch of new item titles, asks the model which
-    /// place each item belongs to (or none).
-    ///
-    /// Items whose title isn't English-safe are dropped before reaching
-    /// the model — same reasoning as the other build* methods: a
-    /// non-English subject makes the model reject the whole prompt.
-    func buildClassificationContext(
-        locations: [(name: String, address: String?)],
-        items: [String],
-        priorCorrections: [(item: String, locationName: String)]
-    ) -> String? {
-
-        let safeItems = items.filter { isEnglishSafe($0) }
-        guard !safeItems.isEmpty, !locations.isEmpty else { return nil }
-
-        func section(_ header: String, _ lines: [String]) -> String {
-            guard !lines.isEmpty else { return "\(header):\n- none" }
-            return "\(header):\n" + lines.map { "- \($0)" }.joined(separator: "\n")
-        }
-
-        let locationLines = locations.map { location -> String in
-            guard let address = location.address, isEnglishSafe(address) else {
-                return location.name
-            }
-            return "\(location.name) — \(address)"
-        }
-
-        let correctionLines = priorCorrections.map { correction in
-            "\(correction.item) → \(correction.locationName) (confirmed by user)"
-        }
-
-        let itemLines = safeItems.map { "- \($0)" }
-
-        return """
-        \(section("Saved places", locationLines))
-
-        \(section("Previously confirmed assignments", correctionLines))
-
-        Items to classify:
-        \(itemLines.joined(separator: "\n"))
-        """
-
-    }
-
-    // MARK: - Keyword relevance
+    // MARK: - Relevance
     //
     // Prevents unrelated reminders/insights from ever reaching the prompt
     // for a given event, rather than trusting the model to ignore them.
+    //
+    // Matching is hybrid: exact token overlap first, then sentence embeddings
+    // for the pairs that share no word at all. The token filter alone was too
+    // narrow — an event "Standup" and a reminder "bring laptop" have nothing
+    // in common lexically, so the reminder never reached the prompt and the
+    // model invented prep items in the gap it left.
 
-    private static let stopwords: Set<String> = [
-        "a", "an", "the", "at", "in", "on", "for", "to", "of", "and", "with",
-        "is", "are", "this", "that", "your", "you", "me", "my", "it", "be",
-        "do", "not", "no", "yes", "today", "tomorrow", "day", "time"
-    ]
-
+    /// Tokenising lives in `OutputGrounding` so retrieval and the output gate
+    /// share one definition of a content word — they compare terms with each
+    /// other, and two lists that drifted apart would surface as the gate
+    /// dropping output that was properly grounded.
     private func keywords(from text: String) -> Set<String> {
-        let words = text.lowercased()
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { $0.count >= 2 && !Self.stopwords.contains($0) }
-        return Set(words)
+        OutputGrounding.contentTerms(of: text)
+    }
+
+    /// How strongly `text` relates to the subject, or nil for no relation.
+    ///
+    /// Shared content words only. More shared words ranks higher, so the
+    /// caller's `prefix` keeps the best rows.
+    ///
+    /// This briefly had a sentence-embedding fallback for pairs sharing no
+    /// word. It was removed after measurement: on one- and two-word event
+    /// titles — which is what calendars contain — neither `NLEmbedding` nor a
+    /// mean-pooled `NLContextualEmbedding` separated related from unrelated
+    /// text, and the resulting false matches put a meeting belief into a Sleep
+    /// event's prompt. See `KnowledgeStore` for the numbers. Lexical matching
+    /// misses real synonyms, but it never invents a match, and a miss shows up
+    /// as a quiet Eve rather than a confidently wrong one.
+    private func relevance(
+        of text: String,
+        to subjectKeywords: Set<String>
+    ) -> Double? {
+
+        guard !subjectKeywords.isEmpty else { return nil }
+
+        let shared = keywords(from: text).intersection(subjectKeywords)
+
+        return shared.isEmpty ? nil : Double(shared.count)
+
     }
 
     private func sharesKeyword(_ text: String, with eventKeywords: Set<String>) -> Bool {
@@ -505,32 +456,50 @@ final class ReminderContextBuilder {
         return !keywords(from: text).isDisjoint(with: eventKeywords)
     }
 
-    private func relevantReminders(to eventKeywords: Set<String>, limit: Int = 10) -> [String] {
+    private func relevantReminders(
+        to eventKeywords: Set<String>,
+        limit: Int = 10
+    ) -> [String] {
 
         let allReminders = (try? context.fetch(FetchDescriptor<ReminderItem>())) ?? []
 
-        let matching = allReminders.filter { reminder in
-            let titleMatches = sharesKeyword(reminder.title, with: eventKeywords)
-            let notesMatch = reminder.notes.map { sharesKeyword($0, with: eventKeywords) } ?? false
-            return titleMatches || notesMatch
-        }
-
-        let sorted = matching.sorted { first, second in
-            (first.dueDate ?? .distantFuture) < (second.dueDate ?? .distantFuture)
-        }
-
-        let lines: [String] = sorted.prefix(limit).map { reminder in
-            guard let dueDate = reminder.dueDate else {
-                return "\(reminder.title) — no due date"
+        let scored: [(reminder: ReminderItem, score: Double)] = allReminders.compactMap { reminder in
+            let text = [reminder.title, reminder.notes ?? ""].joined(separator: " ")
+            guard let score = relevance(of: text, to: eventKeywords) else {
+                return nil
             }
-            return "\(reminder.title) — due \(dueDate.formatted(date: .abbreviated, time: .shortened))"
+            return (reminder, score)
         }
 
-        return englishOnly(lines)
+        // Relevance first, then soonest-due as the tie-break — which is the
+        // whole of the old ordering, now applied within a rank instead of
+        // across an unranked filter result.
+        let sorted = scored.sorted { first, second in
+            if first.score != second.score { return first.score > second.score }
+            return (first.reminder.dueDate ?? .distantFuture) < (second.reminder.dueDate ?? .distantFuture)
+        }.map(\.reminder)
+
+        return englishOnlyDelimiting(sorted.prefix(limit).map { reminder in
+            guard let dueDate = reminder.dueDate else {
+                return (lead: "", untrusted: reminder.title, trail: " — no due date")
+            }
+            return (lead: "",
+                    untrusted: reminder.title,
+                    trail: " — due \(dueDate.formatted(date: .abbreviated, time: .shortened))")
+        })
 
     }
 
-    private func relevantInsights(to eventKeywords: Set<String>) -> [String] {
+    /// Beliefs relevant to one event, ranked and capped.
+    ///
+    /// The cap is a fix, not a nicety: this was the one gatherer in the file
+    /// with no limit, so on a well-used install the beliefs alone could push
+    /// the prep prompt past the on-device model's ~4k window and get it
+    /// silently truncated — the same failure `insights(limit:)` documents.
+    private func relevantInsights(
+        to eventKeywords: Set<String>,
+        limit: Int = 8
+    ) -> [String] {
 
         let descriptor = FetchDescriptor<AIInsight>(
             sortBy: [SortDescriptor(\.lastUpdated, order: .reverse)]
@@ -538,12 +507,27 @@ final class ReminderContextBuilder {
 
         let allInsights = (try? context.fetch(descriptor)) ?? []
 
-        let matching = allInsights.filter { insight in
-            sharesKeyword(insight.title, with: eventKeywords)
-                || sharesKeyword(insight.value, with: eventKeywords)
+        let scored: [(insight: AIInsight, score: Double)] = allInsights.compactMap { insight in
+            let text = "\(insight.title): \(insight.value)"
+            guard let score = relevance(of: text, to: eventKeywords) else {
+                return nil
+            }
+            return (insight, score)
         }
 
-        return englishOnly(matching.map { insight in
+        // A belief the user confirmed outranks any scored match — the
+        // instructions call those ground truth, so they must never be the
+        // rows the cap drops (same rule as `insights(limit:)`).
+        let now = Date.now
+        let sorted = scored.sorted { first, second in
+            if first.insight.isUserEdited != second.insight.isUserEdited {
+                return first.insight.isUserEdited
+            }
+            if first.score != second.score { return first.score > second.score }
+            return decayedConfidence(first.insight, now: now) > decayedConfidence(second.insight, now: now)
+        }.map(\.insight)
+
+        return englishOnlyDelimiting(sorted.prefix(limit).map { insight in
 
             let confidence = Int(insight.confidence * 100)
 
@@ -551,7 +535,9 @@ final class ReminderContextBuilder {
                 ? "confirmed by the user — do not change"
                 : "\(confidence)% confidence"
 
-            return "[\(insight.category.rawValue)] \(insight.title): \(insight.value) (\(origin))"
+            return (lead: "[\(insight.category.rawValue)] ",
+                    untrusted: "\(insight.title): \(insight.value)",
+                    trail: " (\(origin))")
 
         })
 
@@ -621,9 +607,11 @@ final class ReminderContextBuilder {
         let hoursAway = max(1, Int(ceil(nearest.date.timeIntervalSince(now) / 3600)))
         let urgency = hoursAway <= 1 ? "within the next hour" : "in about \(hoursAway) hours"
 
-        return englishOrNil(
-            "\(nearest.title) — \(nearest.date.formatted(date: .omitted, time: .shortened)) (\(urgency))"
-        )
+        let trail = " — \(nearest.date.formatted(date: .omitted, time: .shortened)) (\(urgency))"
+
+        guard isEnglishSafe(nearest.title + trail) else { return nil }
+
+        return UntrustedText.delimit(nearest.title) + trail
 
     }
 
@@ -645,6 +633,20 @@ final class ReminderContextBuilder {
     /// Keeps only lines that are English or too short/ambiguous to classify.
     private func englishOnly(_ lines: [String]) -> [String] {
         lines.filter { isEnglishSafe($0) }
+    }
+
+    /// Same filter, but for lines built from a trusted frame around one
+    /// untrusted span — the span is wrapped for the model (see `UntrustedText`).
+    ///
+    /// Language detection deliberately runs on the *undelimited* text: the tags
+    /// are Latin script and would otherwise bias the recognizer toward English,
+    /// silently letting through content this filter exists to drop.
+    private func englishOnlyDelimiting(
+        _ parts: [(lead: String, untrusted: String, trail: String)]
+    ) -> [String] {
+        parts
+            .filter { isEnglishSafe($0.lead + $0.untrusted + $0.trail) }
+            .map { $0.lead + UntrustedText.delimit($0.untrusted) + $0.trail }
     }
 
     /// Returns the string if it is safe to feed the model, else nil.
@@ -678,8 +680,10 @@ final class ReminderContextBuilder {
 
         let events = (try? context.fetch(descriptor)) ?? []
 
-        return englishOnly(events.map {
-            "\($0.title) — \($0.startDate.formatted(date: .abbreviated, time: .shortened))"
+        return englishOnlyDelimiting(events.map {
+            (lead: "",
+             untrusted: $0.title,
+             trail: " — \($0.startDate.formatted(date: .abbreviated, time: .shortened))")
         })
 
     }
@@ -690,30 +694,62 @@ final class ReminderContextBuilder {
 
         let reminders = (try? context.fetch(descriptor)) ?? []
 
-        return englishOnly(reminders
+        return englishOnlyDelimiting(reminders
             .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
             .prefix(limit)
             .map { reminder in
 
                 if let dueDate = reminder.dueDate {
-                    return "\(reminder.title) — due \(dueDate.formatted(date: .abbreviated, time: .shortened))"
+                    return (lead: "",
+                            untrusted: reminder.title,
+                            trail: " — due \(dueDate.formatted(date: .abbreviated, time: .shortened))")
                 }
 
-                return "\(reminder.title) — no due date"
+                return (lead: "", untrusted: reminder.title, trail: " — no due date")
 
             })
 
     }
 
-    private func insights() -> [String] {
+    /// Confidence, halved for every 30 days since the insight was last seen.
+    /// Keeps a fresh 60% belief ahead of a stale 90% one.
+    private func decayedConfidence(_ insight: AIInsight, now: Date) -> Double {
+        let days = max(0, now.timeIntervalSince(insight.lastUpdated) / 86_400)
+        return insight.confidence * pow(0.5, days / 30)
+    }
+
+    /// The user's accumulated beliefs, ranked and capped.
+    ///
+    /// This was previously unbounded while every other gatherer here had a
+    /// limit — so on a well-used install the beliefs alone could exceed the
+    /// on-device model's 4k-token window and the prompt was silently truncated
+    /// mid-context. That presents as Eve "ignoring" something it was told,
+    /// which is easy to misread as the model being too small.
+    ///
+    /// The cap is a floor, not a fix. The real answer is retrieval — letting
+    /// the model search this content instead of being handed all of it (see
+    /// `SpotlightSearchTool`, iOS 27) — at which point this limit can go.
+    private func insights(limit: Int = 12) -> [String] {
 
         let descriptor = FetchDescriptor<AIInsight>(
             sortBy: [SortDescriptor(\.lastUpdated, order: .reverse)]
         )
 
-        let insights = (try? context.fetch(descriptor)) ?? []
+        let all = (try? context.fetch(descriptor)) ?? []
 
-        return englishOnly(insights.map { insight in
+        // User-confirmed beliefs outrank everything else: the instructions
+        // tell the model they are ground truth it must never contradict, so
+        // they must never be the rows that fall off the end.
+        let now = Date.now
+        let ranked = all.sorted { first, second in
+            if first.isUserEdited != second.isUserEdited { return first.isUserEdited }
+            return decayedConfidence(first, now: now) > decayedConfidence(second, now: now)
+        }
+
+        // The category and origin are Eve's own; the title and value are
+        // model-generated, so they carry forward anything a past injection
+        // managed to write into the store.
+        return englishOnlyDelimiting(ranked.prefix(limit).map { insight in
 
             let confidence = Int(insight.confidence * 100)
 
@@ -721,7 +757,9 @@ final class ReminderContextBuilder {
                 ? "confirmed by the user — do not change"
                 : "\(confidence)% confidence"
 
-            return "[\(insight.category.rawValue)] \(insight.title): \(insight.value) (\(origin))"
+            return (lead: "[\(insight.category.rawValue)] ",
+                    untrusted: "\(insight.title): \(insight.value)",
+                    trail: " (\(origin))")
 
         })
 
@@ -736,8 +774,10 @@ final class ReminderContextBuilder {
 
         let items = (try? context.fetch(descriptor)) ?? []
 
-        return englishOnly(items.map {
-            "\($0.timestamp.formatted(date: .abbreviated, time: .shortened)) — \($0.title)"
+        return englishOnlyDelimiting(items.map {
+            (lead: "\($0.timestamp.formatted(date: .abbreviated, time: .shortened)) — ",
+             untrusted: $0.title,
+             trail: "")
         })
 
     }
@@ -751,8 +791,9 @@ final class ReminderContextBuilder {
 
         let answers = (try? context.fetch(descriptor)) ?? []
 
-        return englishOnly(answers.map {
-            "Q: \($0.question) — A: \($0.answer)"
+        // The answer is Eve's own Yes/No; the question text was model-generated.
+        return englishOnlyDelimiting(answers.map {
+            (lead: "Q: ", untrusted: $0.question, trail: " — A: \($0.answer)")
         })
 
     }

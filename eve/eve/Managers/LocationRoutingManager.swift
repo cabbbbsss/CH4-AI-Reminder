@@ -30,7 +30,8 @@ final class LocationRoutingManager {
 
     private let contextBuilder: ReminderContextBuilder
 
-    private let foundationModel = FoundationModelService()
+    // No shared FoundationModelService: generation runs in a task group and
+    // each task makes its own (see `items(for:index:)`).
 
     init(context: ModelContext) {
         self.context = context
@@ -79,10 +80,14 @@ final class LocationRoutingManager {
             locations.map { (id: $0.id, name: $0.name, address: $0.address) }
         )
 
+        let curatedByLocation = await curatedReminders(
+            locations: locations,
+            eventsByLocation: eventsByLocation
+        )
+
         for location in locations {
 
-            let events = eventsByLocation[location.id] ?? []
-            let curated = await curatedReminders(for: location, events: events)
+            let curated = curatedByLocation[location.id] ?? []
 
             var seenInPlace = Set<String>()
 
@@ -110,38 +115,123 @@ final class LocationRoutingManager {
 
     }
 
-    /// AI-curated, per-event reminders for one place — e.g. an upcoming
-    /// "Cook + Lunch" event becomes "Make sure the ingredients are
+    /// One event's generation for one place, reduced to plain values so it can
+    /// cross into a task group. Nothing SwiftData-backed goes with it.
+    private struct PlaceJob {
+        let locationID: UUID
+        let eventTitle: String
+        let promptText: String
+    }
+
+    /// AI-curated, per-event reminders for every place at once — e.g. an
+    /// upcoming "Cook + Lunch" event becomes "Make sure the ingredients are
     /// complete." One generation pass per already-matched event (see
-    /// `seedReminders`), each prefixed with the event's own title so the
-    /// card shows what it's for. Empty when the place has no assigned
-    /// events, an event's title isn't English-safe, or the model is
+    /// `seedReminders`). A place is absent from the result when it has no
+    /// assigned events, an event's title isn't English-safe, or the model is
     /// unavailable — callers just show "nothing learned yet".
-    private func curatedReminders(for location: SavedLocation, events: [CalendarEvent]) async -> [(text: String, eventTitle: String)] {
+    ///
+    /// This was a nested serial loop (places × up to six events each, one
+    /// awaited model call per pair) behind the Locations screen's blocking
+    /// spinner — comfortably tens of sequential round-trips on a populated
+    /// account. Prompts are built here from SwiftData, the model calls run
+    /// off-actor, and the caller does all the inserts.
+    private func curatedReminders(
+        locations: [SavedLocation],
+        eventsByLocation: [UUID: [CalendarEvent]]
+    ) async -> [UUID: [(text: String, eventTitle: String)]] {
 
-        guard !events.isEmpty else { return [] }
+        let jobs: [PlaceJob] = locations.flatMap { location in
+            (eventsByLocation[location.id] ?? []).compactMap { event in
 
-        var results: [(text: String, eventTitle: String)] = []
+                // Only the prompt text is taken. This path runs
+                // `suggestLocationReminder`, which is inferential by design —
+                // "Gym" is *supposed* to yield workout gear with nothing in
+                // the context saying so — so `OutputGrounding` is deliberately
+                // not applied here. It would drop exactly the items this
+                // feature exists to produce. See `suggestLocationReminder`.
+                guard let prompt = contextBuilder.buildPreparationContext(
+                    eventTitle: event.title,
+                    eventDate: event.startDate,
+                    eventNotes: event.notes,
+                    eventLocation: event.location
+                ) else { return nil }
 
-        for event in events {
+                return PlaceJob(
+                    locationID: location.id,
+                    eventTitle: event.title,
+                    promptText: prompt.promptText
+                )
 
-            guard let promptText = contextBuilder.buildPreparationContext(
-                eventTitle: event.title,
-                eventDate: event.startDate,
-                eventNotes: event.notes,
-                eventLocation: event.location
-            ) else { continue }
+            }
+        }
 
-            let items = (try? await foundationModel.suggestLocationReminder(forPromptText: promptText)) ?? []
+        guard !jobs.isEmpty else { return [:] }
 
+        let itemsByJob = await Self.generate(jobs: jobs)
+
+        // Regroup in job order, not completion order, so a place's reminders
+        // stay in event order the way the serial version produced them — the
+        // per-place `prefix(8)` below depends on that being stable.
+        var curated: [UUID: [(text: String, eventTitle: String)]] = [:]
+
+        for (index, job) in jobs.enumerated() {
             // The event is shown as the row's subtitle now, so store just the
             // suggestion as the reminder text — no "Title: " prefix.
-            results.append(contentsOf: items.map { (text: $0, eventTitle: event.title) })
+            for text in itemsByJob[index] ?? [] {
+                curated[job.locationID, default: []].append(
+                    (text: text, eventTitle: job.eventTitle)
+                )
+            }
+        }
+
+        return curated.mapValues { Array($0.prefix(8)) }
+
+    }
+
+    /// Runs the per-event calls concurrently, at most `maxConcurrent` in
+    /// flight, keyed by each job's index so ordering survives.
+    ///
+    /// Bounded for the same reason as `CalendarReminderManager`: the
+    /// on-device model serialises internally, so an unbounded group over a
+    /// populated account would hold dozens of live sessions to no benefit.
+    private static func generate(
+        jobs: [PlaceJob],
+        maxConcurrent: Int = 4
+    ) async -> [Int: [String]] {
+
+        await withTaskGroup(of: (Int, [String]).self) { group in
+
+            var results: [Int: [String]] = [:]
+            var next = 0
+
+            while next < min(maxConcurrent, jobs.count) {
+                let index = next
+                group.addTask { await Self.items(for: jobs[index], index: index) }
+                next += 1
+            }
+
+            for await (index, items) in group {
+
+                results[index] = items
+
+                if next < jobs.count {
+                    let queued = next
+                    group.addTask { await Self.items(for: jobs[queued], index: queued) }
+                    next += 1
+                }
+
+            }
+
+            return results
 
         }
 
-        return Array(results.prefix(8))
+    }
 
+    private static func items(for job: PlaceJob, index: Int) async -> (Int, [String]) {
+        let service = FoundationModelService()
+        let items = (try? await service.suggestLocationReminder(forPromptText: job.promptText)) ?? []
+        return (index, items)
     }
 
     /// Reminders-app items that aren't shown under any location — surfaced

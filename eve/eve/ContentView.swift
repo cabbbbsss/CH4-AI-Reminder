@@ -4,6 +4,7 @@ import SwiftData
 struct ContentView: View {
   @AppStorage("onboardingStep") private var currentStep: Int = 0
   @Bindable private var permissionManager = PermissionManager.shared
+  @Environment(\.modelContext) private var modelContext
 
   @AppStorage("appThemePreference") private var themeRaw = AppThemePreference.system.rawValue
 
@@ -36,6 +37,12 @@ struct ContentView: View {
     }
     .animation(.easeInOut, value: currentStep)
     .preferredColorScheme(preferredScheme)
+    .task {
+      // Clears beliefs stored before the shape check existed — advice and
+      // passing observations that would otherwise re-enter every prompt.
+      // A no-op once the store is clean.
+      try? InsightManager(context: modelContext).pruneMalformed()
+    }
   }
 }
 

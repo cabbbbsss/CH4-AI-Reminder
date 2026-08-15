@@ -37,33 +37,6 @@ struct EventPreparation {
 }
 
 @Generable
-struct PlaceReminders {
-
-    @Guide(description: "2-4 short, concrete things Eve has learned to remind the user about when they're at this specific place, based on the given context. Each under 8 words. Empty if nothing specific comes to mind — never invent generic advice.")
-    let items: [String]
-
-}
-
-@Generable
-struct LocationAssignmentSuggestion {
-
-    @Guide(description: "The exact item title as given, unmodified")
-    let itemTitle: String
-
-    @Guide(description: "The exact location name it belongs to, copied exactly from the given list of places, or 'none' if it doesn't clearly belong to any of them")
-    let locationName: String
-
-}
-
-@Generable
-struct LocationClassification {
-
-    @Guide(description: "Exactly one assignment per item given, in the same order as given")
-    let assignments: [LocationAssignmentSuggestion]
-
-}
-
-@Generable
 struct PlaceIconSuggestion {
 
     @Guide(description: "The single best-matching icon name, copied exactly from the allowed list in the instructions")
@@ -80,17 +53,14 @@ struct ReminderDecision {
     @Guide(description: "The kind of reminder. One of: routine, insight, actionable. Use 'routine' for scheduled commitments and preparation; 'insight' when driven by a learned pattern/belief about the user; 'actionable' when asking the user to do a concrete task now.")
     let category: String
 
-    @Guide(description: "Notification title, short and friendly")
+    @Guide(description: "Notification title, short and friendly. At most 5 words.")
     let title: String
 
-    @Guide(description: "Notification body, specific to the current context")
+    @Guide(description: "Notification body: ONE sentence, at most 18 words, specific to the current context. Never two sentences, never a list, never an explanation of why you are saying it. Shown in a small chat bubble and as a system notification, so anything longer is cut off. Example: 'Bring your tumbler — you're heading to your usual lunch spot.'")
     let body: String
 
     @Guide(description: "A clarifying question for the user, ONLY if one is genuinely needed")
     let followUpQuestion: String?
-
-    @Guide(description: "New or updated beliefs about the user, based on the context")
-    let proposedInsights: [ProposedInsight]
 
 }
 
@@ -123,7 +93,48 @@ struct InsightExtraction {
 
 /// The only gateway to Apple's on-device model.
 /// Input: ReminderContext. Output: ReminderDecision. Nothing else.
-final class FoundationModelService {
+///
+/// Conforms to `ReasoningEngine` so callers depend on the shape of the work
+/// rather than on Foundation Models itself — see that protocol for why.
+final class FoundationModelService: ReasoningEngine {
+
+    /// Throws unless the on-device model is ready to take a request.
+    ///
+    /// Every entry point below opens with this. It used to be the same nine
+    /// lines copy-pasted at each one, which meant the handling of a newly
+    /// added `UnavailableReason` would have to be changed in six places.
+    private func requireAvailableModel() throws {
+        switch SystemLanguageModel.default.availability {
+        case .available:
+            return
+        case .unavailable(let reason):
+            throw AIError.unavailable(String(describing: reason))
+        }
+    }
+
+    // MARK: - Generation options
+    //
+    // Every call used to run at the framework default, because none passed
+    // `GenerationOptions` at all — so no temperature the team discussed was
+    // ever actually in effect. These are the knobs, gathered here rather than
+    // written as literals at each call so they can be reviewed and tuned as a
+    // set.
+    //
+    // The split is by what the call is *for*: extracting facts wants low
+    // variance, writing something a person reads wants some warmth.
+
+    /// Deterministic. For choosing one value from a fixed set, where the same
+    /// input returning the same answer matters more than variety.
+    private static let deterministic = GenerationOptions(sampling: .greedy)
+
+    /// Low variance, for output that must stay specific and traceable.
+    private static let factual = GenerationOptions(temperature: 0.3)
+
+    /// Between the two: inference from the activity is wanted, invention isn't.
+    private static let grounded = GenerationOptions(temperature: 0.5)
+
+    /// For prose a person reads, where varied phrasing is the point.
+    private static let conversational = GenerationOptions(temperature: 0.7)
 
     enum AIError: LocalizedError {
 
@@ -155,10 +166,14 @@ final class FoundationModelService {
     - Decide whether a reminder is genuinely useful RIGHT NOW. Do not notify for \
     things that are far away in time or already handled. Prefer silence over noise.
     - Phrase reminders in a warm, brief, concrete way — one micro-thing, not a list.
-    - Beliefs marked "confirmed by the user" are ground truth. Never propose a \
-    change to them.
-    - Propose new insights only when the context contains repeated or explicit \
-    evidence. Give each a confidence that honestly reflects the evidence.
+    - Keep the body to ONE sentence, at most 18 words. Do not restate the context \
+    back to the user, do not explain your reasoning, and do not justify the \
+    suggestion — say the one thing and stop. "You've mentioned wanting to…" and \
+    "Since your … is …" are openings that always run too long; start with the \
+    thing itself instead.
+    - Beliefs marked "confirmed by the user" are ground truth. Never contradict them.
+    - You are writing a reminder, not recording what you have learned. Do not \
+    restate a belief back as though it were new.
     - Ask a follow-up question only when a single answer would meaningfully \
     improve your understanding. Otherwise leave it empty.
     - If "User's name" is known (not "unknown"), you MAY occasionally open the \
@@ -168,28 +183,52 @@ final class FoundationModelService {
     commitments and preparation, 'insight' when it's driven by a learned \
     pattern or belief about the user, 'actionable' when you're asking the \
     user to do a concrete task right now.
+
+    \(UntrustedText.instructionRule)
     """
 
+    /// The strict prep path.
+    ///
+    /// The ban on vagueness is phrased as "every item must name a specific
+    /// thing" rather than the older "never invent generic advice." That older
+    /// rule collided with the retrieved "General knowledge" section the moment
+    /// it was added: a corpus of general statements reads exactly like the
+    /// thing being forbidden, so the model's safest move was to ignore the
+    /// section entirely and retrieval did nothing. Naming the *specificity* of
+    /// the output as the requirement keeps "arrive on time" out while letting
+    /// "bring your goggles and towel" in.
     private let preparationInstructions = """
     You are Eve, an adaptive reminder assistant running privately on the user's device.
 
-    You will be given ONE specific upcoming event with its own details, plus the \
-    user's pending reminders and durable beliefs about them (AI Insights). You are \
-    NOT shown the rest of the day's schedule — reason only about the named event.
+    You will be given ONE upcoming event with its own details, the user's pending \
+    reminders and durable beliefs (AI Insights), and — when Eve recognises the kind \
+    of activity — a short "General knowledge" list about that kind of activity. You \
+    are NOT shown the rest of the day's schedule; reason only about the named event.
 
     Your only job: list 2-4 short, concrete things this person might forget to \
-    bring, prepare, or do before THIS event specifically.
+    bring, prepare, or do before THIS event.
+
+    An item may come from these sources and nothing else:
+    1. The event's own title, location, or notes.
+    2. A reminder or belief whose subject clearly matches the event.
+    3. The "General knowledge" list — but ONLY when the event plainly is that kind \
+    of activity. A line about flights is for a flight, not for a meeting that \
+    happens to mention an airport.
+
+    Prefer 1 and 2 over 3. What the user wrote about this event beats anything \
+    general; use 3 only to supply what they would obviously need but never wrote down.
 
     STRICT rules:
-    - Only use information that is directly about the named event — its own \
-    location/notes, or a reminder/belief whose subject clearly matches it (e.g. \
-    a reminder literally mentioning the event or its activity).
-    - Never invent generic advice like "arrive on time" or "be prepared."
-    - If the event is a routine, prayer time, or generic personal block, and \
-    nothing given is clearly about it, return an EMPTY list. Do not guess just \
-    to fill the list — an empty list is a correct, expected answer.
-    - Every item must be traceable to something explicitly stated above. \
-    When in doubt, leave it out.
+    - Every item must name a specific thing to bring, prepare, or check. "Bring \
+    your goggles and towel" is an item. "Arrive on time", "be prepared", "plan \
+    ahead" are not — never write those, whichever source suggested them.
+    - Never introduce an object or detail that appears in none of the three sources.
+    - Do not repeat a "General knowledge" line as written. Turn it into an \
+    instruction to this user about this event.
+    - If the event is a routine, prayer time, or generic personal block and nothing \
+    given is clearly about it, return an EMPTY list. An empty list is a correct answer.
+
+    \(UntrustedText.instructionRule)
     """
 
     /// Unlike `preparationInstructions` (strict: every item must trace to
@@ -205,9 +244,10 @@ final class FoundationModelService {
     You are Eve, an adaptive reminder assistant running privately on the user's device.
 
     You will be given ONE upcoming calendar event tied to one of the user's \
-    saved places, plus any reminders or beliefs that clearly relate to it. \
-    You are NOT shown the rest of the day's schedule — reason only about the \
-    named event.
+    saved places, any reminders or beliefs that clearly relate to it, and — \
+    when Eve recognises the kind of activity — a short "General knowledge" \
+    list about that kind of activity. You are NOT shown the rest of the day's \
+    schedule — reason only about the named event.
 
     Your only job: write 1-2 short, concrete reminders of things this person \
     might forget to bring, prepare, or check before THIS event, based on \
@@ -215,11 +255,14 @@ final class FoundationModelService {
     a class).
 
     Rules:
-    - Base each reminder on the event's own title, notes, location, or a \
-    matching reminder/belief. Ordinary common-sense inference from the \
-    activity itself is fine and expected — e.g. "Gym" → bring workout gear, \
-    "Cook" or "Lunch" → check ingredients are on hand, "Meeting" → bring \
-    laptop/notes. This is the point of this task.
+    - Base each reminder on the event's own title, notes, location, a \
+    matching reminder/belief, or the "General knowledge" list. Ordinary \
+    common-sense inference from the activity itself is fine and expected — \
+    e.g. "Gym" → bring workout gear, "Cook" or "Lunch" → check ingredients \
+    are on hand, "Meeting" → bring laptop/notes. This is the point of this task.
+    - When the "General knowledge" list covers the activity, prefer it over \
+    your own assumptions — it says what this kind of activity actually needs, \
+    and guessing past it is how wrong details get introduced.
     - Do not invent specifics that aren't implied by the event's own nature \
     (e.g. don't guess a meeting needs an umbrella just because it might rain).
     - If the event is too vague or generic to say anything concrete and \
@@ -228,52 +271,8 @@ final class FoundationModelService {
     - Never phrase items as generic advice like "be prepared" or "arrive on \
     time" — every item must be a specific, actionable thing to bring, \
     prepare, or check.
-    """
 
-    private let placeInstructions = """
-    You are Eve, an adaptive reminder assistant running privately on the user's device.
-
-    You will be given ONE specific place, how many times the user has visited it, \
-    and any calendar events, reminders, or beliefs about the user that are \
-    specifically tied to that place. You are NOT shown anything unrelated.
-
-    Some calendar events are marked "(likely — based on usual time at this place, \
-    not explicit)" — these weren't confirmed to be at this place, just inferred \
-    from when they happen (e.g. an evening event guessed as Home). Treat these as \
-    weaker signal: only draw on one if it's still concrete and plausible for this \
-    place, and never state or imply it's confirmed to happen here.
-
-    Your only job: list 2-4 short, concrete things Eve has learned to remind the \
-    user about when they are at THIS place.
-
-    STRICT rules:
-    - Only use information directly given about this place — its events, \
-    reminders, or matching beliefs. Never invent generic advice like "have a \
-    good time" or "stay safe."
-    - If nothing given is clearly actionable for this place, return an EMPTY \
-    list. An empty list is a correct, expected answer — do not guess.
-    - Every item must be traceable to something explicitly stated above.
-    """
-
-    private let classificationInstructions = """
-    You are Eve, an adaptive reminder assistant running privately on the user's device.
-
-    You will be given a list of the user's saved places (name and optional \
-    address), a list of previously confirmed item→place assignments (ground \
-    truth, made by the user), and a list of new item titles to classify.
-
-    Your only job: for each new item, decide which saved place it belongs to.
-
-    STRICT rules:
-    - Only assign an item to a place if the item's own title clearly \
-    indicates that place (mentions its name, or something distinctive from \
-    its address), OR the item closely matches the pattern of a previously \
-    confirmed assignment.
-    - Never guess based on vague association. If unsure, use "none."
-    - Previously confirmed assignments are ground truth for similar future \
-    items — follow the same pattern the user already established.
-    - Return exactly one assignment per item given, in the same order, \
-    copying each item's title back exactly as given.
+    \(UntrustedText.instructionRule)
     """
 
     /// Built from `LocationIconResolver.catalog` so the icons offered to the
@@ -307,15 +306,7 @@ final class FoundationModelService {
     /// provisional icon they already have.
     func classifyPlaceIcon(userName: String, mapName: String?, address: String?) async throws -> String? {
 
-        switch SystemLanguageModel.default.availability {
-
-        case .available:
-            break
-
-        case .unavailable(let reason):
-            throw AIError.unavailable(String(describing: reason))
-
-        }
+        try requireAvailableModel()
 
         var prompt = "Name the user gave this place: \"\(userName)\""
 
@@ -331,7 +322,8 @@ final class FoundationModelService {
 
         let response = try await session.respond(
             to: prompt,
-            generating: PlaceIconSuggestion.self
+            generating: PlaceIconSuggestion.self,
+            options: Self.deterministic
         )
 
         let icon = response.content.iconName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -342,21 +334,14 @@ final class FoundationModelService {
 
     func decide(from context: ReminderContext) async throws -> ReminderDecision {
 
-        switch SystemLanguageModel.default.availability {
-
-        case .available:
-            break
-
-        case .unavailable(let reason):
-            throw AIError.unavailable(String(describing: reason))
-
-        }
+        try requireAvailableModel()
 
         let session = LanguageModelSession(instructions: instructions)
 
         let response = try await session.respond(
             to: context.promptText,
-            generating: ReminderDecision.self
+            generating: ReminderDecision.self,
+            options: Self.conversational
         )
 
         return response.content
@@ -369,21 +354,14 @@ final class FoundationModelService {
     /// day's context here caused the model to blend in unrelated events.
     func suggestPreparation(forPromptText promptText: String) async throws -> [String] {
 
-        switch SystemLanguageModel.default.availability {
-
-        case .available:
-            break
-
-        case .unavailable(let reason):
-            throw AIError.unavailable(String(describing: reason))
-
-        }
+        try requireAvailableModel()
 
         let session = LanguageModelSession(instructions: preparationInstructions)
 
         let response = try await session.respond(
             to: promptText,
-            generating: EventPreparation.self
+            generating: EventPreparation.self,
+            options: Self.factual
         )
 
         return response.content.items
@@ -398,76 +376,17 @@ final class FoundationModelService {
     /// `ReminderContextBuilder.buildPreparationContext`).
     func suggestLocationReminder(forPromptText promptText: String) async throws -> [String] {
 
-        switch SystemLanguageModel.default.availability {
-
-        case .available:
-            break
-
-        case .unavailable(let reason):
-            throw AIError.unavailable(String(describing: reason))
-
-        }
+        try requireAvailableModel()
 
         let session = LanguageModelSession(instructions: locationEventInstructions)
 
         let response = try await session.respond(
             to: promptText,
-            generating: EventPreparation.self
+            generating: EventPreparation.self,
+            options: Self.grounded
         )
 
         return response.content.items
-
-    }
-
-    /// A short, place-specific "what Eve has learned" checklist.
-    /// `promptText` must be scoped to just the one place (see
-    /// `ReminderContextBuilder.buildPlaceContext`).
-    func suggestReminders(forPromptText promptText: String) async throws -> [String] {
-
-        switch SystemLanguageModel.default.availability {
-
-        case .available:
-            break
-
-        case .unavailable(let reason):
-            throw AIError.unavailable(String(describing: reason))
-
-        }
-
-        let session = LanguageModelSession(instructions: placeInstructions)
-
-        let response = try await session.respond(
-            to: promptText,
-            generating: PlaceReminders.self
-        )
-
-        return response.content.items
-
-    }
-
-    /// Classifies which saved place each given item title belongs to (or
-    /// none). `promptText` must already be scoped/language-filtered — see
-    /// `ReminderContextBuilder.buildClassificationContext`.
-    func classifyItems(forPromptText promptText: String) async throws -> [LocationAssignmentSuggestion] {
-
-        switch SystemLanguageModel.default.availability {
-
-        case .available:
-            break
-
-        case .unavailable(let reason):
-            throw AIError.unavailable(String(describing: reason))
-
-        }
-
-        let session = LanguageModelSession(instructions: classificationInstructions)
-
-        let response = try await session.respond(
-            to: promptText,
-            generating: LocationClassification.self
-        )
-
-        return response.content.assignments
 
     }
 
@@ -485,6 +404,8 @@ final class FoundationModelService {
     medication schedules, caring for a pet, commuting to work, exercise, \
     recurring appointments.
     - Keep each question to one friendly sentence. Do not repeat questions.
+
+    \(UntrustedText.instructionRule)
     """
 
     /// Generates personalised onboarding questions from the prepared context.
@@ -492,21 +413,14 @@ final class FoundationModelService {
         from context: ReminderContext
     ) async throws -> [OnboardingQuestion] {
 
-        switch SystemLanguageModel.default.availability {
-
-        case .available:
-            break
-
-        case .unavailable(let reason):
-            throw AIError.unavailable(String(describing: reason))
-
-        }
+        try requireAvailableModel()
 
         let session = LanguageModelSession(instructions: onboardingInstructions)
 
         let response = try await session.respond(
             to: context.promptText,
-            generating: OnboardingQuestionSet.self
+            generating: OnboardingQuestionSet.self,
+            options: Self.conversational
         )
 
         return response.content.questions
@@ -537,6 +451,8 @@ final class FoundationModelService {
     (e.g. do NOT say "You haven't specified your location/name"). Absence of data \
     is not a belief — simply omit it.
     - If nothing durable can be grounded, return an empty list.
+
+    \(UntrustedText.instructionRule)
     """
 
     /// Extracts durable AI Insights from the prepared context — calendar/reminder
@@ -546,21 +462,14 @@ final class FoundationModelService {
         from context: ReminderContext
     ) async throws -> [ProposedInsight] {
 
-        switch SystemLanguageModel.default.availability {
-
-        case .available:
-            break
-
-        case .unavailable(let reason):
-            throw AIError.unavailable(String(describing: reason))
-
-        }
+        try requireAvailableModel()
 
         let session = LanguageModelSession(instructions: insightExtractionInstructions)
 
         let response = try await session.respond(
             to: context.promptText,
-            generating: InsightExtraction.self
+            generating: InsightExtraction.self,
+            options: Self.factual
         )
 
         return response.content.insights

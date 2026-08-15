@@ -205,9 +205,16 @@ struct HomeView: View {
                         }
 
                         VStack(alignment: .leading) {
+                            // Capped so an over-long model response can't
+                            // push Today's Routine off the screen. The
+                            // prompt asks for one sentence under 18 words,
+                            // which fits in three lines here — this is the
+                            // guarantee for when it doesn't comply, since
+                            // nothing about a generated string is certain.
                             Text(suggestionText)
                                 .font(.system(size: 15, weight: .medium))
                                 .foregroundColor(Color(.textPrimary))
+                                .lineLimit(3)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .padding(16)

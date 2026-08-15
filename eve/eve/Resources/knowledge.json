@@ -1,0 +1,32 @@
+{
+  "version": 3,
+  "note": "Eve's retrievable knowledge. A fact is offered to the model only when one of its `triggers` appears as a word in the event's title or notes. Triggers are matched exactly (lowercased, whole words), NOT semantically \u2014 an earlier embedding-based version matched everything to everything and produced meeting advice for a Sleep event. Keep triggers specific: a word that shows up in unrelated event titles will drag its facts along with it. Keep each text under ~20 words; every retrieved line spends part of a 4096-token window.",
+  "facts": [
+    {"key": "gym-gear", "topic": "gym", "triggers": ["gym", "workout", "fitness", "lifting"], "text": "A gym session usually needs workout clothes, a towel, a water bottle, and shoes to change into."},
+    {"key": "gym-change", "topic": "gym", "triggers": ["gym", "workout", "fitness"], "text": "People often forget a change of clothes when going to the gym straight from work or class."},
+    {"key": "swim-kit", "topic": "swimming", "triggers": ["swim", "swimming", "pool"], "text": "Swimming needs goggles, a towel, and a dry change of clothes."},
+    {"key": "run-kit", "topic": "running", "triggers": ["running", "jog", "jogging", "marathon"], "text": "An outdoor run usually needs running shoes, and sunscreen or a cap in daytime heat."},
+    {"key": "meeting-materials", "topic": "meeting", "triggers": ["meeting", "standup", "sync", "briefing", "kickoff", "retro"], "text": "A meeting usually needs a laptop, a charger, and any document or note the discussion is about."},
+    {"key": "meeting-online", "topic": "meeting", "triggers": ["zoom", "teams", "webinar", "online", "virtual"], "text": "An online meeting needs a working link, headphones, and a quiet place to sit."},
+    {"key": "presentation-kit", "topic": "presentation", "triggers": ["presentation", "pitch", "demo", "showcase"], "text": "A presentation needs slides available offline, a charger, and an adapter for the room's display."},
+    {"key": "interview-prep", "topic": "interview", "triggers": ["interview"], "text": "An interview usually needs an offline copy of your CV, the address, and the interviewer's name."},
+    {"key": "class-kit", "topic": "class", "triggers": ["class", "lecture", "lesson", "seminar", "workshop", "course"], "text": "A class or lecture usually needs a notebook or laptop, a charger, and any assignment that is due."},
+    {"key": "exam-kit", "topic": "exam", "triggers": ["exam", "quiz", "midterm"], "text": "An exam usually needs an ID card, pens, and any calculator or material the exam allows."},
+    {"key": "doctor-visit", "topic": "health", "triggers": ["doctor", "clinic", "hospital", "checkup"], "text": "A doctor or clinic visit usually needs an insurance or ID card and a list of current medication."},
+    {"key": "dentist-visit", "topic": "health", "triggers": ["dentist", "dental"], "text": "A dental appointment usually needs your insurance card and a note of any tooth pain to mention."},
+    {"key": "medication-routine", "topic": "health", "triggers": ["medication", "medicine", "pills", "prescription"], "text": "Medication is easiest to remember when tied to a fixed daily event like a meal."},
+    {"key": "flight-documents", "topic": "travel", "triggers": ["flight", "airport", "departure", "boarding"], "text": "A flight needs a passport or ID, the booking reference, and time for check-in before departure."},
+    {"key": "trip-charger", "topic": "travel", "triggers": ["trip", "travel", "holiday", "vacation"], "text": "Trips are commonly ruined by a forgotten phone charger or power bank."},
+    {"key": "train-ticket", "topic": "travel", "triggers": ["train", "bus", "station", "terminal"], "text": "A train or bus journey needs the ticket saved offline in case there is no signal at the station."},
+    {"key": "hotel-checkout", "topic": "travel", "triggers": ["hotel"], "text": "Hotel checkout is usually late morning, earlier than most people expect."},
+    {"key": "commute-motorbike", "topic": "commute", "triggers": ["motorbike", "motorcycle", "ojek"], "text": "Riding a motorbike needs a helmet, and a rain jacket if rain is likely."},
+    {"key": "parking-cash", "topic": "commute", "triggers": ["parking", "toll"], "text": "Some parking attendants and small vendors still take cash only."},
+    {"key": "groceries-list", "topic": "groceries", "triggers": ["groceries", "grocery", "supermarket", "shopping", "market"], "text": "A grocery trip works better with a list written before leaving, and a reusable bag."},
+    {"key": "cooking-ingredients", "topic": "cooking", "triggers": ["cook", "cooking", "bake", "baking", "recipe"], "text": "Cooking a planned meal needs its ingredients checked at home first — one missing item blocks the dish."},
+    {"key": "laundry-timing", "topic": "chores", "triggers": ["laundry", "washing"], "text": "Laundry needs to be hung or collected the same day, especially in humid weather."},
+    {"key": "pet-sitting", "topic": "pet", "triggers": ["pet", "dog", "cat"], "text": "Leaving a pet alone for a day needs food, water, and someone to check on them."},
+    {"key": "pet-vet", "topic": "pet", "triggers": ["vet", "veterinarian"], "text": "A vet visit needs a carrier for the animal and its vaccination record."},
+    {"key": "birthday-gift", "topic": "social", "triggers": ["birthday", "anniversary", "wedding", "celebration"], "text": "A birthday or celebration usually needs a gift or card arranged in advance."},
+    {"key": "dinner-booking", "topic": "social", "triggers": ["restaurant", "reservation", "booking"], "text": "A restaurant meal with several people usually needs a booking made ahead."}
+  ]
+}
