@@ -93,72 +93,84 @@ struct AddLocationSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-
-                nameField
-
-                searchField
-
-                List {
-                    Button {
-                        Task { await useCurrentLocation() }
-                    } label: {
-                        row(
-                            icon: "location.fill",
-                            iconColor: Color(.textQuarternary),
-                            title: "Current Location",
-                            subtitle: "Use where you are now",
-                            selected: false
-                        )
-                    }
-                    .buttonStyle(.plain)
-
-                    ForEach(Array(completer.results.enumerated()), id: \.offset) { _, completion in
+            
+            ZStack {
+                Color(.bgPrimary).ignoresSafeArea()
+                
+                Rectangle()
+                    .fill(Color.bgSecondary)
+                    .frame(width: 800, height: 500)
+                    .blur(radius: 150)
+                    .position(x: 200, y: 150)
+                    .ignoresSafeArea(edges: .all)
+                
+                VStack(spacing: 0) {
+                    
+                    nameField
+                    
+                    searchField
+                    
+                    List {
                         Button {
-                            select(completion)
+                            Task { await useCurrentLocation() }
                         } label: {
                             row(
-                                icon: "mappin.circle.fill",
-                                iconColor: Color.red,
-                                title: completion.title,
-                                subtitle: completion.subtitle,
-                                selected: completion.title == selectedTitle
+                                icon: "location.fill",
+                                iconColor: Color(.textQuarternary),
+                                title: "Current Location",
+                                subtitle: "Use where you are now",
+                                selected: false
                             )
                         }
                         .buttonStyle(.plain)
+                        
+                        ForEach(Array(completer.results.enumerated()), id: \.offset) { _, completion in
+                            Button {
+                                select(completion)
+                            } label: {
+                                row(
+                                    icon: "mappin.circle.fill",
+                                    iconColor: Color.red,
+                                    title: completion.title,
+                                    subtitle: completion.subtitle,
+                                    selected: completion.title == selectedTitle
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .listStyle(.plain)
+                    
+                    if let coordinate = selectedCoordinate {
+                        Map(position: $cameraPosition) {
+                            Marker(placeName.isEmpty ? (selectedName ?? "Selected place") : placeName, coordinate: coordinate)
+                                .tint(Color.red)
+                        }
+                        .frame(height: 220)
+                        .transition(.move(edge: .bottom))
                     }
                 }
-                .listStyle(.plain)
-
-                if let coordinate = selectedCoordinate {
-                    Map(position: $cameraPosition) {
-                        Marker(placeName.isEmpty ? (selectedName ?? "Selected place") : placeName, coordinate: coordinate)
-                            .tint(Color.red)
+                .navigationTitle("Location")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                        }
                     }
-                    .frame(height: 220)
-                    .transition(.move(edge: .bottom))
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button {
+                            save()
+                        } label: {
+                            Image(systemName: "checkmark")
+                        }
+                        .disabled(selectedCoordinate == nil || placeName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
                 }
+                .onAppear { searchFocused = true }
             }
-            .navigationTitle("Location")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        save()
-                    } label: {
-                        Image(systemName: "checkmark")
-                    }
-                    .disabled(selectedCoordinate == nil || placeName.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-            .onAppear { searchFocused = true }
         }
     }
 

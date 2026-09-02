@@ -31,7 +31,7 @@ struct AILearningView: View {
 
         Text(headline)
           .font(.system(size: 32, weight: .bold))
-          .foregroundColor(.white)
+          .foregroundColor(.textPrimary)
           .multilineTextAlignment(.center)
           .animation(.easeInOut, value: isFinished)
           .animation(.easeInOut, value: aiMissing)
@@ -132,16 +132,17 @@ struct AILearningView: View {
   // MARK: - Background
 
   private var background: some View {
-    LinearGradient(
-      stops: [
-        .init(color: Color(.gradientPrimaryStart), location: 0.0),
-        .init(color: Color(.gradientPrimaryStart), location: 0.35),
-        .init(color: Color(.textTertiary), location: 0.75),
-        .init(color: Color(.gradientSecondaryStart), location: 1.0)
-      ],
-      startPoint: .top,
-      endPoint: .bottom
-    )
+      ZStack {
+          Color(.bgPrimary).ignoresSafeArea()
+          
+          Rectangle()
+              .fill(Color.bgSecondary.opacity(0.8))
+              .frame(width: 800, height: 500)
+              .blur(radius: 150)
+              .position(x: 200, y: 150)
+              .ignoresSafeArea(edges: .all)
+          
+      }
     .ignoresSafeArea()
   }
 
@@ -181,13 +182,13 @@ struct AILearningView: View {
           value: isFloating
         )
 
-      ThoughtBubble()
-        .offset(x: 122, y: -62)
-        .offset(y: isFloating ? -4 : 4)
-        .animation(
-          .easeInOut(duration: 2.2).repeatForever(autoreverses: true),
-          value: isFloating
-        )
+//      ThoughtBubble()
+//        .offset(x: 122, y: -62)
+//        .offset(y: isFloating ? -4 : 4)
+//        .animation(
+//          .easeInOut(duration: 2.2).repeatForever(autoreverses: true),
+//          value: isFloating
+//        )
 
       Image("Avatar")
         .resizable()
@@ -215,7 +216,7 @@ struct AILearningView: View {
           // ✓ when the step had data to work with, ✗ when nothing was
           // available (the relevant permission wasn't granted).
           icon: step.succeeded ? "checkmark" : "xmark",
-          iconColor: step.succeeded ? Color(.textSecondary) : .red,
+          iconColor: step.succeeded ? Color(.textPrimary) : .red,
           text: step.text,
           isActive: false,
           isLast: !engine.isAnalyzing && step.id == engine.completedSteps.last?.id
@@ -225,7 +226,7 @@ struct AILearningView: View {
       if engine.isAnalyzing {
         LearningLogRow(
           icon: "ellipsis",
-          iconColor: Color(.textSecondary),
+          iconColor: Color(.textPrimary),
           text: engine.currentAnalysisTask.isEmpty
             ? "Processing..."
             : engine.currentAnalysisTask,
@@ -251,7 +252,7 @@ struct AILearningView: View {
 
           Image(systemName: "apple.intelligence")
             .font(.system(size: 40, weight: .regular))
-            .foregroundColor(Color(.textSecondary))
+            .foregroundColor(Color(.textPrimary))
 
               VStack(alignment: .leading, spacing: 5) {
                   
@@ -280,7 +281,7 @@ struct AILearningView: View {
           } label: {
             Text("Enable")
               .font(.system(size: 14, weight: .bold))
-              .foregroundColor(.white)
+              .foregroundColor(.textPrimary)
               .frame(maxWidth: .infinity, alignment: .center)
               .padding(.horizontal, 100)
               .padding(.vertical, 10)
@@ -328,41 +329,41 @@ private struct GlassIconTile: View {
 
   var body: some View {
     RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
-      .fill(Color.white.opacity(0.14))
+      .fill(Color.textPrimary.opacity(0.14))
       .frame(width: size, height: size)
       .overlay(
         RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
-          .stroke(Color.white.opacity(0.28), lineWidth: 1)
+          .stroke(Color.bgPrimary.opacity(0.28), lineWidth: 1)
       )
       .overlay(
         Image(systemName: systemName)
           .font(.system(size: size * 0.4, weight: .medium))
-          .foregroundColor(.white.opacity(0.9))
+          .foregroundColor(.textPrimary.opacity(0.9))
       )
       .shadow(color: Color.black.opacity(0.18), radius: 10, y: 5)
       .rotationEffect(.degrees(rotation))
   }
 }
 
-private struct ThoughtBubble: View {
-  var body: some View {
-    ZStack(alignment: .bottomLeading) {
-      Ellipse()
-        .fill(Color.white)
-        .frame(width: 62, height: 46)
-
-      Circle()
-        .fill(Color.white)
-        .frame(width: 11, height: 11)
-        .offset(x: -8, y: 5)
-
-      Circle()
-        .fill(Color.white)
-        .frame(width: 5, height: 5)
-        .offset(x: -16, y: 11)
-    }
-  }
-}
+//private struct ThoughtBubble: View {
+//  var body: some View {
+//    ZStack(alignment: .bottomLeading) {
+//      Ellipse()
+//        .fill(Color.white)
+//        .frame(width: 62, height: 46)
+//
+//      Circle()
+//        .fill(Color.white)
+//        .frame(width: 11, height: 11)
+//        .offset(x: -8, y: 5)
+//
+//      Circle()
+//        .fill(Color.white)
+//        .frame(width: 5, height: 5)
+//        .offset(x: -16, y: 11)
+//    }
+//  }
+//}
 
 private struct LearningLogRow: View {
   let icon: String
@@ -377,7 +378,7 @@ private struct LearningLogRow: View {
       VStack(spacing: 0) {
         ZStack {
           Circle()
-            .fill(Color.white)
+            .fill(Color.bgSecondary)
             .frame(width: 28, height: 28)
 
           Image(systemName: icon)
@@ -389,18 +390,18 @@ private struct LearningLogRow: View {
         // the active row (more is coming), nothing after the last.
         if !isLast {
           Rectangle()
-            .fill(Color.white.opacity(0.55))
+            .fill(Color.bgSecondary.opacity(0.55))
             .frame(width: 2, height: 26)
         } else if isActive {
           Rectangle()
-            .fill(Color.white.opacity(0.55))
+            .fill(Color.bgSecondary.opacity(0.55))
             .frame(width: 2, height: 16)
         }
       }
 
       Text(text)
         .font(.system(size: 14, weight: .semibold))
-        .foregroundColor(isActive ? Color.white.opacity(0.55) : .white)
+        .foregroundColor(isActive ? Color.textPrimary.opacity(0.55) : .white)
         .padding(.top, 5)
 
       Spacer(minLength: 0)
