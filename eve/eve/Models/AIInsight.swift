@@ -18,6 +18,12 @@ enum InsightCategory: String, Codable, CaseIterable {
 
     case behavior
 
+    /// The category names as the model is offered them, generated from the
+    /// cases so the list can never drift from what `init(rawValue:)` accepts.
+    nonisolated static var promptNames: String {
+        allCases.map(\.rawValue).joined(separator: ", ")
+    }
+
 }
 
 @Model

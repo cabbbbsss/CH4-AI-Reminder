@@ -50,11 +50,11 @@ final class AILearningEngine {
   /// A safe default set used when the model can't generate questions.
   /// Shared with OnboardingQuestionsView as its default set too.
   static let fallbackQuestions: [OnboardingQuestion] = [
-    OnboardingQuestion(question: "Do you take any medication on a regular schedule?", category: "health"),
-    OnboardingQuestion(question: "Do you have a pet that needs regular care?", category: "pet"),
-    OnboardingQuestion(question: "Do you commute to a workplace on weekdays?", category: "commute"),
-    OnboardingQuestion(question: "Do you exercise or go to the gym regularly?", category: "routine"),
-    OnboardingQuestion(question: "Would you like reminders before you leave home?", category: "preference")
+    OnboardingQuestion(question: "Do you take any medication on a regular schedule?"),
+    OnboardingQuestion(question: "Do you have a pet that needs regular care?"),
+    OnboardingQuestion(question: "Do you commute to a workplace on weekdays?"),
+    OnboardingQuestion(question: "Do you exercise or go to the gym regularly?"),
+    OnboardingQuestion(question: "Would you like reminders before you leave home?")
   ]
 
   func analyzeUserRoutines(context: ModelContext?) async {

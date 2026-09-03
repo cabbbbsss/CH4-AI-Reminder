@@ -11,13 +11,13 @@ import FoundationModels
 @Generable
 struct ProposedInsight {
 
-    @Guide(description: "One of: routine, place, preference, behavior")
+    @Guide(description: "One of: \(InsightCategory.promptNames)")
     let category: String
 
     @Guide(description: "Short internal key for this belief, used only for matching and editing — never displayed as standalone text in the UI. Examples: 'Workplace', 'Meeting Format', 'Morning Exercise'")
     let title: String
 
-    @Guide(description: "A complete, natural-language sentence in second person ('You …') that combines the belief topic and its answer into one self-contained, human-readable statement. This is the ONLY text shown to the user in the insight list, so it must make sense without the title. Keep it concise (max ~15 words). Never output a raw answer like 'Yes', 'No', or a bare noun. Examples: 'You review your notes before every meeting.', 'Your meetings are usually held virtually via Zoom.', 'You often study at a café on weekdays.'")
+    @Guide(description: "A complete, natural-language sentence in second person ('You …') that combines the belief topic and its answer into one self-contained, human-readable statement. This is the ONLY text shown to the user in the insight list, so it must make sense without the title. Keep it concise — aim for under 15 words and never exceed 20. Never output a raw answer like 'Yes', 'No', or a bare noun. Examples: 'You review your notes before every meeting.', 'Your meetings are usually held virtually via Zoom.', 'You often study at a café on weekdays.'")
     let value: String
 
     @Guide(description: "Confidence between 0.0 and 1.0")
@@ -31,7 +31,18 @@ struct ProposedInsight {
 @Generable
 struct EventPreparation {
 
-    @Guide(description: "2-4 short, concrete things to bring, prepare, or do before this specific event, based on the given context. Each under 8 words. Empty if nothing specific comes to mind — never invent generic advice.")
+    /// Deliberately says nothing about how many items or what qualifies as one.
+    ///
+    /// Two calls fill this type with different rules — `suggestPreparation`
+    /// wants 2-4 strictly traceable items, `suggestLocationReminder` wants 1-2
+    /// inferred ones — so any count stated here contradicts one of them. It
+    /// also used to carry "never invent generic advice", the phrasing
+    /// `preparationInstructions` deliberately dropped because it collides with
+    /// the retrieved "General knowledge" section (see the note there). Keeping
+    /// it on the schema kept that collision alive on the half of the prompt
+    /// the rewrite never touched. Format only, then: the behaviour belongs to
+    /// whichever instruction string is driving the call.
+    @Guide(description: "The items, most important first. Each under 8 words. An empty list is a valid answer.")
     let items: [String]
 
 }
@@ -50,7 +61,7 @@ struct ReminderDecision {
     @Guide(description: "Should a reminder be shown right now?")
     let shouldNotify: Bool
 
-    @Guide(description: "The kind of reminder. One of: routine, insight, actionable. Use 'routine' for scheduled commitments and preparation; 'insight' when driven by a learned pattern/belief about the user; 'actionable' when asking the user to do a concrete task now.")
+    @Guide(description: "The kind of reminder. One of: \(NotificationCategory.promptNames). Use \(NotificationCategory.promptCatalog).")
     let category: String
 
     @Guide(description: "Notification title, short and friendly. At most 5 words.")
@@ -59,9 +70,6 @@ struct ReminderDecision {
     @Guide(description: "Notification body: ONE sentence, at most 18 words, specific to the current context. Never two sentences, never a list, never an explanation of why you are saying it. Shown in a small chat bubble and as a system notification, so anything longer is cut off. Example: 'Bring your tumbler — you're heading to your usual lunch spot.'")
     let body: String
 
-    @Guide(description: "A clarifying question for the user, ONLY if one is genuinely needed")
-    let followUpQuestion: String?
-
 }
 
 @Generable
@@ -69,9 +77,6 @@ struct OnboardingQuestion {
 
     @Guide(description: "A short yes/no question whose answer will improve reminders. Either confirms a concrete pattern from the user's data (e.g. 'You usually visit the gym on weekday evenings. Correct?') or asks about an important recurring need (e.g. 'Do you take medication on a regular schedule?').")
     let question: String
-
-    @Guide(description: "One of: routine, health, pet, commute, work, preference")
-    let category: String
 
 }
 
@@ -127,14 +132,15 @@ final class FoundationModelService: ReasoningEngine {
     /// input returning the same answer matters more than variety.
     private static let deterministic = GenerationOptions(sampling: .greedy)
 
-    /// Low variance, for output that must stay specific and traceable.
+    /// Low variance, for output that must stay specific and traceable — the
+    /// prep lists and the belief extraction, where a wider spread shows up as
+    /// invented detail rather than as variety.
     private static let factual = GenerationOptions(temperature: 0.3)
 
-    /// Between the two: inference from the activity is wanted, invention isn't.
-    private static let grounded = GenerationOptions(temperature: 0.5)
-
-    /// For prose a person reads, where varied phrasing is the point.
-    private static let conversational = GenerationOptions(temperature: 0.7)
+    /// For prose a person reads, where varied phrasing is the point. Still
+    /// well below the framework default: the reminder and the onboarding
+    /// questions want a little warmth, not surprise.
+    private static let conversational = GenerationOptions(temperature: 0.5)
 
     enum AIError: LocalizedError {
 
@@ -171,18 +177,16 @@ final class FoundationModelService: ReasoningEngine {
     suggestion — say the one thing and stop. "You've mentioned wanting to…" and \
     "Since your … is …" are openings that always run too long; start with the \
     thing itself instead.
+    - Every reminder must name something that appears in the context above — \
+    an event, a reminder, a place, or a belief. If you cannot point to the \
+    line it came from, say nothing instead.
     - Beliefs marked "confirmed by the user" are ground truth. Never contradict them.
     - You are writing a reminder, not recording what you have learned. Do not \
     restate a belief back as though it were new.
-    - Ask a follow-up question only when a single answer would meaningfully \
-    improve your understanding. Otherwise leave it empty.
     - If "User's name" is known (not "unknown"), you MAY occasionally open the \
     reminder by addressing them by that name to feel warm and personal — but \
     only once in a while, never in every message, and never when it feels forced.
-    - Classify each reminder with a category: 'routine' for scheduled \
-    commitments and preparation, 'insight' when it's driven by a learned \
-    pattern or belief about the user, 'actionable' when you're asking the \
-    user to do a concrete task right now.
+    - Classify each reminder with a category — use \(NotificationCategory.promptCatalog).
 
     \(UntrustedText.instructionRule)
     """
@@ -296,6 +300,8 @@ final class FoundationModelService: ReasoningEngine {
         - The user's own name for the place is the strongest signal (e.g. a \
         place named "Gym" is a gym even if the address says otherwise).
         - If the kind of place is unclear or not covered, use "\(LocationIconResolver.defaultIcon)".
+
+        \(UntrustedText.instructionRule)
         """
     }
 
@@ -308,14 +314,18 @@ final class FoundationModelService: ReasoningEngine {
 
         try requireAvailableModel()
 
-        var prompt = "Name the user gave this place: \"\(userName)\""
+        // The user typed the name; MapKit supplied the other two. All three
+        // are text Eve did not author, so all three are marked as such — the
+        // catalog check below already bounds the damage, but this is the one
+        // prompt that used to sit outside the rule entirely.
+        var prompt = "Name the user gave this place: \(UntrustedText.delimit(userName))"
 
         if let mapName, !mapName.isEmpty, mapName != userName {
-            prompt += "\nThe map's own name for the confirmed pin: \"\(mapName)\""
+            prompt += "\nThe map's own name for the confirmed pin: \(UntrustedText.delimit(mapName))"
         }
 
         if let address, !address.isEmpty {
-            prompt += "\nAddress of the confirmed pin: \(address)"
+            prompt += "\nAddress of the confirmed pin: \(UntrustedText.delimit(address))"
         }
 
         let session = LanguageModelSession(instructions: iconInstructions)
@@ -383,7 +393,7 @@ final class FoundationModelService: ReasoningEngine {
         let response = try await session.respond(
             to: promptText,
             generating: EventPreparation.self,
-            options: Self.grounded
+            options: Self.factual
         )
 
         return response.content.items
@@ -404,6 +414,8 @@ final class FoundationModelService: ReasoningEngine {
     medication schedules, caring for a pet, commuting to work, exercise, \
     recurring appointments.
     - Keep each question to one friendly sentence. Do not repeat questions.
+    - Never ask about something already listed under "Questions the user has \
+    answered" — those are settled. Ask about what you still don't know.
 
     \(UntrustedText.instructionRule)
     """
@@ -445,7 +457,13 @@ final class FoundationModelService: ReasoningEngine {
     on a schedule?" A "Yes" → "You take medication on a regular schedule."). \
     Skip questions answered "No" unless the "No" itself is clearly informative.
     - Each insight's `value` must be a complete second-person sentence ("You …").
-    - Pick a fitting category (routine, place, preference, behavior) and an honest \
+    - A belief must still be true next month. Never write "today", "tonight", \
+    "right now", "currently", or "heading to" — those describe a moment, not \
+    a person.
+    - A belief is a statement, not a suggestion. Never write "should", "might", \
+    "make sure", "remember to", "try to", or "consider" — that is advice, and \
+    advice is not something you have learned.
+    - Pick a fitting category (\(InsightCategory.promptNames)) and an honest \
     confidence. Do not duplicate a belief already listed in the context's insights.
     - NEVER create an insight about missing, unknown, or unspecified information \
     (e.g. do NOT say "You haven't specified your location/name"). Absence of data \
