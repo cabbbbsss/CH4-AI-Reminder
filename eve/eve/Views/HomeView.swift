@@ -132,15 +132,14 @@ struct HomeView: View {
 
     private var homeTab: some View {
         ZStack {
-            LinearGradient(
-              stops: [
-                .init(color: Color(.bgPrimary), location: 0.75),
-                .init(color: Color(.bgSecondary), location: 1.0)
-              ],
-              startPoint: .top,
-              endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            Color(.bgPrimary).ignoresSafeArea()
+
+            Rectangle()
+                .fill(Color.bgSecondary.opacity(0.8))
+                .frame(width: 800, height: 500)
+                .blur(radius: 150)
+                .position(x: 200, y: 150)
+                .ignoresSafeArea(edges: .all)
 
             Rectangle()
                 .fill(Color(.bgSecondary))
@@ -158,11 +157,11 @@ struct HomeView: View {
                 .ignoresSafeArea(edges: .horizontal)
                 .frame(maxHeight: .infinity, alignment: .top)
 
-            VStack(alignment: .leading, spacing: 0) {
+            VStack {
                 // Header
                 HStack {
                     Text(greeting)
-                        .font(.system(size: 26, weight: .medium, design: .default))
+                        .font(.system(size: 30, weight: .medium))
                         .foregroundColor(Color(.textPrimary))
                         .padding(.leading, 30)
 

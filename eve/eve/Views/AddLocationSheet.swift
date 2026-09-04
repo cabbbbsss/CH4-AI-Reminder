@@ -146,7 +146,7 @@ struct AddLocationSheet: View {
                             Marker(placeName.isEmpty ? (selectedName ?? "Selected place") : placeName, coordinate: coordinate)
                                 .tint(Color.red)
                         }
-                        .frame(height: 220)
+                        .frame(height: 535)
                         .transition(.move(edge: .bottom))
                     }
                 }
