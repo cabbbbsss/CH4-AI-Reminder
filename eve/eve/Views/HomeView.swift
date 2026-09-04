@@ -168,6 +168,21 @@ struct HomeView: View {
 
                     Spacer()
 
+                    #if DEBUG
+                    NavigationLink(destination: PromptTesterView()) {
+                        Image(systemName: "ladybug.fill")
+                            .font(.title2)
+                            .foregroundColor(Color(.textPrimary))
+                            .foregroundStyle(.white)
+                            .padding(5)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .background(Color(.bgTertiary))
+                    .clipShape(Circle())
+                    .padding(.trailing, 10)
+                    #endif
+
                     NavigationLink(destination: SettingsView()) {
                         Image(systemName: "gearshape.fill")
                             .font(.title2)
