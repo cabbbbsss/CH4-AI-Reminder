@@ -164,7 +164,7 @@ final class FoundationModelService: ReasoningEngine {
 
     }
 
-    private let instructions = """
+    let instructions = """
     Evaluate user context to generate a single, highly urgent reminder.
 
     - Base suggestions on the "Most urgent upcoming commitment". If none, rely on "AI Insights" or recent activity.
@@ -332,7 +332,7 @@ final class FoundationModelService: ReasoningEngine {
 
     }
 
-    private let onboardingInstructions = """
+    let onboardingInstructions = """
     Generate yes/no questions to improve reminder personalization from user context.
 
     - EVERY question MUST be answerable with a simple Yes or No.
@@ -366,7 +366,7 @@ final class FoundationModelService: ReasoningEngine {
 
     }
 
-    private let insightExtractionInstructions = """
+    let insightExtractionInstructions = """
     Extract durable beliefs (AI Insights) about the user from the provided context.
 
     - Draw ONLY from recurring patterns in calendar/reminders and onboarding answers.

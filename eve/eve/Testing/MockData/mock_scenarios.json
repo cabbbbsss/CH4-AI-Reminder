@@ -1,0 +1,69 @@
+{
+  "Busy Executive": {
+    "currentPlace": "Office",
+    "userName": "Alex",
+    "nextUrgentItem": "Board Meeting at 2:00 PM",
+    "meetingLink": "https://zoom.us/j/123456789",
+    "eventDescription": "Quarterly financial review with the board of directors.",
+    "eventLocation": "Conference Room A",
+    "guests": ["Sarah (CFO)", "David (CEO)", "Emma (Secretary)"],
+    "upcomingEvents": [
+      "Quarterly Review at 4:00 PM",
+      "Flight to Tokyo at 8:00 PM (Terminal 3)"
+    ],
+    "pendingReminders": [
+      "Review Q3 financial reports",
+      "Approve marketing budget"
+    ],
+    "insights": [
+      "You prefer printed notes for board meetings.",
+      "You always arrive at the airport 2 hours early."
+    ],
+    "recentHistory": ["Arrived at Office"],
+    "answeredQuestions": ["Q: Do you commute by train? A: No"]
+  },
+  "Student Morning": {
+    "currentPlace": "Dorm",
+    "userName": "Jamie",
+    "nextUrgentItem": "Advanced Calculus Exam at 9:00 AM",
+    "meetingLink": null,
+    "eventDescription": "Final exam for MAT301. Bring #2 pencils and calculator.",
+    "eventLocation": "Science Building Room 402",
+    "guests": null,
+    "upcomingEvents": [
+      "Group Study at Library at 12:00 PM"
+    ],
+    "pendingReminders": [
+      "Bring student ID",
+      "Return library books"
+    ],
+    "insights": [
+      "You study better with noise-canceling headphones."
+    ],
+    "recentHistory": ["Dismissed alarm", "Opened notes app"],
+    "answeredQuestions": ["Q: Do you take morning classes? A: Yes"]
+  },
+  "Weekend Hiker": {
+    "currentPlace": "Home",
+    "userName": "Sam",
+    "nextUrgentItem": "Mountain Trail Hike at 7:00 AM",
+    "meetingLink": null,
+    "eventDescription": "15-mile loop trail. Difficulty: Hard.",
+    "eventLocation": "North Trailhead",
+    "guests": ["Chris", "Taylor"],
+    "upcomingEvents": [
+      "Lunch at Summit at 12:30 PM",
+      "Drive back home at 5:00 PM"
+    ],
+    "pendingReminders": [
+      "Check tire pressure",
+      "Pack trail mix"
+    ],
+    "insights": [
+      "You often forget your sunglasses on morning hikes.",
+      "You prefer to carry at least 2 liters of water."
+    ],
+    "recentHistory": ["Charged smartwatch"],
+    "answeredQuestions": ["Q: Do you exercise on weekends? A: Yes"]
+  }
+}
