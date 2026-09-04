@@ -179,5 +179,31 @@ final class PromptTester: ObservableObject {
             lastResult = "Error: \(error.localizedDescription)"
         }
     }
+    
+    func runOnboardingQuestions(scenarioName: String) async {
+        guard let context = scenarios[scenarioName] else { return }
+        
+        isTesting = true
+        defer { isTesting = false }
+        
+        print("\n\n====== [TEST: Onboarding Questions (\(scenarioName))] ======")
+        print("PROMPT TEXT:\n\(context.promptText)\n")
+        
+        do {
+            let questions = try await modelService.generateOnboardingQuestions(from: context)
+            print("--- RESULT ---")
+            for q in questions {
+                print("[\(q.category)] \(q.question)")
+            }
+            if questions.isEmpty {
+                print("No questions generated. (Model returned empty)")
+            }
+            print("===================================================\n\n")
+            lastResult = "Generated \(questions.count) questions."
+        } catch {
+            print("Error: \(error)")
+            lastResult = "Error: \(error.localizedDescription)"
+        }
+    }
 }
 #endif

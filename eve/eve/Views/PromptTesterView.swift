@@ -32,6 +32,10 @@ struct PromptTesterView: View {
                 Button("Test Insight Extraction") {
                     Task { await tester.runInsightExtraction(scenarioName: selectedScenario) }
                 }
+                
+                Button("Test Onboarding Questions") {
+                    Task { await tester.runOnboardingQuestions(scenarioName: selectedScenario) }
+                }
             }
             
             if tester.isTesting {

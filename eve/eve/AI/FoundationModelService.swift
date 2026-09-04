@@ -76,7 +76,7 @@ struct ReminderDecision {
 @Generable
 struct OnboardingQuestion {
 
-    @Guide(description: "A short yes/no question whose answer will improve reminders. Either confirms a concrete pattern from the user's data (e.g. 'You usually visit the gym on weekday evenings. Correct?') or asks about an important recurring need (e.g. 'Do you take medication on a regular schedule?').")
+    @Guide(description: "A short, simple yes/no question. NEVER ask compound questions. NEVER ask for details like 'when', 'what', 'where', or 'how'. E.g. 'Do you take medication on a schedule?'")
     let question: String
 
     @Guide(description: "One of: routine, health, pet, commute, work, preference")
@@ -90,7 +90,7 @@ struct OnboardingQuestionSet {
     @Guide(description: "Inference scratchpad to analyze user context before formulating questions")
     let thoughtProcess: String
 
-    @Guide(description: "5 to 6 concise yes/no onboarding questions, personalised to the context. Mix confirmations of patterns you can see with questions about important recurring needs such as medication, pets, commute, or exercise.")
+    @Guide(description: "Concise yes/no onboarding questions based ONLY on the provided context. If the user's data lacks clear patterns, return an empty array [] so the app can use its fallback questions.")
     let questions: [OnboardingQuestion]
 
 }
@@ -336,8 +336,11 @@ final class FoundationModelService: ReasoningEngine {
     Generate yes/no questions to improve reminder personalization from user context.
 
     - EVERY question MUST be answerable with a simple Yes or No.
-    - Prefer confirming concrete patterns visible in the provided context.
-    - Include questions about important recurring needs (medication, pets, commute, exercise, appointments).
+    - NEVER ask compound questions (e.g., "Do you exercise, and if so, when?").
+    - NEVER ask open-ended questions using "when", "what", "where", or "how".
+    - PRIORITIZE questions that confirm concrete patterns visible in the provided calendar and reminders.
+    - ONLY ask about generic topics (like medication, pets, commute) IF they are explicitly hinted at in the context.
+    - If there is not enough data to form meaningful questions, return an empty list of questions.
     - Limit each question to ONE sentence.
     - NEVER repeat questions.
 
