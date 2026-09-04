@@ -90,7 +90,8 @@ final class ReminderContextBuilder {
         eventDate: Date,
         eventNotes: String?,
         eventLocation: String?,
-        eventAttendees: String? = nil
+        eventAttendees: String? = nil,
+        eventMeetingURL: String? = nil
     ) -> PreparationPrompt? {
 
         // The event title is the prompt's subject and can't be filtered
@@ -112,6 +113,12 @@ final class ReminderContextBuilder {
 
         if let eventLocation, let safeLocation = englishOrNil(eventLocation) {
             eventLine += "\nLocation: \(UntrustedText.delimit(safeLocation))"
+        }
+
+        // A URL isn't prose, so it skips the language filter (it wouldn't trip
+        // the model's check anyway), but it's still attacker-reachable — wrap it.
+        if let eventMeetingURL, !eventMeetingURL.isEmpty {
+            eventLine += "\nMeeting link: \(UntrustedText.delimit(eventMeetingURL))"
         }
 
         if let eventAttendees, let safeAttendees = englishOrNil(eventAttendees) {
@@ -176,6 +183,9 @@ final class ReminderContextBuilder {
         var groundingTerms = eventKeywords
         groundingTerms.formUnion(keywords(from: eventLocation ?? ""))
         groundingTerms.formUnion(keywords(from: eventAttendees ?? ""))
+        // Grounds a prep item that names the provider ("Zoom", "Teams") — the
+        // host survives keyword extraction from the URL.
+        groundingTerms.formUnion(keywords(from: eventMeetingURL ?? ""))
         for line in reminders + beliefs + knowledge {
             groundingTerms.formUnion(keywords(from: UntrustedText.strip(line)))
         }
@@ -702,13 +712,18 @@ final class ReminderContextBuilder {
             var line = UntrustedText.delimit(event.title)
                 + " — \(event.startDate.formatted(date: .abbreviated, time: .shortened))"
 
-            // Location, guests and notes let Eve learn *why* an event matters,
-            // not just that it exists — so reminders can be personalised. Each
-            // is attacker-reachable invite text, so it is language-filtered and
-            // wrapped as untrusted; notes are excerpted to respect the shared
+            // Location, meeting link, guests and notes let Eve learn *why* an
+            // event matters, not just that it exists — so reminders can be
+            // personalised. Each is attacker-reachable invite text, so it is
+            // language-filtered (except the URL, which isn't prose) and wrapped
+            // as untrusted; notes are excerpted to respect the shared
             // 4096-token window.
             if let location = event.location.flatMap(englishOrNil) {
                 line += "\n  Location: \(UntrustedText.delimit(location))"
+            }
+
+            if let meetingURL = event.meetingURL, !meetingURL.isEmpty {
+                line += "\n  Meeting link: \(UntrustedText.delimit(meetingURL))"
             }
 
             if let attendees = event.attendees.flatMap(englishOrNil) {

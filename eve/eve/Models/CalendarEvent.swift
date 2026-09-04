@@ -50,6 +50,12 @@ final class CalendarEvent {
     /// sees it.
     var attendees: String?
 
+    /// The event's meeting link (EKEvent.url) — where Calendar puts a Zoom /
+    /// Teams / Meet URL. Signals an online meeting, which lets Eve personalise
+    /// ("you usually have virtual calls on Fridays"). Attacker-reachable like
+    /// the other invite fields, so it is wrapped by `UntrustedText`.
+    var meetingURL: String?
+
     init(event: EKEvent) {
 
         let identifier = event.eventIdentifier ?? UUID().uuidString
@@ -64,7 +70,7 @@ final class CalendarEvent {
         self.notes = HTMLText.plainIfNeeded(event.notes)
         self.location = event.location
         self.attendees = Self.attendeeNames(from: event)
-
+        self.meetingURL = event.url?.absoluteString
     }
 
     /// Display names of the event's guests, or nil when there are none.
