@@ -74,7 +74,8 @@ final class CalendarReminderManager {
                     eventTitle: event.title,
                     eventDate: event.startDate,
                     eventNotes: event.notes,
-                    eventLocation: event.location
+                    eventLocation: event.location,
+                    eventAttendees: event.attendees
                 ) else { return nil }
 
                 return PrepJob(

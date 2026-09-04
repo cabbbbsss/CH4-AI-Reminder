@@ -15,6 +15,12 @@ import NaturalLanguage
 /// into one ReminderContext.
 final class ReminderContextBuilder {
 
+    /// Max characters of an event's notes included in the wide `ReminderContext`.
+    /// Notes are the largest attacker-reachable span, and the prompt shares a
+    /// 4096-token window (TN3193), so the excerpt is capped rather than sent whole.
+    /// Lower this first if busy days push the context over budget.
+    private static let eventNotesExcerptLimit = 200
+
     private let context: ModelContext
 
     init(context: ModelContext) {
@@ -83,7 +89,8 @@ final class ReminderContextBuilder {
         eventTitle: String,
         eventDate: Date,
         eventNotes: String?,
-        eventLocation: String?
+        eventLocation: String?,
+        eventAttendees: String? = nil
     ) -> PreparationPrompt? {
 
         // The event title is the prompt's subject and can't be filtered
@@ -105,6 +112,10 @@ final class ReminderContextBuilder {
 
         if let eventLocation, let safeLocation = englishOrNil(eventLocation) {
             eventLine += "\nLocation: \(UntrustedText.delimit(safeLocation))"
+        }
+
+        if let eventAttendees, let safeAttendees = englishOrNil(eventAttendees) {
+            eventLine += "\nGuests: \(UntrustedText.delimit(safeAttendees))"
         }
 
         if let eventNotes, let safeNotes = englishOrNil(eventNotes) {
@@ -164,6 +175,7 @@ final class ReminderContextBuilder {
         // naming something it couldn't find in the context.
         var groundingTerms = eventKeywords
         groundingTerms.formUnion(keywords(from: eventLocation ?? ""))
+        groundingTerms.formUnion(keywords(from: eventAttendees ?? ""))
         for line in reminders + beliefs + knowledge {
             groundingTerms.formUnion(keywords(from: UntrustedText.strip(line)))
         }
@@ -680,11 +692,38 @@ final class ReminderContextBuilder {
 
         let events = (try? context.fetch(descriptor)) ?? []
 
-        return englishOnlyDelimiting(events.map {
-            (lead: "",
-             untrusted: $0.title,
-             trail: " — \($0.startDate.formatted(date: .abbreviated, time: .shortened))")
-        })
+        return events.compactMap { event -> String? in
+
+            // The title is the event's subject and gates the whole line: a
+            // non-English title makes the on-device model reject the prompt,
+            // so drop the event (the same rule the title-only version used).
+            guard isEnglishSafe(event.title) else { return nil }
+
+            var line = UntrustedText.delimit(event.title)
+                + " — \(event.startDate.formatted(date: .abbreviated, time: .shortened))"
+
+            // Location, guests and notes let Eve learn *why* an event matters,
+            // not just that it exists — so reminders can be personalised. Each
+            // is attacker-reachable invite text, so it is language-filtered and
+            // wrapped as untrusted; notes are excerpted to respect the shared
+            // 4096-token window.
+            if let location = event.location.flatMap(englishOrNil) {
+                line += "\n  Location: \(UntrustedText.delimit(location))"
+            }
+
+            if let attendees = event.attendees.flatMap(englishOrNil) {
+                line += "\n  Guests: \(UntrustedText.delimit(attendees))"
+            }
+
+            if let notes = event.notes.flatMap(englishOrNil), !notes.isEmpty {
+                let excerpt = notes.count > Self.eventNotesExcerptLimit
+                    ? String(notes.prefix(Self.eventNotesExcerptLimit)) + "…"
+                    : notes
+                line += "\n  Notes: \(UntrustedText.delimit(excerpt))"
+            }
+
+            return line
+        }
 
     }
 

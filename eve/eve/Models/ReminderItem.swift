@@ -29,7 +29,8 @@ final class ReminderItem {
         self.reminderIdentifier = reminder.calendarItemIdentifier
         self.title = reminder.title
         self.dueDate = reminder.dueDateComponents?.date
-        self.notes = reminder.notes
+        // Shared lists can deliver notes as HTML; store clean plain text.
+        self.notes = HTMLText.plainIfNeeded(reminder.notes)
         self.location = reminder.location
 
     }
