@@ -334,6 +334,7 @@ struct CalendarView: View {
 
   var body: some View {
     ZStack {
+          
         LinearGradient(
             colors: [Color(.gradientPrimaryStart), Color(.bgPrimary)],
             startPoint: .bottom,
@@ -348,7 +349,13 @@ struct CalendarView: View {
 //          .position(x: proxy.size.width / 2, y: -proxy.size.height * 0.1)
 //      }
 //      .ignoresSafeArea()
-
+       
+//        Rectangle()
+//            .fill(.blue)
+//            .frame(width: 300, height: 50)
+//            .glassEffect()
+//            .ignoresSafeArea(edges: .all)
+        
       VStack(spacing: 0) {
         // Timeline Container
         ZStack(alignment: .top) {
@@ -357,6 +364,9 @@ struct CalendarView: View {
             .ignoresSafeArea(edges: .bottom)
 
           VStack(spacing: 0) {
+            currentMonth
+                  .opacity(0.7)
+              
             weekStrip
               .padding(.top, 20)
               .padding(.bottom, 12)
@@ -460,7 +470,24 @@ struct CalendarView: View {
     }
   }
 
-  // MARK: - Week strip
+    // MARK: - Month
+    
+    private func getCurrentMonth(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM"
+        return formatter.string(from: date)
+    }
+    
+    private var currentMonth: some View {
+        Text(getCurrentMonth(from: selectedDate))
+            .font(.system(size: 34, weight: .black))
+            .foregroundColor(Color(.textPrimary))
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.horizontal, 24)
+            .padding(.top, 16)
+    }
+    
+    // MARK: - Week strip
 
   private var weekStrip: some View {
     SwipeCarousel(
