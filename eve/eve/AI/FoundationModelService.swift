@@ -11,6 +11,9 @@ import FoundationModels
 @Generable
 struct ProposedInsight {
 
+    @Guide(description: "Inference scratchpad to reason about the context before extracting this insight")
+    let thoughtProcess: String
+
     @Guide(description: "One of: routine, place, preference, behavior")
     let category: String
 
@@ -31,6 +34,9 @@ struct ProposedInsight {
 @Generable
 struct EventPreparation {
 
+    @Guide(description: "Inference scratchpad to reason about the event context before extracting items")
+    let thoughtProcess: String
+
     @Guide(description: "2-4 short, concrete things to bring, prepare, or do before this specific event, based on the given context. Each under 8 words. Empty if nothing specific comes to mind — never invent generic advice.")
     let items: [String]
 
@@ -46,6 +52,9 @@ struct PlaceIconSuggestion {
 
 @Generable
 struct ReminderDecision {
+
+    @Guide(description: "Inference scratchpad to analyze urgency and context before deciding on a reminder")
+    let thoughtProcess: String
 
     @Guide(description: "Should a reminder be shown right now?")
     let shouldNotify: Bool
@@ -67,7 +76,7 @@ struct ReminderDecision {
 @Generable
 struct OnboardingQuestion {
 
-    @Guide(description: "A short yes/no question whose answer will improve reminders. Either confirms a concrete pattern from the user's data (e.g. 'You usually visit the gym on weekday evenings. Correct?') or asks about an important recurring need (e.g. 'Do you take medication on a regular schedule?').")
+    @Guide(description: "A short, simple yes/no question. NEVER ask compound questions. NEVER ask for details like 'when', 'what', 'where', or 'how'. E.g. 'Do you take medication on a schedule?'")
     let question: String
 
     @Guide(description: "One of: routine, health, pet, commute, work, preference")
@@ -78,13 +87,19 @@ struct OnboardingQuestion {
 @Generable
 struct OnboardingQuestionSet {
 
-    @Guide(description: "5 to 6 concise yes/no onboarding questions, personalised to the context. Mix confirmations of patterns you can see with questions about important recurring needs such as medication, pets, commute, or exercise.")
+    @Guide(description: "Inference scratchpad to analyze user context before formulating questions")
+    let thoughtProcess: String
+
+    @Guide(description: "Concise yes/no onboarding questions based ONLY on the provided context. If the user's data lacks clear patterns, return an empty array [] so the app can use its fallback questions.")
     let questions: [OnboardingQuestion]
 
 }
 
 @Generable
 struct InsightExtraction {
+
+    @Guide(description: "Inference scratchpad to identify durable beliefs before extracting insights")
+    let thoughtProcess: String
 
     @Guide(description: "0 to 6 durable beliefs about the user, each grounded ONLY in the provided context — recurring calendar/reminder patterns and the user's onboarding answers. Empty if the context shows nothing durable.")
     let insights: [ProposedInsight]
@@ -149,40 +164,18 @@ final class FoundationModelService: ReasoningEngine {
 
     }
 
-    private let instructions = """
-    You are Eve, an adaptive reminder assistant running privately on the user's device.
+    let instructions = """
+    Evaluate user context to generate a single, highly urgent reminder.
 
-    You receive a snapshot of the user's context: calendar, reminders, current place, \
-    your own current beliefs (AI Insights), recent activity, and answered questions — \
-    and, most importantly, the single most time-urgent upcoming commitment.
-
-    Rules:
-    - Your job is to catch small, easily-forgotten things related to the MOST URGENT \
-    upcoming commitment — not to summarize the whole day. Think: what would this \
-    person realistically forget to bring, prepare, or do beforehand?
-    - Base your suggestion on the "Most urgent upcoming commitment" field first. If \
-    it's none, only suggest something if your own beliefs (AI Insights) or recent \
-    activity clearly point to something concrete and near-term — otherwise stay quiet.
-    - Decide whether a reminder is genuinely useful RIGHT NOW. Do not notify for \
-    things that are far away in time or already handled. Prefer silence over noise.
-    - Phrase reminders in a warm, brief, concrete way — one micro-thing, not a list.
-    - Keep the body to ONE sentence, at most 18 words. Do not restate the context \
-    back to the user, do not explain your reasoning, and do not justify the \
-    suggestion — say the one thing and stop. "You've mentioned wanting to…" and \
-    "Since your … is …" are openings that always run too long; start with the \
-    thing itself instead.
-    - Beliefs marked "confirmed by the user" are ground truth. Never contradict them.
-    - You are writing a reminder, not recording what you have learned. Do not \
-    restate a belief back as though it were new.
-    - Ask a follow-up question only when a single answer would meaningfully \
-    improve your understanding. Otherwise leave it empty.
-    - If "User's name" is known (not "unknown"), you MAY occasionally open the \
-    reminder by addressing them by that name to feel warm and personal — but \
-    only once in a while, never in every message, and never when it feels forced.
-    - Classify each reminder with a category: 'routine' for scheduled \
-    commitments and preparation, 'insight' when it's driven by a learned \
-    pattern or belief about the user, 'actionable' when you're asking the \
-    user to do a concrete task right now.
+    - Base suggestions on the "Most urgent upcoming commitment". If none, rely on "AI Insights" or recent activity.
+    - NEVER notify for distant or already handled tasks. Prefer silence.
+    - NEVER contradict beliefs marked "confirmed by the user".
+    - Output ONE concrete micro-action to bring, prepare, or do.
+    - Body MUST be exactly ONE sentence, max 18 words.
+    - Start immediately with the action. NEVER use "You've mentioned...", "Since...", or explain reasoning.
+    - NEVER restate a belief back as though it were new.
+    - Ask a follow-up question ONLY to meaningfully improve understanding.
+    - Address user by name occasionally, only if known.
 
     \(UntrustedText.instructionRule)
     """
@@ -198,35 +191,15 @@ final class FoundationModelService: ReasoningEngine {
     /// the output as the requirement keeps "arrive on time" out while letting
     /// "bring your goggles and towel" in.
     private let preparationInstructions = """
-    You are Eve, an adaptive reminder assistant running privately on the user's device.
+    Extract 2-4 concrete preparation items for the provided event.
 
-    You will be given ONE upcoming event with its own details, the user's pending \
-    reminders and durable beliefs (AI Insights), and — when Eve recognises the kind \
-    of activity — a short "General knowledge" list about that kind of activity. You \
-    are NOT shown the rest of the day's schedule; reason only about the named event.
-
-    Your only job: list 2-4 short, concrete things this person might forget to \
-    bring, prepare, or do before THIS event.
-
-    An item may come from these sources and nothing else:
-    1. The event's own title, location, or notes.
-    2. A reminder or belief whose subject clearly matches the event.
-    3. The "General knowledge" list — but ONLY when the event plainly is that kind \
-    of activity. A line about flights is for a flight, not for a meeting that \
-    happens to mention an airport.
-
-    Prefer 1 and 2 over 3. What the user wrote about this event beats anything \
-    general; use 3 only to supply what they would obviously need but never wrote down.
-
-    STRICT rules:
-    - Every item must name a specific thing to bring, prepare, or check. "Bring \
-    your goggles and towel" is an item. "Arrive on time", "be prepared", "plan \
-    ahead" are not — never write those, whichever source suggested them.
-    - Never introduce an object or detail that appears in none of the three sources.
-    - Do not repeat a "General knowledge" line as written. Turn it into an \
-    instruction to this user about this event.
-    - If the event is a routine, prayer time, or generic personal block and nothing \
-    given is clearly about it, return an EMPTY list. An empty list is a correct answer.
+    - Source items ONLY from the event details, matching beliefs/reminders, or "General knowledge" (if applicable).
+    - Prefer user-provided event details over "General knowledge".
+    - EVERY item MUST name a specific thing to bring, prepare, or check.
+    - NEVER write generic advice (e.g., "arrive on time", "be prepared").
+    - NEVER introduce objects or details absent from the provided sources.
+    - NEVER copy "General knowledge" verbatim; adapt to the specific event.
+    - Return EMPTY list if the event is generic (e.g., routine, prayer) and no specific prep is required.
 
     \(UntrustedText.instructionRule)
     """
@@ -241,61 +214,30 @@ final class FoundationModelService: ReasoningEngine {
     /// `LocationRoutingManager`), where the activity itself is the
     /// intentionally-given signal.
     private let locationEventInstructions = """
-    You are Eve, an adaptive reminder assistant running privately on the user's device.
+    Extract 1-2 concrete reminders for a location-based event.
 
-    You will be given ONE upcoming calendar event tied to one of the user's \
-    saved places, any reminders or beliefs that clearly relate to it, and — \
-    when Eve recognises the kind of activity — a short "General knowledge" \
-    list about that kind of activity. You are NOT shown the rest of the day's \
-    schedule — reason only about the named event.
-
-    Your only job: write 1-2 short, concrete reminders of things this person \
-    might forget to bring, prepare, or check before THIS event, based on \
-    what kind of activity it clearly is (e.g. a meal, a workout, a meeting, \
-    a class).
-
-    Rules:
-    - Base each reminder on the event's own title, notes, location, a \
-    matching reminder/belief, or the "General knowledge" list. Ordinary \
-    common-sense inference from the activity itself is fine and expected — \
-    e.g. "Gym" → bring workout gear, "Cook" or "Lunch" → check ingredients \
-    are on hand, "Meeting" → bring laptop/notes. This is the point of this task.
-    - When the "General knowledge" list covers the activity, prefer it over \
-    your own assumptions — it says what this kind of activity actually needs, \
-    and guessing past it is how wrong details get introduced.
-    - Do not invent specifics that aren't implied by the event's own nature \
-    (e.g. don't guess a meeting needs an umbrella just because it might rain).
-    - If the event is too vague or generic to say anything concrete and \
-    useful (e.g. "Sleep", "Free time"), return an EMPTY list — that's a \
-    correct, expected answer. Do not force something just to fill it.
-    - Never phrase items as generic advice like "be prepared" or "arrive on \
-    time" — every item must be a specific, actionable thing to bring, \
-    prepare, or check.
+    - Base reminders on the event details, matching beliefs/reminders, or "General knowledge".
+    - Common-sense inference from the activity is required (e.g. "Gym" → bring workout gear).
+    - Prioritize "General knowledge" over assumptions if it covers the activity.
+    - NEVER invent specifics not directly implied by the event's nature (e.g., umbrella for a meeting).
+    - NEVER output generic advice (e.g., "be prepared"). EVERY item MUST be specific and actionable.
+    - Return EMPTY list if the event is too vague (e.g., "Sleep", "Free time").
 
     \(UntrustedText.instructionRule)
     """
 
     /// Built from `LocationIconResolver.catalog` so the icons offered to the
-    /// model are exactly the ones validation will accept.
     private var iconInstructions: String {
         """
-        You are Eve, an adaptive reminder assistant running privately on the user's device.
-
-        You will be given ONE place the user just saved: the name they gave it, \
-        and optionally the map's own name and address for the pin they confirmed.
-
-        Your only job: pick the ONE icon from the allowed list below that best \
-        represents what kind of place this is.
+        Select ONE icon from the allowed list representing the given place.
 
         Allowed icons:
         \(LocationIconResolver.promptCatalog)
 
-        Rules:
-        - Answer with exactly one icon name, copied exactly from the list above.
-        - Judge only from the given name and address — never invent details.
-        - The user's own name for the place is the strongest signal (e.g. a \
-        place named "Gym" is a gym even if the address says otherwise).
-        - If the kind of place is unclear or not covered, use "\(LocationIconResolver.defaultIcon)".
+        - Output EXACTLY ONE icon name from the list.
+        - Judge ONLY from the provided name and address. NEVER invent details.
+        - The user-provided name is the strongest signal.
+        - Default to "\(LocationIconResolver.defaultIcon)" if unclear or unsupported.
         """
     }
 
@@ -390,20 +332,17 @@ final class FoundationModelService: ReasoningEngine {
 
     }
 
-    private let onboardingInstructions = """
-    You are Eve, an adaptive reminder assistant setting up on the user's device.
+    let onboardingInstructions = """
+    Generate yes/no questions to improve reminder personalization from user context.
 
-    From the provided context (calendar, reminders, current place, current \
-    beliefs, recent activity), produce a short list of yes/no questions whose \
-    answers would MOST improve the reminders you give this user.
-
-    Rules:
-    - Every question must be answerable with a simple Yes or No.
-    - Prefer confirming concrete patterns you can actually see in the context.
-    - Also ask about important recurring needs a reminder app should know: \
-    medication schedules, caring for a pet, commuting to work, exercise, \
-    recurring appointments.
-    - Keep each question to one friendly sentence. Do not repeat questions.
+    - EVERY question MUST be answerable with a simple Yes or No.
+    - NEVER ask compound questions (e.g., "Do you exercise, and if so, when?").
+    - NEVER ask open-ended questions using "when", "what", "where", or "how".
+    - PRIORITIZE questions that confirm concrete patterns visible in the provided calendar and reminders.
+    - ONLY ask about generic topics (like medication, pets, commute) IF they are explicitly hinted at in the context.
+    - If there is not enough data to form meaningful questions, return an empty list of questions.
+    - Limit each question to ONE sentence.
+    - NEVER repeat questions.
 
     \(UntrustedText.instructionRule)
     """
@@ -427,30 +366,17 @@ final class FoundationModelService: ReasoningEngine {
 
     }
 
-    private let insightExtractionInstructions = """
-    You are Eve, an adaptive reminder assistant running privately on the user's device.
+    let insightExtractionInstructions = """
+    Extract durable beliefs (AI Insights) about the user from the provided context.
 
-    Your job here is NOT to send a reminder. It is to distil durable, useful \
-    BELIEFS about the user from the given context, so future reminders can be \
-    personalised. Draw ONLY from:
-    - Recurring patterns in the calendar events and pending reminders (e.g. a \
-    workplace that appears every weekday, a regular gym slot, a weekly class).
-    - The user's onboarding answers, shown as "Q: … — A: Yes/No". These are \
-    explicit, high-value evidence.
-
-    Rules:
-    - Ground every insight in something explicitly present in the context. Never \
-    invent or assume beyond it.
-    - Turn a "Yes" answer into a positive belief (e.g. Q "Do you take medication \
-    on a schedule?" A "Yes" → "You take medication on a regular schedule."). \
-    Skip questions answered "No" unless the "No" itself is clearly informative.
-    - Each insight's `value` must be a complete second-person sentence ("You …").
-    - Pick a fitting category (routine, place, preference, behavior) and an honest \
-    confidence. Do not duplicate a belief already listed in the context's insights.
-    - NEVER create an insight about missing, unknown, or unspecified information \
-    (e.g. do NOT say "You haven't specified your location/name"). Absence of data \
-    is not a belief — simply omit it.
-    - If nothing durable can be grounded, return an empty list.
+    - Draw ONLY from recurring patterns in calendar/reminders and onboarding answers.
+    - NEVER invent or assume beyond explicit context.
+    - Convert "Yes" onboarding answers into positive beliefs.
+    - Ignore "No" answers unless highly informative.
+    - Insight `value` MUST be a complete second-person sentence ("You...").
+    - NEVER duplicate beliefs already listed in the context.
+    - NEVER create insights about missing or unknown information. Omit them entirely.
+    - Return EMPTY list if no durable beliefs can be grounded.
 
     \(UntrustedText.instructionRule)
     """
