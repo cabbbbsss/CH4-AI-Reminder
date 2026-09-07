@@ -21,15 +21,14 @@ struct InsightView: View {
 
   var body: some View {
     ZStack {
-      LinearGradient(
-        stops: [
-          .init(color: Color(.bgPrimary), location: 0.75),
-          .init(color: Color(.bgSecondary), location: 1.0)
-        ],
-        startPoint: .top,
-        endPoint: .bottom
-      )
-      .ignoresSafeArea()
+        Color(.bgSecondary).ignoresSafeArea()
+
+        Rectangle()
+            .fill(Color.bgPrimary)
+            .frame(width: 800, height: 500)
+            .blur(radius: 150)
+            .position(x: 200, y: 150)
+            .ignoresSafeArea(edges: .all)
 
       VStack(spacing: 0) {
         // ── Character + Chat Bubble ─────────────────────────
@@ -66,7 +65,7 @@ struct InsightView: View {
         // ── Insights Card Container ─────────────────────────
         ZStack(alignment: .top) {
           Color(.bgSecondary)
-            .cornerRadius(64, corners: [.topLeft, .topRight])
+            .cornerRadius(32, corners: [.topLeft, .topRight])
             .ignoresSafeArea(edges: .bottom)
 
           VStack(spacing: 0) {

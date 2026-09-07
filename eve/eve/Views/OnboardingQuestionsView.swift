@@ -39,13 +39,13 @@ struct OnboardingQuestionsView: View {
         // Subtitle
         Text("EVE has a few questions to\nrefine your reminders.")
           .font(.system(size: 17, weight: .regular))
-          .foregroundColor(Color(.textSecondary).opacity(0.55))
+          .foregroundColor(Color(.textPrimary).opacity(0.55))
           .padding(.top, 120)
 
         // Progress
         Text("\(min(index + 1, questions.count)) of \(questions.count)")
           .font(.system(size: 13, weight: .semibold))
-          .foregroundColor(Color(.textSecondary).opacity(0.4))
+          .foregroundColor(Color(.textPrimary).opacity(0.4))
           .padding(.top, 24)
 
         if let question = questions[safe: index] {
@@ -53,7 +53,7 @@ struct OnboardingQuestionsView: View {
           // Question text
           Text(question.question)
             .font(.system(size: 22, weight: .bold))
-            .foregroundColor(Color(.textSecondary))
+            .foregroundColor(Color(.textPrimary))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, 12)
             .id(index) // re-triggers the transition per question
@@ -126,7 +126,7 @@ struct OnboardingQuestionsView: View {
     } label: {
       Text(title)
         .font(.system(size: 16, weight: .bold))
-        .foregroundColor(isSelected ? .white : Color(.textSecondary))
+        .foregroundColor(isSelected ? .white : Color(.textPrimary))
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
         .overlay(alignment: .leading) {
@@ -142,7 +142,7 @@ struct OnboardingQuestionsView: View {
             .fill(isSelected ? Color.accentColor : Color.clear)
             .overlay {
               if !isSelected {
-                Capsule().stroke(Color(.textSecondary).opacity(0.4), lineWidth: 1.5)
+                Capsule().stroke(Color(.textPrimary).opacity(0.4), lineWidth: 1.5)
               }
             }
         }
@@ -211,17 +211,18 @@ struct OnboardingQuestionsView: View {
 
   // MARK: - Background
 
-  private var background: some View {
-    LinearGradient(
-      stops: [
-        .init(color: Color(.gradientSecondaryStart), location: 0.0),
-        .init(color: Color(.gradientSecondaryStart), location: 0.35),
-        .init(color: Color(.textTertiary), location: 0.7),
-        .init(color: Color(.gradientPrimaryStart), location: 1.0)
-      ],
-      startPoint: .top,
-      endPoint: .bottom
-    )
+    private var background: some View {
+        
+       ZStack {
+        Color(.bgPrimary).ignoresSafeArea()
+        
+        Rectangle()
+            .fill(Color.bgSecondary.opacity(0.8))
+            .frame(width: 800, height: 500)
+            .blur(radius: 150)
+            .position(x: 200, y: 150)
+            .ignoresSafeArea(edges: .all)
+    }
     .ignoresSafeArea()
   }
 }

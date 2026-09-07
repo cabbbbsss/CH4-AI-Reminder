@@ -100,15 +100,15 @@ struct LocationView: View {
 
     private var screen: some View {
         ZStack {
-            Color(.bgPrimary).ignoresSafeArea()
+            Color(.bgPrimary)
+                .ignoresSafeArea()
 
-            GeometryReader { proxy in
-                Ellipse()
-                    .fill(Color(.bgSecondary))
-                    .frame(width: proxy.size.width * 2.5, height: proxy.size.height * 1.2)
-                    .position(x: proxy.size.width / 2, y: -proxy.size.height * 0.1)
-            }
-            .ignoresSafeArea()
+            Rectangle()
+                .fill(Color.bgSecondary.opacity(0.8))
+                .frame(width: 800, height: 500)
+                .blur(radius: 150)
+                .position(x: 200, y: 150)
+                .ignoresSafeArea(edges: .all)
 
             if savedLocations.isEmpty {
                 emptyLocationsState
