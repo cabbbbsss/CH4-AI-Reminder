@@ -27,6 +27,11 @@ struct ReminderContext {
     /// rather than nudge about something far away.
     let nextUrgentItem: String?
 
+    let meetingLink: String?
+    let eventDescription: String?
+    let eventLocation: String?
+    let guests: [String]?
+
     let upcomingEvents: [String]
 
     let pendingReminders: [String]
@@ -51,11 +56,12 @@ struct ReminderContext {
 
         var terms = Set<String>()
 
-        for text in [currentPlace, userName, nextUrgentItem].compactMap({ $0 }) {
+        for text in [currentPlace, userName, nextUrgentItem, meetingLink, eventDescription, eventLocation].compactMap({ $0 }) {
             terms.formUnion(OutputGrounding.contentTerms(of: UntrustedText.strip(text)))
         }
 
-        for line in upcomingEvents + pendingReminders + insights + recentHistory + answeredQuestions {
+        let allStringLists = upcomingEvents + pendingReminders + insights + recentHistory + answeredQuestions + (guests ?? [])
+        for line in allStringLists {
             terms.formUnion(OutputGrounding.contentTerms(of: UntrustedText.strip(line)))
         }
 
@@ -77,6 +83,10 @@ struct ReminderContext {
         User's name: \((userName?.isEmpty == false ? userName : nil) ?? "unknown")
 
         Most urgent upcoming commitment: \(nextUrgentItem ?? "none within the next 24 hours")
+        Meeting link: \(meetingLink ?? "none")
+        Event location: \(eventLocation ?? "none")
+        Event description: \(eventDescription ?? "none")
+        \(section("Guests", guests ?? []))
 
         \(section("Upcoming calendar events", upcomingEvents))
 

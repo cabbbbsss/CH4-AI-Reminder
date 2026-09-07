@@ -53,10 +53,12 @@ final class AssistantManager {
         // for a case that has one obvious right answer.
         guard contextBuilder.hasAnyPendingCommitment() else {
             lastDecision = ReminderDecision(
+                thoughtProcess: "No pending commitment found, skipping model.",
                 shouldNotify: false,
                 category: "routine",
                 title: "All clear",
-                body: "Your day's wide open — I'll keep watch and let you know if anything comes up."
+                body: "Your day's wide open — I'll keep watch and let you know if anything comes up.",
+                followUpQuestion: nil
             )
             return
         }
@@ -147,10 +149,12 @@ final class AssistantManager {
         #endif
 
         return ReminderDecision(
+            thoughtProcess: decision.thoughtProcess,
             shouldNotify: false,
             category: decision.category,
             title: decision.title,
-            body: decision.body
+            body: decision.body,
+            followUpQuestion: decision.followUpQuestion
         )
 
     }
