@@ -25,7 +25,7 @@
       "shouldNotify": true,
       "category": "actionable",
       "title": "Upcoming Board Meeting",
-      "body": "Print the Q3 financial reports for the meeting in Conference Room A."
+      "body": "Print and review the Q3 financial reports for the meeting in Conference Room A."
     }
   },
   "Student Morning": {
@@ -52,7 +52,7 @@
       "shouldNotify": true,
       "category": "actionable",
       "title": "Calculus Exam",
-      "body": "Bring your student ID, #2 pencils, and a calculator to Room 402."
+      "body": "Bring your student ID, #2 pencils, calculator, and noise-canceling headphones to Room 402."
     }
   },
   "Weekend Hiker": {
@@ -81,7 +81,7 @@
       "shouldNotify": true,
       "category": "insight",
       "title": "Mountain Trail Hike",
-      "body": "Don't forget to pack your sunglasses and at least 2 liters of water."
+      "body": "Check tire pressure, and pack trail mix, sunglasses, and 2 liters of water."
     }
   }
 }
