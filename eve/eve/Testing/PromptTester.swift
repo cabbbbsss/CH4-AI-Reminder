@@ -177,34 +177,54 @@ final class PromptTester: ObservableObject {
         var score = 0.0
         
         if real.shouldNotify == expected.shouldNotify {
-            score += 40.0
-        }
-        
-        if real.category.lowercased() == expected.category.lowercased() {
             score += 20.0
         }
         
-        let titleScore = jaccardSimilarity(real.title, expected.title)
-        score += (titleScore * 15.0)
+        if real.category.lowercased() == expected.category.lowercased() {
+            score += 10.0
+        }
         
-        let bodyScore = jaccardSimilarity(real.body, expected.body)
-        score += (bodyScore * 25.0)
+        let titleScore = keywordMatchSimilarity(actual: real.title, expected: expected.title)
+        score += (titleScore * 20.0)
+        
+        let bodyScore = keywordMatchSimilarity(actual: real.body, expected: expected.body)
+        score += (bodyScore * 50.0)
+        
+        // Apply a heavy penalty if the core message (the body) is mostly wrong or hallucinated
+        if bodyScore < 0.3 {
+            score *= 0.5
+        }
         
         return score
     }
     
-    private func jaccardSimilarity(_ s1: String, _ s2: String) -> Double {
-        func getWords(_ s: String) -> Set<String> {
+    private func keywordMatchSimilarity(actual: String, expected: String) -> Double {
+        let stopWords: Set<String> = ["the", "a", "an", "to", "for", "in", "at", "on", "and", "or", "of", "with", "is", "are", "be", "your", "my", "it", "this", "that"]
+        
+        func processWords(_ s: String) -> Set<String> {
             let words = s.lowercased()
                 .components(separatedBy: CharacterSet.alphanumerics.inverted)
-                .filter { !$0.isEmpty }
+                .filter { !$0.isEmpty && !stopWords.contains($0) }
+                .map { word -> String in
+                    var w = word
+                    if w.hasSuffix("ing") { w.removeLast(3) }
+                    else if w.hasSuffix("ed") { w.removeLast(2) }
+                    else if w.hasSuffix("es") && w.count > 3 { w.removeLast(2) }
+                    else if w.hasSuffix("s") && w.count > 2 { w.removeLast(1) }
+                    return w
+                }
             return Set(words)
         }
-        let set1 = getWords(s1)
-        let set2 = getWords(s2)
-        let intersection = set1.intersection(set2).count
-        let union = set1.union(set2).count
-        return union == 0 ? (intersection == 0 ? 1.0 : 0.0) : Double(intersection) / Double(union)
+        
+        let actualWords = processWords(actual)
+        let expectedWords = processWords(expected)
+        
+        if expectedWords.isEmpty { return 1.0 }
+        
+        let intersection = expectedWords.intersection(actualWords).count
+        let union = expectedWords.union(actualWords).count
+        
+        return union == 0 ? 1.0 : Double(intersection) / Double(union)
     }
 
     // MARK: - Test Runners

@@ -50,7 +50,7 @@
     "answeredQuestions": ["Q: Do you take morning classes? A: Yes"],
     "expectedDecision": {
       "shouldNotify": true,
-      "category": "routine",
+      "category": "actionable",
       "title": "Calculus Exam",
       "body": "Bring your student ID, #2 pencils, and a calculator to Room 402."
     }
