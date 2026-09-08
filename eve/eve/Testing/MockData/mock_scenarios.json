@@ -23,7 +23,7 @@
     "answeredQuestions": ["Q: Do you commute by train? A: No"],
     "expectedDecision": {
       "shouldNotify": true,
-      "category": "Preparation",
+      "category": "actionable",
       "title": "Upcoming Board Meeting",
       "body": "Print the Q3 financial reports for the meeting in Conference Room A."
     }
@@ -50,7 +50,7 @@
     "answeredQuestions": ["Q: Do you take morning classes? A: Yes"],
     "expectedDecision": {
       "shouldNotify": true,
-      "category": "Preparation",
+      "category": "routine",
       "title": "Calculus Exam",
       "body": "Bring your student ID, #2 pencils, and a calculator to Room 402."
     }
@@ -79,7 +79,7 @@
     "answeredQuestions": ["Q: Do you exercise on weekends? A: Yes"],
     "expectedDecision": {
       "shouldNotify": true,
-      "category": "Preparation",
+      "category": "insight",
       "title": "Mountain Trail Hike",
       "body": "Don't forget to pack your sunglasses and at least 2 liters of water."
     }
