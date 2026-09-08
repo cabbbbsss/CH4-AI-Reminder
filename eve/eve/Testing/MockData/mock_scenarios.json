@@ -20,7 +20,13 @@
       "You always arrive at the airport 2 hours early."
     ],
     "recentHistory": ["Arrived at Office"],
-    "answeredQuestions": ["Q: Do you commute by train? A: No"]
+    "answeredQuestions": ["Q: Do you commute by train? A: No"],
+    "expectedDecision": {
+      "shouldNotify": true,
+      "category": "Preparation",
+      "title": "Upcoming Board Meeting",
+      "body": "Print the Q3 financial reports for the meeting in Conference Room A."
+    }
   },
   "Student Morning": {
     "currentPlace": "Dorm",
@@ -41,7 +47,13 @@
       "You study better with noise-canceling headphones."
     ],
     "recentHistory": ["Dismissed alarm", "Opened notes app"],
-    "answeredQuestions": ["Q: Do you take morning classes? A: Yes"]
+    "answeredQuestions": ["Q: Do you take morning classes? A: Yes"],
+    "expectedDecision": {
+      "shouldNotify": true,
+      "category": "Preparation",
+      "title": "Calculus Exam",
+      "body": "Bring your student ID, #2 pencils, and a calculator to Room 402."
+    }
   },
   "Weekend Hiker": {
     "currentPlace": "Home",
@@ -64,6 +76,12 @@
       "You prefer to carry at least 2 liters of water."
     ],
     "recentHistory": ["Charged smartwatch"],
-    "answeredQuestions": ["Q: Do you exercise on weekends? A: Yes"]
+    "answeredQuestions": ["Q: Do you exercise on weekends? A: Yes"],
+    "expectedDecision": {
+      "shouldNotify": true,
+      "category": "Preparation",
+      "title": "Mountain Trail Hike",
+      "body": "Don't forget to pack your sunglasses and at least 2 liters of water."
+    }
   }
 }

@@ -9,6 +9,13 @@ import OSLog
 
 private let logger = Logger(subsystem: "com.caca.Eve", category: "PromptTester")
 
+struct ExpectedDecision: Codable {
+    let shouldNotify: Bool
+    let category: String
+    let title: String
+    let body: String
+}
+
 struct MockScenario: Decodable {
     let currentPlace: String?
     let userName: String?
@@ -22,6 +29,7 @@ struct MockScenario: Decodable {
     let insights: [String]
     let recentHistory: [String]
     let answeredQuestions: [String]
+    let expectedDecision: ExpectedDecision?
     
     var context: ReminderContext {
         ReminderContext(
@@ -50,6 +58,8 @@ struct TestResult: Codable {
     let promptText: String
     let thoughtProcess: String
     let output: String
+    let expectedOutput: String?
+    let accuracyScore: Double?
     let timestamp: Date
 }
 
@@ -65,6 +75,9 @@ final class PromptTester: ObservableObject {
     @Published var currentThoughtProcess: String = ""
     @Published var ragUsed: Bool = false
     @Published var scenarios: [String: ReminderContext] = [:]
+    @Published var rawScenarios: [String: MockScenario] = [:]
+    @Published var lastAccuracyScore: Double? = nil
+    @Published var lastExpectedOutput: String? = nil
 
     init() {
         loadScenarios()
@@ -80,6 +93,7 @@ final class PromptTester: ObservableObject {
                     loadedScenarios[key] = value.context
                 }
                 self.scenarios = loadedScenarios
+                self.rawScenarios = decoded
                 logger.info("Loaded \(loadedScenarios.count) mock scenarios from bundle.")
             } catch {
                 logger.error("Failed to decode mock scenarios: \(error.localizedDescription)")
@@ -118,10 +132,86 @@ final class PromptTester: ObservableObject {
         return !context.insights.isEmpty || !context.upcomingEvents.isEmpty || !context.pendingReminders.isEmpty
     }
 
+    // MARK: - Markdown Logger
+    
+    private func logToMarkdown(result: TestResult) {
+        do {
+            let docsUrl = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            let mdUrl = docsUrl.appendingPathComponent("test_history.md")
+            
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateStyle = .medium
+            dateFormatter.timeStyle = .medium
+            
+            var content = "\n## Test Run: \(dateFormatter.string(from: result.timestamp))\n"
+            content += "**Scenario:** \(result.scenarioName) (\(result.testType))\n"
+            content += "**RAG Active:** \(result.ragUsed ? "Yes" : "No")\n"
+            
+            if let accuracy = result.accuracyScore {
+                content += "**Accuracy Score:** \(String(format: "%.1f%%", accuracy))\n"
+            }
+            if let expected = result.expectedOutput {
+                content += "\n### Expected Output:\n```\n\(expected)\n```\n"
+            }
+            content += "\n### Actual Output:\n```\n\(result.output)\n```\n"
+            
+            if FileManager.default.fileExists(atPath: mdUrl.path) {
+                let fileHandle = try FileHandle(forWritingTo: mdUrl)
+                fileHandle.seekToEndOfFile()
+                if let data = content.data(using: .utf8) {
+                    fileHandle.write(data)
+                }
+                fileHandle.closeFile()
+            } else {
+                let header = "# AI Evaluation History\n"
+                try (header + content).write(to: mdUrl, atomically: true, encoding: .utf8)
+            }
+        } catch {
+            logger.error("Failed to append markdown log: \(error.localizedDescription)")
+        }
+    }
+    
+    // MARK: - Accuracy Scoring
+    
+    private func calculateAccuracy(real: ReminderDecision, expected: ExpectedDecision) -> Double {
+        var score = 0.0
+        
+        if real.shouldNotify == expected.shouldNotify {
+            score += 40.0
+        }
+        
+        if real.category.lowercased() == expected.category.lowercased() {
+            score += 20.0
+        }
+        
+        let titleScore = jaccardSimilarity(real.title, expected.title)
+        score += (titleScore * 15.0)
+        
+        let bodyScore = jaccardSimilarity(real.body, expected.body)
+        score += (bodyScore * 25.0)
+        
+        return score
+    }
+    
+    private func jaccardSimilarity(_ s1: String, _ s2: String) -> Double {
+        func getWords(_ s: String) -> Set<String> {
+            let words = s.lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { !$0.isEmpty }
+            return Set(words)
+        }
+        let set1 = getWords(s1)
+        let set2 = getWords(s2)
+        let intersection = set1.intersection(set2).count
+        let union = set1.union(set2).count
+        return union == 0 ? (intersection == 0 ? 1.0 : 0.0) : Double(intersection) / Double(union)
+    }
+
     // MARK: - Test Runners
     
     func runReminderDecision(scenarioName: String) async {
         guard let context = scenarios[scenarioName] else { return }
+        let rawScenario = rawScenarios[scenarioName]
         
         isTesting = true
         defer { isTesting = false }
@@ -130,6 +220,8 @@ final class PromptTester: ObservableObject {
         currentPromptText = context.promptText
         ragUsed = checkRAGUsed(context: context)
         currentThoughtProcess = ""
+        lastAccuracyScore = nil
+        lastExpectedOutput = nil
         lastResult = "Generating..."
         
         do {
@@ -142,9 +234,19 @@ final class PromptTester: ObservableObject {
             output += "Body: \(decision.body)\n"
             output += "Follow Up: \(decision.followUpQuestion ?? "None")"
             
+            var expectedStr: String? = nil
+            var accuracy: Double? = nil
+            
+            if let expected = rawScenario?.expectedDecision {
+                expectedStr = "Should Notify: \(expected.shouldNotify)\nCategory: \(expected.category)\nTitle: \(expected.title)\nBody: \(expected.body)"
+                accuracy = calculateAccuracy(real: decision, expected: expected)
+                lastAccuracyScore = accuracy
+                lastExpectedOutput = expectedStr
+            }
+            
             lastResult = output
             
-            saveResult(TestResult(
+            let result = TestResult(
                 scenarioName: scenarioName,
                 testType: "Reminder Decision",
                 ragUsed: ragUsed,
@@ -152,8 +254,13 @@ final class PromptTester: ObservableObject {
                 promptText: currentPromptText,
                 thoughtProcess: currentThoughtProcess,
                 output: output,
+                expectedOutput: expectedStr,
+                accuracyScore: accuracy,
                 timestamp: Date()
-            ))
+            )
+            
+            saveResult(result)
+            logToMarkdown(result: result)
             
         } catch {
             lastResult = "Error: \(error.localizedDescription)"
@@ -184,7 +291,7 @@ final class PromptTester: ObservableObject {
             }
             lastResult = output
             
-            saveResult(TestResult(
+            let result = TestResult(
                 scenarioName: scenarioName,
                 testType: "Event Preparation",
                 ragUsed: ragUsed,
@@ -192,8 +299,12 @@ final class PromptTester: ObservableObject {
                 promptText: currentPromptText,
                 thoughtProcess: currentThoughtProcess,
                 output: output,
+                expectedOutput: nil,
+                accuracyScore: nil,
                 timestamp: Date()
-            ))
+            )
+            saveResult(result)
+            logToMarkdown(result: result)
         } catch {
             lastResult = "Error: \(error.localizedDescription)"
         }
@@ -226,7 +337,7 @@ final class PromptTester: ObservableObject {
             }
             lastResult = output
             
-            saveResult(TestResult(
+            let result = TestResult(
                 scenarioName: scenarioName,
                 testType: "Insight Extraction",
                 ragUsed: ragUsed,
@@ -234,8 +345,12 @@ final class PromptTester: ObservableObject {
                 promptText: currentPromptText,
                 thoughtProcess: currentThoughtProcess,
                 output: output,
+                expectedOutput: nil,
+                accuracyScore: nil,
                 timestamp: Date()
-            ))
+            )
+            saveResult(result)
+            logToMarkdown(result: result)
         } catch {
             lastResult = "Error: \(error.localizedDescription)"
         }
@@ -266,7 +381,7 @@ final class PromptTester: ObservableObject {
             }
             lastResult = output
             
-            saveResult(TestResult(
+            let result = TestResult(
                 scenarioName: scenarioName,
                 testType: "Onboarding Questions",
                 ragUsed: ragUsed,
@@ -274,8 +389,12 @@ final class PromptTester: ObservableObject {
                 promptText: currentPromptText,
                 thoughtProcess: currentThoughtProcess,
                 output: output,
+                expectedOutput: nil,
+                accuracyScore: nil,
                 timestamp: Date()
-            ))
+            )
+            saveResult(result)
+            logToMarkdown(result: result)
         } catch {
             lastResult = "Error: \(error.localizedDescription)"
         }
