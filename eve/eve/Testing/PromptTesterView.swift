@@ -9,6 +9,7 @@ import SwiftUI
 struct PromptTesterView: View {
     @StateObject private var tester = PromptTester()
     @State private var selectedScenario: String = ""
+    @State private var copiedToClipboard = false
     
     var body: some View {
         ScrollView {
@@ -29,6 +30,12 @@ struct PromptTesterView: View {
                             selectedScenario = first
                         }
                     }
+                    
+                    Button(copiedToClipboard ? "History Copied!" : "Copy MD History") {
+                        copyHistoryToClipboard()
+                    }
+                    .buttonStyle(.bordered)
+                    .foregroundColor(copiedToClipboard ? .green : .blue)
                 }
                 
                 HStack(spacing: 12) {
@@ -115,7 +122,7 @@ struct PromptTesterView: View {
                         
                         // Final Output
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Final Output")
+                            Text("Actual Model Output")
                                 .font(.headline)
                             Text(tester.lastResult)
                                 .font(.system(.body, design: .monospaced))
@@ -123,6 +130,32 @@ struct PromptTesterView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(Color.green.opacity(0.1))
                                 .cornerRadius(8)
+                        }
+                        
+                        // Expected Output & Accuracy
+                        if let expected = tester.lastExpectedOutput {
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Text("Expected Output")
+                                        .font(.headline)
+                                    Spacer()
+                                    if let accuracy = tester.lastAccuracyScore {
+                                        Text("Accuracy: \(String(format: "%.1f%%", accuracy))")
+                                            .font(.subheadline).bold()
+                                            .foregroundColor(accuracy >= 80 ? .green : (accuracy >= 50 ? .orange : .red))
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.black.opacity(0.1))
+                                            .cornerRadius(6)
+                                    }
+                                }
+                                Text(expected)
+                                    .font(.system(.body, design: .monospaced))
+                                    .padding()
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(Color.purple.opacity(0.1))
+                                    .cornerRadius(8)
+                            }
                         }
                     }
                     .padding()
@@ -133,6 +166,21 @@ struct PromptTesterView: View {
             .padding()
         }
         .navigationTitle("Prompt Tester")
+    }
+    
+    private func copyHistoryToClipboard() {
+        do {
+            let docsUrl = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            let mdUrl = docsUrl.appendingPathComponent("test_history.md")
+            let content = try String(contentsOf: mdUrl, encoding: .utf8)
+            UIPasteboard.general.string = content
+            copiedToClipboard = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                copiedToClipboard = false
+            }
+        } catch {
+            print("Failed to copy history: \\(error)")
+        }
     }
 }
 #endif
