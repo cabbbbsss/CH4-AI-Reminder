@@ -136,7 +136,7 @@ struct HomeView: View {
 
             Rectangle()
                 .fill(Color.bgSecondary.opacity(0.8))
-                .frame(width: 800, height: 500)
+                .frame(width: 800, height: 300)
                 .blur(radius: 150)
                 .position(x: 200, y: 150)
                 .ignoresSafeArea(edges: .all)
@@ -144,7 +144,7 @@ struct HomeView: View {
             Rectangle()
                 .fill(Color(.bgSecondary))
                 .cornerRadius(20)
-                .frame(width: 390, height: 490)
+                .frame(width: 390, height: 320)
                 .ignoresSafeArea(edges: .top)
                 .frame(maxHeight: .infinity, alignment: .top)
 
@@ -196,7 +196,6 @@ struct HomeView: View {
                     .buttonBorderShape(.circle)
                     .background(Color(.bgTertiary))
                     .clipShape(Circle())
-                    .frame(maxHeight: .infinity, alignment: .topTrailing)
                     .padding(20)
                 }
                 .padding(.top, 20)
