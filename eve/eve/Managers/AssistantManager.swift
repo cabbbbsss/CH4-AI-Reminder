@@ -10,15 +10,13 @@ import SwiftData
 
 /// Orchestrates one full assistant cycle:
 /// build ReminderContext → ask the Foundation Model → apply the decision
-/// (notification, insight changes, follow-up question).
+/// (notification, insight changes).
 @Observable
 final class AssistantManager {
 
     private(set) var isThinking = false
 
     private(set) var lastDecision: ReminderDecision?
-
-    private(set) var pendingQuestion: String?
 
     private(set) var errorMessage: String?
 
@@ -30,16 +28,10 @@ final class AssistantManager {
 
     private let notificationService: NotificationService
 
-    private let historyLogger: HistoryLogger
-
-    private let modelContext: ModelContext
-
     init(context: ModelContext, notificationService: NotificationService) {
         self.contextBuilder = ReminderContextBuilder(context: context)
         self.insightManager = InsightManager(context: context)
         self.notificationService = notificationService
-        self.historyLogger = HistoryLogger(context: context)
-        self.modelContext = context
     }
 
     /// Runs one assistant cycle: build context → ask the model → apply
@@ -52,7 +44,6 @@ final class AssistantManager {
 
         isThinking = true
         errorMessage = nil
-        pendingQuestion = nil
 
         defer { isThinking = false }
 
@@ -82,7 +73,6 @@ final class AssistantManager {
             )
 
             lastDecision = decision
-            pendingQuestion = decision.followUpQuestion
 
             if notify && decision.shouldNotify
                 && NotificationPreferences.isEnabled(forCategory: decision.category) {
@@ -235,28 +225,6 @@ final class AssistantManager {
             notRestating: prompt.subjectTerms,
             label: "prep/\(title)"
         )
-
-    }
-
-    /// Stores the user's answer to Eve's follow-up question.
-    /// It becomes context for every future decision.
-    func answerPendingQuestion(with answer: String) {
-
-        guard let question = pendingQuestion else { return }
-
-        modelContext.insert(
-            QuestionAnswer(question: question, answer: answer)
-        )
-
-        try? historyLogger.log(
-            .questionAnswered,
-            title: question,
-            detail: answer
-        )
-
-        try? modelContext.save()
-
-        pendingQuestion = nil
 
     }
 

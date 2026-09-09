@@ -165,13 +165,17 @@ final class EventKitSyncManager {
                     || current.startDate != event.startDate
                     || current.endDate != event.endDate
                     || current.notes != event.notes
-                    || current.location != event.location {
+                    || current.location != event.location
+                    || current.attendees != event.attendees
+                    || current.meetingURL != event.meetingURL {
 
                     current.title = event.title
                     current.startDate = event.startDate
                     current.endDate = event.endDate
                     current.notes = event.notes
                     current.location = event.location
+                    current.attendees = event.attendees
+                    current.meetingURL = event.meetingURL
 
                     updated += 1
 

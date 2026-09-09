@@ -12,8 +12,31 @@ import Foundation
 
 /// The three notification kinds the user can toggle. Raw values map each
 /// category to the `@AppStorage` key its switch writes in NotificationSettingsView.
-enum NotificationCategory: String {
+enum NotificationCategory: String, CaseIterable {
     case routine, insight, actionable
+
+    /// What each category means, in the words the model is given.
+    ///
+    /// One list drives both the AI instructions and `isEnabled(forCategory:)`,
+    /// so a prompt can never offer a category the app doesn't recognise —
+    /// the same move `LocationIconResolver.catalog` makes for icon names.
+    nonisolated var meaning: String {
+        switch self {
+        case .routine:    "for a scheduled commitment or preparation"
+        case .insight:    "when driven by a learned pattern or belief about the user"
+        case .actionable: "when asking the user to do a concrete task right now"
+        }
+    }
+
+    /// Just the names, for a short "one of" list.
+    nonisolated static var promptNames: String {
+        allCases.map(\.rawValue).joined(separator: ", ")
+    }
+
+    /// The names with their meanings, as the instructions phrase them.
+    nonisolated static var promptCatalog: String {
+        allCases.map { "'\($0.rawValue)' \($0.meaning)" }.joined(separator: "; ")
+    }
 
     var preferenceKey: String {
         switch self {

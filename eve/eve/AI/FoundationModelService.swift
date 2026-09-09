@@ -14,7 +14,7 @@ struct ProposedInsight {
     @Guide(description: "Inference scratchpad to reason about the context before extracting this insight")
     let thoughtProcess: String
 
-    @Guide(description: "One of: routine, place, preference, behavior")
+    @Guide(description: "One of: \(InsightCategory.promptNames)")
     let category: String
 
     @Guide(description: "Short internal key for this belief, used only for matching and editing — never displayed as standalone text in the UI. Examples: 'Workplace', 'Meeting Format', 'Morning Exercise'")
@@ -59,7 +59,7 @@ struct ReminderDecision {
     @Guide(description: "Should a reminder be shown right now?")
     let shouldNotify: Bool
 
-    @Guide(description: "The kind of reminder. One of: routine, insight, actionable. Use 'routine' for scheduled commitments and preparation; 'insight' when driven by a learned pattern/belief about the user; 'actionable' when asking the user to do a concrete task now.")
+    @Guide(description: "The kind of reminder. One of: \(NotificationCategory.promptNames). Use \(NotificationCategory.promptCatalog).")
     let category: String
 
     @Guide(description: "Notification title, short and friendly. At most 5 words.")
@@ -142,14 +142,15 @@ final class FoundationModelService: ReasoningEngine {
     /// input returning the same answer matters more than variety.
     private static let deterministic = GenerationOptions(sampling: .greedy)
 
-    /// Low variance, for output that must stay specific and traceable.
+    /// Low variance, for output that must stay specific and traceable — the
+    /// prep lists and the belief extraction, where a wider spread shows up as
+    /// invented detail rather than as variety.
     private static let factual = GenerationOptions(temperature: 0.3)
 
-    /// Between the two: inference from the activity is wanted, invention isn't.
-    private static let grounded = GenerationOptions(temperature: 0.5)
-
-    /// For prose a person reads, where varied phrasing is the point.
-    private static let conversational = GenerationOptions(temperature: 0.7)
+    /// For prose a person reads, where varied phrasing is the point. Still
+    /// well below the framework default: the reminder and the onboarding
+    /// questions want a little warmth, not surprise.
+    private static let conversational = GenerationOptions(temperature: 0.5)
 
     enum AIError: LocalizedError {
 
@@ -240,6 +241,8 @@ final class FoundationModelService: ReasoningEngine {
         - Judge ONLY from the provided name and address. NEVER invent details.
         - The user-provided name is the strongest signal.
         - Default to "\(LocationIconResolver.defaultIcon)" if unclear or unsupported.
+
+        \(UntrustedText.instructionRule)
         """
     }
 
@@ -252,14 +255,18 @@ final class FoundationModelService: ReasoningEngine {
 
         try requireAvailableModel()
 
-        var prompt = "Name the user gave this place: \"\(userName)\""
+        // The user typed the name; MapKit supplied the other two. All three
+        // are text Eve did not author, so all three are marked as such — the
+        // catalog check below already bounds the damage, but this is the one
+        // prompt that used to sit outside the rule entirely.
+        var prompt = "Name the user gave this place: \(UntrustedText.delimit(userName))"
 
         if let mapName, !mapName.isEmpty, mapName != userName {
-            prompt += "\nThe map's own name for the confirmed pin: \"\(mapName)\""
+            prompt += "\nThe map's own name for the confirmed pin: \(UntrustedText.delimit(mapName))"
         }
 
         if let address, !address.isEmpty {
-            prompt += "\nAddress of the confirmed pin: \(address)"
+            prompt += "\nAddress of the confirmed pin: \(UntrustedText.delimit(address))"
         }
 
         let session = LanguageModelSession(instructions: iconInstructions)
@@ -327,7 +334,7 @@ final class FoundationModelService: ReasoningEngine {
         let response = try await session.respond(
             to: promptText,
             generating: EventPreparation.self,
-            options: Self.grounded
+            options: Self.factual
         )
 
         return response.content.items

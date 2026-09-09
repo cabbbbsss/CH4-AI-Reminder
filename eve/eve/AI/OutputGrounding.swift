@@ -117,10 +117,10 @@ enum OutputGrounding {
 
     /// `filter`, with the dropped items logged in debug builds.
     ///
-    /// The log is the tuning instrument. `semanticDistanceLimit` in
-    /// `ReminderContextBuilder` and the bar above are both starting points;
-    /// watching what gets dropped on a real account is how you find out
-    /// whether retrieval is too narrow or the gate too tight.
+    /// The log is the tuning instrument. The shared-term match in
+    /// `ReminderContextBuilder.relevance(of:to:)` and the bar above are both
+    /// starting points; watching what gets dropped on a real account is how
+    /// you find out whether retrieval is too narrow or the gate too tight.
     static func filterLogging(
         _ items: [String],
         groundedIn terms: Set<String>,
