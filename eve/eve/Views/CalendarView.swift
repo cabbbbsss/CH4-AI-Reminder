@@ -334,7 +334,7 @@ struct CalendarView: View {
 
   var body: some View {
     ZStack {
-          
+        
         LinearGradient(
             colors: [Color(.gradientPrimaryStart), Color(.bgPrimary)],
             startPoint: .bottom,
@@ -350,11 +350,6 @@ struct CalendarView: View {
 //      }
 //      .ignoresSafeArea()
        
-//        Rectangle()
-//            .fill(.blue)
-//            .frame(width: 300, height: 50)
-//            .glassEffect()
-//            .ignoresSafeArea(edges: .all)
         
       VStack(spacing: 0) {
         // Timeline Container
@@ -362,7 +357,13 @@ struct CalendarView: View {
           Color(.bgSecondary)
             .cornerRadius(32, corners: [.topLeft, .topRight])
             .ignoresSafeArea(edges: .bottom)
-
+            
+        RoundedRectangle(cornerRadius: 0)
+            .fill(.clear)
+            .frame(height: 80)
+            .glassEffect()
+            .position(x: 200, y: 110)
+            
           VStack(spacing: 0) {
             currentMonth
                   .opacity(0.7)
@@ -371,8 +372,8 @@ struct CalendarView: View {
               .padding(.top, 20)
               .padding(.bottom, 12)
 
-            dateHeader
-              .padding(.bottom, 20)
+//            dateHeader
+//              .padding(.bottom, 20)
 
             daySwipeArea
               .frame(maxHeight: .infinity)
@@ -480,7 +481,7 @@ struct CalendarView: View {
     
     private var currentMonth: some View {
         Text(getCurrentMonth(from: selectedDate))
-            .font(.system(size: 34, weight: .black))
+            .font(.system(size: 30, weight: .bold))
             .foregroundColor(Color(.textPrimary))
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.horizontal, 24)
