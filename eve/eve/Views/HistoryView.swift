@@ -9,6 +9,25 @@ struct HistoryView: View {
     // Which rows are expanded. Items with detail start expanded (see isExpanded).
     @State private var collapsedIDs: Set<PersistentIdentifier> = []
 
+    @State private var isSearching = false
+    @State private var searchText = ""
+    @FocusState private var searchFocused: Bool
+
+    /// The timeline as it's actually drawn.
+    ///
+    /// Every index-based helper below reads from this rather than `items` —
+    /// day headers and repeated-time suppression are computed by comparing a
+    /// row with the one above it, so filtering the source without filtering
+    /// what they look at would put headers on the wrong rows.
+    private var visibleItems: [HistoryItem] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return items }
+        return items.filter {
+            $0.title.localizedCaseInsensitiveContains(query)
+                || $0.detail.localizedCaseInsensitiveContains(query)
+        }
+    }
+
     var body: some View {
         ZStack {
             LinearGradient(
@@ -47,17 +66,23 @@ struct HistoryView: View {
                 .padding(.top, 24)
                 .padding(.bottom, 48)
 
+                if isSearching {
+                    searchField
+                }
+
                 // Timeline
-                if items.isEmpty {
+                if visibleItems.isEmpty {
                     Spacer()
                     VStack(spacing: 8) {
-                        Image(systemName: "clock")
+                        Image(systemName: items.isEmpty ? "clock" : "magnifyingglass")
                             .font(.system(size: 40))
                             .foregroundColor(Color(.textPrimary).opacity(0.4))
-                        Text("Nothing yet")
+                        Text(items.isEmpty ? "Nothing yet" : "No matches")
                             .font(.system(size: 17, weight: .bold))
                             .foregroundColor(Color(.textPrimary))
-                        Text("Every sync, question, visit and insight will appear here as a timeline.")
+                        Text(items.isEmpty
+                             ? "Every sync, question, visit and insight will appear here as a timeline."
+                             : "Nothing in your history mentions “\(searchText)”.")
                             .font(.system(size: 13))
                             .foregroundColor(Color(.textPrimary).opacity(0.6))
                             .multilineTextAlignment(.center)
@@ -67,7 +92,7 @@ struct HistoryView: View {
                 } else {
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 0) {
-                            ForEach(Array(items.enumerated()), id: \.element.persistentModelID) { index, item in
+                            ForEach(Array(visibleItems.enumerated()), id: \.element.persistentModelID) { index, item in
                                 HistoryTimelineRow(
                                     dateLabel: dateLabel(at: index),
                                     timeLabel: timeLabel(at: index),
@@ -86,17 +111,68 @@ struct HistoryView: View {
         }
         .navigationTitle("History")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isSearching.toggle()
+                    }
+                    // Closing also clears, so a hidden filter can never leave
+                    // the timeline looking mysteriously short.
+                    if isSearching {
+                        searchFocused = true
+                    } else {
+                        searchText = ""
+                    }
+                } label: {
+                    Image(systemName: isSearching ? "xmark" : "magnifyingglass")
+                }
+                .accessibilityLabel(isSearching ? "Close search" : "Search history")
+            }
+        }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(Color(.textPrimary).opacity(0.5))
+
+            TextField("Search history", text: $searchText)
+                .font(.system(size: 15))
+                .foregroundColor(Color(.textPrimary))
+                .focused($searchFocused)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(Color(.textPrimary).opacity(0.5))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 40)
+        .background(Color(.bgTertiary))
+        .cornerRadius(12)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 24)
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 
     // MARK: - Mapping HistoryItem → designed row
 
     /// Shows a day header only on the first item of each calendar day.
     private func dateLabel(at index: Int) -> String? {
-        let item = items[index]
+        let item = visibleItems[index]
         let day = Calendar.current.startOfDay(for: item.timestamp)
 
         if index > 0 {
-            let previousDay = Calendar.current.startOfDay(for: items[index - 1].timestamp)
+            let previousDay = Calendar.current.startOfDay(for: visibleItems[index - 1].timestamp)
             if day == previousDay { return nil }
         }
 
@@ -108,11 +184,11 @@ struct HistoryView: View {
     /// "8:00 AM" rendered as two lines, matching the design. Hidden when it
     /// would repeat the previous row's label (same day, same minute).
     private func timeLabel(at index: Int) -> String? {
-        let item = items[index]
+        let item = visibleItems[index]
         let label = formattedTime(item.timestamp)
 
         if index > 0 {
-            let previous = items[index - 1]
+            let previous = visibleItems[index - 1]
             if Calendar.current.isDate(previous.timestamp, inSameDayAs: item.timestamp),
                formattedTime(previous.timestamp) == label {
                 return nil
@@ -236,11 +312,16 @@ struct HistoryTimelineRow: View {
 
             // Card Content
             VStack(alignment: .leading, spacing: 0) {
-                HStack {
+                HStack(alignment: .top) {
                     Text(title)
                         .font(.system(size: 15, weight: .bold))
                         .foregroundColor(Color(.textPrimary))
-                    Spacer()
+                        // Without this a Text in a constrained container
+                        // truncates to one line rather than growing taller.
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Spacer(minLength: 8)
                     if hasBody {
                         Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                             .foregroundColor(Color(.textTertiary))
@@ -258,6 +339,11 @@ struct HistoryTimelineRow: View {
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(Color(.textPrimary))
                             .lineSpacing(3)
+                            // An explanation is the whole point of expanding a
+                            // row, so it must never be cut off.
+                            .fixedSize(horizontal: false, vertical: true)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 16)
                             .padding(.bottom, 16)
                     }
@@ -268,11 +354,15 @@ struct HistoryTimelineRow: View {
                                 Text(insightTitle)
                                     .font(.system(size: 12, weight: .bold))
                                     .foregroundColor(Color(.textPrimary))
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                             Text(markdown(insightBody))
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundColor(Color(.textPrimary))
                                 .lineSpacing(3)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .multilineTextAlignment(.leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .padding(14)
                         .frame(maxWidth: .infinity, alignment: .leading)

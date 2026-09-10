@@ -234,31 +234,6 @@ final class LocationRoutingManager {
         return (index, items)
     }
 
-    /// Reminders-app items that aren't shown under any location — surfaced
-    /// in the Unsorted section for the user to assign.
-    func unassignedReminderTitles() -> [String] {
-
-        let shownKeys = Set(
-            ((try? context.fetch(FetchDescriptor<LocationReminder>())) ?? [])
-                .compactMap { $0.itemKey }
-        )
-
-        let reminderItems = (try? context.fetch(FetchDescriptor<ReminderItem>())) ?? []
-
-        var seen = Set<String>()
-        var result: [String] = []
-
-        for item in reminderItems {
-            let key = normalize(item.title)
-            guard !key.isEmpty, !shownKeys.contains(key), !seen.contains(key) else { continue }
-            seen.insert(key)
-            result.append(item.title)
-        }
-
-        return result
-
-    }
-
     /// The user assigns an Unsorted reminder to a place. Creates a
     /// user-owned row (survives refresh) and remembers the choice.
     func assignUnsorted(title: String, to location: SavedLocation) {

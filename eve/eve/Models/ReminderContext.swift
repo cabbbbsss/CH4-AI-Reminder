@@ -20,8 +20,8 @@ struct ReminderContext {
     /// address them by name in a reminder. nil/empty when unset.
     let userName: String?
 
-    /// The single most time-urgent upcoming calendar event or dated
-    /// reminder, found by escalating the search window hour by hour
+    /// The single most time-urgent upcoming calendar event, found by
+    /// escalating the search window hour by hour
     /// (next hour, then the hour after, ...) up to 24 hours out. nil when
     /// nothing falls within that horizon — the model should stay quiet
     /// rather than nudge about something far away.
@@ -33,8 +33,6 @@ struct ReminderContext {
     let guests: [String]?
 
     let upcomingEvents: [String]
-
-    let pendingReminders: [String]
 
     let insights: [String]
 
@@ -60,13 +58,27 @@ struct ReminderContext {
             terms.formUnion(OutputGrounding.contentTerms(of: UntrustedText.strip(text)))
         }
 
-        let allStringLists = upcomingEvents + pendingReminders + insights + recentHistory + answeredQuestions + (guests ?? [])
+        let allStringLists = upcomingEvents + insights + recentHistory + answeredQuestions + (guests ?? [])
         for line in allStringLists {
             terms.formUnion(OutputGrounding.contentTerms(of: UntrustedText.strip(line)))
         }
 
         return terms
 
+    }
+
+    /// Content words from the user's calendar alone.
+    ///
+    /// Deliberately narrower than `groundingTerms`: onboarding questions are
+    /// held to the user's actual schedule, not to everything else this context
+    /// carries. Empty when there are no events, which callers read as "there
+    /// is nothing to be about" rather than "nothing matched".
+    var calendarTerms: Set<String> {
+        var terms = Set<String>()
+        for line in upcomingEvents {
+            terms.formUnion(OutputGrounding.contentTerms(of: UntrustedText.strip(line)))
+        }
+        return terms
     }
 
     /// Renders the context as the prompt text sent to the model.
@@ -89,8 +101,6 @@ struct ReminderContext {
         \(section("Guests", guests ?? []))
 
         \(section("Upcoming calendar events", upcomingEvents))
-
-        \(section("Pending reminders", pendingReminders))
 
         \(section("Current beliefs about the user (AI Insights)", insights))
 

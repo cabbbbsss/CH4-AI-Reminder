@@ -17,7 +17,6 @@ struct eveApp: App {
       QuestionAnswer.self,
       CalendarEvent.self,
       CalendarReminder.self,
-      ReminderItem.self,
       SavedLocation.self,
       LocationReminder.self,
       LocationAssignment.self,

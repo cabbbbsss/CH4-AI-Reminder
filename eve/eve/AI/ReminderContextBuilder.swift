@@ -39,7 +39,6 @@ final class ReminderContextBuilder {
             eventLocation: nil,
             guests: nil,
             upcomingEvents: upcomingEvents(),
-            pendingReminders: pendingReminders(),
             insights: insights(),
             recentHistory: recentHistory(),
             answeredQuestions: answeredQuestions()
@@ -137,7 +136,6 @@ final class ReminderContextBuilder {
         let titleKeywords = keywords(from: eventTitle)
         let eventKeywords = keywords(from: "\(eventTitle) \(eventNotes ?? "")")
 
-        var reminders = relevantReminders(to: eventKeywords)
         var beliefs = relevantInsights(to: eventKeywords)
 
         // Eve's own corpus: what this *kind* of activity usually needs. The
@@ -152,16 +150,13 @@ final class ReminderContextBuilder {
         // tokens shared with the instructions, the schema and the response
         // (TN3193), so trim to a budget rather than trusting per-section caps
         // to add up to something safe.
-        (reminders, beliefs, knowledge) = Self.fitToBudget(
-            reminders: reminders,
+        (beliefs, knowledge) = Self.fitToBudget(
             beliefs: beliefs,
             knowledge: knowledge
         )
 
         var promptText = """
         Event: \(eventLine)
-
-        \(section("Reminders that specifically match this event", reminders))
 
         \(section("Beliefs about the user that specifically match this event", beliefs))
         """
@@ -190,7 +185,7 @@ final class ReminderContextBuilder {
         // Grounds a prep item that names the provider ("Zoom", "Teams") — the
         // host survives keyword extraction from the URL.
         groundingTerms.formUnion(keywords(from: eventMeetingURL ?? ""))
-        for line in reminders + beliefs + knowledge {
+        for line in beliefs + knowledge {
             groundingTerms.formUnion(keywords(from: UntrustedText.strip(line)))
         }
 
@@ -220,18 +215,17 @@ final class ReminderContextBuilder {
     /// response.
     private static let retrievalTokenBudget = 900
 
-    /// Trims the three retrieved sections to fit `retrievalTokenBudget`,
+    /// Trims the retrieved sections to fit `retrievalTokenBudget`,
     /// interleaved by priority rather than section.
     ///
-    /// Order matters: the user's own reminders and beliefs outrank Eve's
-    /// general knowledge, so a crowded event keeps the personal rows and drops
-    /// the generic ones. Taking whole sections in turn would instead let a long
-    /// reminder list starve the knowledge entirely, or vice versa.
+    /// Order matters: the user's own beliefs outrank Eve's general knowledge,
+    /// so a crowded event keeps the personal rows and drops the generic ones.
+    /// Taking whole sections in turn would instead let a long belief list
+    /// starve the knowledge entirely, or vice versa.
     private static func fitToBudget(
-        reminders: [String],
         beliefs: [String],
         knowledge: [String]
-    ) -> (reminders: [String], beliefs: [String], knowledge: [String]) {
+    ) -> (beliefs: [String], knowledge: [String]) {
 
         var budget = Int(Double(retrievalTokenBudget) * charactersPerToken)
 
@@ -246,11 +240,10 @@ final class ReminderContextBuilder {
             return kept
         }
 
-        let keptReminders = take(reminders)
         let keptBeliefs = take(beliefs)
         let keptKnowledge = take(knowledge)
 
-        return (keptReminders, keptBeliefs, keptKnowledge)
+        return (keptBeliefs, keptKnowledge)
 
     }
 
@@ -482,40 +475,6 @@ final class ReminderContextBuilder {
         return !keywords(from: text).isDisjoint(with: eventKeywords)
     }
 
-    private func relevantReminders(
-        to eventKeywords: Set<String>,
-        limit: Int = 10
-    ) -> [String] {
-
-        let allReminders = (try? context.fetch(FetchDescriptor<ReminderItem>())) ?? []
-
-        let scored: [(reminder: ReminderItem, score: Double)] = allReminders.compactMap { reminder in
-            let text = [reminder.title, reminder.notes ?? ""].joined(separator: " ")
-            guard let score = relevance(of: text, to: eventKeywords) else {
-                return nil
-            }
-            return (reminder, score)
-        }
-
-        // Relevance first, then soonest-due as the tie-break — which is the
-        // whole of the old ordering, now applied within a rank instead of
-        // across an unranked filter result.
-        let sorted = scored.sorted { first, second in
-            if first.score != second.score { return first.score > second.score }
-            return (first.reminder.dueDate ?? .distantFuture) < (second.reminder.dueDate ?? .distantFuture)
-        }.map(\.reminder)
-
-        return englishOnlyDelimiting(sorted.prefix(limit).map { reminder in
-            guard let dueDate = reminder.dueDate else {
-                return (lead: "", untrusted: reminder.title, trail: " — no due date")
-            }
-            return (lead: "",
-                    untrusted: reminder.title,
-                    trail: " — due \(dueDate.formatted(date: .abbreviated, time: .shortened))")
-        })
-
-    }
-
     /// Beliefs relevant to one event, ranked and capped.
     ///
     /// The cap is a fix, not a nicety: this was the one gatherer in the file
@@ -585,19 +544,12 @@ final class ReminderContextBuilder {
 
         let eventCount = (try? context.fetchCount(eventDescriptor)) ?? 0
 
-        if eventCount > 0 {
-            return true
-        }
-
-        var reminderDescriptor = FetchDescriptor<ReminderItem>()
-        reminderDescriptor.fetchLimit = 1
-
-        return ((try? context.fetchCount(reminderDescriptor)) ?? 0) > 0
+        return eventCount > 0
 
     }
 
-    /// Finds the single most time-urgent upcoming commitment (calendar event
-    /// or dated reminder), escalating the search window hour by hour — next
+    /// Finds the single most time-urgent upcoming calendar event,
+    /// escalating the search window hour by hour — next
     /// hour, then the hour after, and so on — up to a 24-hour horizon.
     /// Beyond that, nothing is "urgent" enough to lead with yet.
     private func nextUrgentItem() -> String? {
@@ -612,14 +564,7 @@ final class ReminderContextBuilder {
 
         let events = (try? context.fetch(eventDescriptor)) ?? []
 
-        let allReminders = (try? context.fetch(FetchDescriptor<ReminderItem>())) ?? []
-
-        var upcoming: [(title: String, date: Date)] = events.map { ($0.title, $0.startDate) }
-
-        upcoming.append(contentsOf: allReminders.compactMap { reminder in
-            guard let due = reminder.dueDate, due >= now else { return nil }
-            return (reminder.title, due)
-        })
+        let upcoming: [(title: String, date: Date)] = events.map { ($0.title, $0.startDate) }
 
         let horizon: TimeInterval = 24 * 3600
 
@@ -743,29 +688,6 @@ final class ReminderContextBuilder {
 
             return line
         }
-
-    }
-
-    private func pendingReminders(limit: Int = 10) -> [String] {
-
-        let descriptor = FetchDescriptor<ReminderItem>()
-
-        let reminders = (try? context.fetch(descriptor)) ?? []
-
-        return englishOnlyDelimiting(reminders
-            .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
-            .prefix(limit)
-            .map { reminder in
-
-                if let dueDate = reminder.dueDate {
-                    return (lead: "",
-                            untrusted: reminder.title,
-                            trail: " — due \(dueDate.formatted(date: .abbreviated, time: .shortened))")
-                }
-
-                return (lead: "", untrusted: reminder.title, trail: " — no due date")
-
-            })
 
     }
 

@@ -19,45 +19,28 @@ struct LocationView: View {
     @State private var addingLocation = false
     @State private var editingReminder: LocationReminder?
 
-    /// Backing state for the inline "type a new reminder" row at the bottom of
-    /// the list. Focus is driven from here so the bottom-right + can jump to it.
-    @State private var newReminderText = ""
-    @FocusState private var newReminderFocused: Bool
+    /// The day whose add row was tapped. Presenting on this — rather than a
+    /// bare bool — carries which heading the new reminder belongs under.
+    @State private var addingReminder: NewReminderTarget?
+
+    /// A day, made identifiable so it can drive `.sheet(item:)`.
+    private struct NewReminderTarget: Identifiable {
+        let id = UUID()
+        var day: Date
+    }
 
     @State private var toast: String?
 
+    /// Which triggers the list is showing. Both on by default — the filter is
+    /// for narrowing to one half of a visit, not for hiding things by accident.
+    @State private var visibleTriggers: Set<LocationTrigger> = Set(LocationTrigger.allCases)
+
     var body: some View {
         screen
-        .navigationTitle("Locations")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationTitle("Location")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
-        .tint(Color(.textPrimary))
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    Task { await refresh() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .disabled(isSeeding)
-            }
-        }
-        .overlay {
-            // While typing a new reminder, a tap anywhere cancels it — clears
-            // the field and dismisses the keyboard. Only hit-testable while
-            // focused, so it never interferes with normal list interaction.
-            if newReminderFocused {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .ignoresSafeArea()
-                    .onTapGesture { cancelNewReminder() }
-            }
-        }
-        .overlay(alignment: .bottomTrailing) {
-            if !savedLocations.isEmpty {
-                addReminderButton
-            }
-        }
+        .tint(Color.eveOnSurface)
         .overlay(alignment: .bottom) {
             if let toast {
                 SuccessToast(message: toast)
@@ -74,6 +57,14 @@ struct LocationView: View {
         .sheet(item: $editingReminder) { reminder in
             ReminderEditSheet(
                 reminder: reminder,
+                allLocations: savedLocations,
+                router: routingManager
+            )
+        }
+        .sheet(item: $addingReminder) { target in
+            ReminderEditSheet(
+                location: activeLocation,
+                defaultDay: target.day,
                 allLocations: savedLocations,
                 router: routingManager
             )
@@ -100,22 +91,19 @@ struct LocationView: View {
 
     private var screen: some View {
         ZStack {
-            Color(.bgPrimary)
-                .ignoresSafeArea()
-
-            Rectangle()
-                .fill(Color.bgSecondary.opacity(0.8))
-                .frame(width: 800, height: 500)
-                .blur(radius: 150)
-                .position(x: 200, y: 150)
-                .ignoresSafeArea(edges: .all)
+            AuroraBackground()
 
             if savedLocations.isEmpty {
                 emptyLocationsState
             } else {
                 VStack(spacing: 0) {
                     locationFilter
-                        .padding(.top, 4)
+                        .padding(.top, Theme.Spacing.xxs)
+
+                    if let location = activeLocation {
+                        addressBlock(for: location)
+                    }
+
                     selectedLocationCard
                 }
             }
@@ -126,19 +114,20 @@ struct LocationView: View {
 
     private var locationFilter: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
+            HStack(spacing: Theme.Spacing.xs) {
                 // Add a new place — sits to the left of the location chips.
                 Button {
                     addingLocation = true
                 } label: {
                     Image(systemName: "plus")
-                        .font(.system(size: 15, weight: .bold))
-                        .frame(width: 20, height: 20)
+                        .font(.eveCardTitle)
+                        .frame(width: Theme.Spacing.l, height: Theme.Spacing.l)
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
                 .controlSize(.large)
-                .tint(Color(.textPrimary))
+                .tint(Color.eveOnSurface)
+                .accessibilityLabel("Add location")
 
                 ForEach(savedLocations) { location in
                     LocationChip(
@@ -149,9 +138,6 @@ struct LocationView: View {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             selectedLocationID = location.id
                         }
-                        // Fresh place → clear whatever was half-typed elsewhere.
-                        newReminderText = ""
-                        newReminderFocused = false
                     }
                     .contextMenu {
                         Button {
@@ -168,9 +154,42 @@ struct LocationView: View {
                     }
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 6)
+            .padding(.horizontal, Theme.Spacing.gutter)
+            .padding(.vertical, Theme.Spacing.xs)
         }
+    }
+
+    // MARK: - Address
+
+    /// The selected place's street address, with a shortcut into its editor.
+    private func addressBlock(for location: SavedLocation) -> some View {
+        HStack(alignment: .top, spacing: Theme.Spacing.s) {
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Address:")
+                    .font(.eveBody.weight(.semibold))
+                    .foregroundStyle(Color.eveOnSurfaceMuted)
+
+                Text(location.address ?? "No address set")
+                    .font(.eveDetail)
+                    .foregroundStyle(Color.eveOnSurfaceMuted.opacity(0.8))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+
+            Button {
+                editingLocation = location
+            } label: {
+                Image(systemName: "square.and.pencil")
+                    .font(.title3)
+                    .foregroundStyle(Color.accentColor)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Edit this place")
+        }
+        .padding(.horizontal, Theme.Spacing.gutter)
+        .padding(.top, Theme.Spacing.s)
     }
 
     // MARK: - Selected location card
@@ -181,128 +200,179 @@ struct LocationView: View {
             // No location header inside the card — the filter above already
             // shows which place these reminders belong to.
             remindersList(for: location)
-                .background(Color(.bgSecondary))
-                .cornerRadius(24)
-                .shadow(color: Color(.textPrimary).opacity(0.1), radius: 10, y: 5)
-                .padding(.horizontal, 24)
-                .padding(.top, 12)
-                .padding(.bottom, 24)
+                .background(Color.eveSurface)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
+                .shadow(color: Color.eveOnSurface.opacity(0.1), radius: 10, y: 5)
+                .padding(.horizontal, Theme.Spacing.gutter)
+                .padding(.top, Theme.Spacing.s)
+                .padding(.bottom, Theme.Spacing.gutter)
         }
     }
 
     private func remindersList(for location: SavedLocation) -> some View {
-        let items = reminders(for: location)
 
-        return List {
-            if items.isEmpty && isSeeding && !location.hasBeenSeeded {
-                HStack(spacing: 12) {
-                    Image(systemName: "sparkles")
-                        .foregroundColor(Color(.textQuarternary))
-                    Text("Eve is learning about this place…")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(Color(.textQuarternary))
+        let groups = dateGroups(for: location)
+
+        return ScrollView {
+            LazyVStack(alignment: .leading, spacing: Theme.Spacing.l) {
+
+                filterBar
+
+                if groups.isEmpty {
+                    emptyRemindersState(for: location)
+                } else {
+                    ForEach(groups, id: \.day) { group in
+                        dateGroup(group, in: location)
+                    }
                 }
-                .listRowInsets(EdgeInsets(top: 10, leading: 20, bottom: 10, trailing: 20))
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
             }
+            .padding(.horizontal, Theme.Spacing.l)
+            .padding(.vertical, Theme.Spacing.m)
+            // Room for the floating + that overlaps the card's lower corner.
+            .padding(.bottom, Theme.Spacing.xxl)
+        }
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
+    }
 
-            ForEach(items) { reminder in
-                ReminderRow(
+    /// Arriving / Leaving, as toggles rather than a single choice — the two
+    /// halves of a visit aren't mutually exclusive, and a picker would force
+    /// the user to hide one of them to see the other.
+    private var filterBar: some View {
+        HStack {
+            Spacer()
+            Menu {
+                ForEach(LocationTrigger.allCases) { trigger in
+                    Button {
+                        toggle(trigger)
+                    } label: {
+                        Label(
+                            trigger.title,
+                            systemImage: visibleTriggers.contains(trigger) ? "checkmark" : ""
+                        )
+                    }
+                }
+            } label: {
+                Image(systemName: "line.3.horizontal.decrease")
+                    .font(.title3)
+                    .foregroundStyle(Color.accentColor)
+            }
+            .accessibilityLabel("Filter by arriving or leaving")
+        }
+    }
+
+    @ViewBuilder
+    private func emptyRemindersState(for location: SavedLocation) -> some View {
+        if isSeeding && !location.hasBeenSeeded {
+            HStack(spacing: Theme.Spacing.s) {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(Color.eveOnSurfaceFaint)
+                Text("Eve is learning about this place…")
+                    .font(.eveBody)
+                    .foregroundStyle(Color.eveOnSurfaceFaint)
+            }
+        } else {
+            Text(visibleTriggers.count == LocationTrigger.allCases.count
+                 ? "Nothing for this place yet."
+                 : "Nothing matches this filter.")
+                .font(.eveBody)
+                .foregroundStyle(Color.eveOnSurfaceMuted)
+        }
+
+        addReminderRow(for: location, on: Calendar.current.startOfDay(for: .now))
+    }
+
+    /// One day's worth of reminders: a heading, its rows, the inline add row,
+    /// and a rule closing it off.
+    private func dateGroup(_ group: DateGroup, in location: SavedLocation) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+
+            Text(group.day.formatted(.dateTime.day().month(.wide).year()))
+                .font(.eveBody.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+
+            ForEach(group.reminders) { reminder in
+                LocationReminderRow(
                     reminder: reminder,
                     onToggle: { routingManager?.toggleCompletion(reminder) },
                     onTap: { editingReminder = reminder }
                 )
-                .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
-                .listRowSeparatorTint(Color(.bgTertiary))
-                .listRowBackground(Color.clear)
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    // Icon-only, red — no "Delete" text.
+                .contextMenu {
                     Button(role: .destructive) {
                         deleteReminder(reminder)
                     } label: {
-                        Image(systemName: "trash")
+                        Label("Delete", systemImage: "trash")
                     }
-                    .tint(.red)
                 }
             }
 
-            // Inline new-reminder row — type and press return to add, exactly
-            // like the Reminders app. No separate "add" button.
-            HStack(spacing: 12) {
-                Image(systemName: "circle")
-                    .font(.system(size: 22))
-                    .foregroundColor(Color(.textQuarternary).opacity(0.5))
+            addReminderRow(for: location, on: group.day)
 
-                TextField("Add Reminder", text: $newReminderText)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(Color(.textPrimary))
-                    .focused($newReminderFocused)
-                    .submitLabel(.next)
-                    .onSubmit { commitNewReminder(to: location) }
+            Rectangle()
+                .fill(Color.eveOnSurfaceFaint.opacity(0.4))
+                .frame(height: 1)
+                .padding(.bottom, Theme.Spacing.xs)
+        }
+    }
+
+    /// Opens the same editor a tap on an existing reminder does, seeded with
+    /// the day it was tapped under — the same move as the routine list's add
+    /// row, so adding a reminder works identically on both screens.
+    private func addReminderRow(for location: SavedLocation, on day: Date) -> some View {
+        Button {
+            addingReminder = NewReminderTarget(day: day)
+        } label: {
+            HStack(spacing: Theme.Spacing.s) {
+                Circle()
+                    .strokeBorder(
+                        Color.eveOnSurfaceFaint.opacity(0.7),
+                        style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [0.5, 3])
+                    )
+                    .frame(width: 18, height: 18)
+                    .frame(width: 22, height: 22)
+
+                Text("Add a reminder…")
+                    .font(.eveCardTitle)
+                    .foregroundStyle(Color.eveOnSurfaceFaint)
 
                 Spacer(minLength: 0)
             }
-            .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
-            .listRowSeparator(.hidden)
-            .listRowBackground(Color.clear)
+            .contentShape(Rectangle())
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .scrollIndicators(.hidden)
-        .contentMargins(.top, 8, for: .scrollContent)
-        // Extra bottom room so the last (inline) row isn't hidden behind the
-        // floating + button that overlaps the card's lower-right corner.
-        .contentMargins(.bottom, 52, for: .scrollContent)
-    }
-
-    // MARK: - Bottom-right add-reminder button
-
-    private var addReminderButton: some View {
-        Button {
-            newReminderFocused = true
-        } label: {
-            Image(systemName: "plus")
-                .font(.system(size: 20, weight: .semibold))
-                .frame(width: 24, height: 24)
-        }
-        .buttonStyle(.glassProminent)
-        .buttonBorderShape(.circle)
-        .controlSize(.large)
-        .tint(Color.accentColor)
-        // Equal inset from the screen's bottom and trailing edges, matching the
-        // card's 24pt horizontal padding so the button sits at its corner.
-        .padding(.trailing, 24)
-        .padding(.bottom, 24)
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add a reminder")
     }
 
     // MARK: - Empty state
 
     private var emptyLocationsState: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: Theme.Spacing.xs) {
             Image(systemName: "mappin.slash")
                 .font(.system(size: 44))
-                .foregroundColor(Color(.textPrimary).opacity(0.5))
+                .foregroundStyle(Color.eveOnSurface.opacity(0.5))
             Text("No places yet")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundColor(Color(.textPrimary))
+                .font(.eveSectionTitle)
+                .foregroundStyle(Color.eveOnSurface)
             Text("Add a place and Eve will start learning what to remind you there.")
-                .font(.system(size: 13))
-                .foregroundColor(Color(.textPrimary).opacity(0.7))
+                .font(.eveDetail)
+                .foregroundStyle(Color.eveOnSurface.opacity(0.7))
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+                .padding(.horizontal, Theme.Spacing.xxl)
 
             Button {
                 addingLocation = true
             } label: {
                 Label("Add Location", systemImage: "plus")
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(width: 200, height: 40)
+                    .font(.eveButton)
+                    // Grows with the label instead of a fixed 200×40 box, so
+                    // it doesn't clip at larger Dynamic Type sizes.
+                    .padding(.horizontal, Theme.Spacing.xxl)
+                    .padding(.vertical, Theme.Spacing.s)
             }
             .buttonStyle(.glassProminent)
             .buttonBorderShape(.capsule)
             .tint(Color.accentColor)
-            .padding(.top, 8)
+            .padding(.top, Theme.Spacing.xs)
         }
     }
 
@@ -320,36 +390,38 @@ struct LocationView: View {
             .sorted { $0.createdAt < $1.createdAt }
     }
 
-    // MARK: - Actions
+    /// One day's reminders for the selected place, newest day first.
+    private struct DateGroup {
+        var day: Date
+        var reminders: [LocationReminder]
+    }
 
-    /// Adds the inline-typed reminder to the active place, then keeps focus so
-    /// the user can keep adding rows back-to-back — like the Reminders app.
-    private func commitNewReminder(to location: SavedLocation) {
+    private func dateGroups(for location: SavedLocation) -> [DateGroup] {
 
-        let trimmed = newReminderText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let calendar = Calendar.current
 
-        guard !trimmed.isEmpty else {
-            newReminderFocused = false
-            return
+        let visible = reminders(for: location)
+            .filter { visibleTriggers.contains($0.trigger) }
+
+        return Dictionary(grouping: visible) {
+            calendar.startOfDay(for: $0.effectiveDate)
         }
-
-        modelContext.insert(
-            LocationReminder(locationID: location.id, text: trimmed, itemKey: nil, isSystemManaged: false)
-        )
-        try? modelContext.save()
-
-        newReminderText = ""
-        newReminderFocused = true
-
+        .map { DateGroup(day: $0.key, reminders: $0.value) }
+        .sorted { $0.day < $1.day }
     }
 
-    /// Abandons an in-progress inline reminder — clears the field and drops
-    /// focus (dismissing the keyboard). Triggered by tapping anywhere while
-    /// the new-reminder field is focused.
-    private func cancelNewReminder() {
-        newReminderText = ""
-        newReminderFocused = false
+    private func toggle(_ trigger: LocationTrigger) {
+        // Never let the last one be switched off — an empty filter shows an
+        // empty list with no way to tell why.
+        if visibleTriggers.contains(trigger) {
+            guard visibleTriggers.count > 1 else { return }
+            visibleTriggers.remove(trigger)
+        } else {
+            visibleTriggers.insert(trigger)
+        }
     }
+
+    // MARK: - Actions
 
     /// Seeds Home/Office on first launch, then auto-generates reminders
     /// only for places that have never been seeded before. Re-entering this
@@ -422,29 +494,30 @@ private struct LocationChip: View {
     var isSelected: Bool
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: Theme.Spacing.xs) {
             Image(systemName: location.iconName)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.eveCaption)
             Text(location.name)
-                .font(.system(size: 14, weight: .bold))
+                .font(.eveCardTitle)
         }
-        .foregroundColor(isSelected ? .white : Color(.textPrimary))
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .foregroundStyle(isSelected ? .white : Color.eveOnSurface)
+        .padding(.horizontal, Theme.Spacing.m)
+        .padding(.vertical, Theme.Spacing.xs)
         .background(
             Capsule()
-                .fill(isSelected ? Color.accentColor : Color(.bgSecondary).opacity(0.85))
+                .fill(isSelected ? Color.accentColor : Color.eveSurface.opacity(0.85))
         )
         .overlay(
             Capsule()
-                .stroke(Color(.textPrimary).opacity(isSelected ? 0 : 0.08), lineWidth: 1)
+                .stroke(Color.eveOnSurface.opacity(isSelected ? 0 : 0.08), lineWidth: 1)
         )
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }
 
-// MARK: - Reminder row (Apple Reminders style)
+// MARK: - Reminder row
 
-private struct ReminderRow: View {
+private struct LocationReminderRow: View {
     var reminder: LocationReminder
     var onToggle: () -> Void
     var onTap: () -> Void
@@ -460,35 +533,54 @@ private struct ReminderRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: Theme.Spacing.s) {
             Button(action: onToggle) {
                 Image(systemName: reminder.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 22))
-                    .foregroundColor(reminder.isCompleted ? Color.accentColor : Color(.textQuarternary))
+                    .font(.title3)
+                    .foregroundStyle(reminder.isCompleted ? Color.accentColor : Color.eveOnSurfaceFaint)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(reminder.isCompleted ? "Mark as not done" : "Mark as done")
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(reminder.isCompleted ? Color(.textQuarternary) : Color(.textPrimary))
-                    .strikethrough(reminder.isCompleted, color: Color(.textQuarternary))
+                    .font(.eveCardTitle)
+                    .foregroundStyle(reminder.isCompleted ? Color.eveOnSurfaceFaint : Color.eveOnSurface)
+                    .strikethrough(reminder.isCompleted, color: .eveOnSurfaceFaint)
                     .multilineTextAlignment(.leading)
 
-                // Subtitle = related calendar/reminder event. Empty for
-                // freeform reminders not tied to any event.
                 if let event = reminder.eventTitle, !event.isEmpty {
                     Text(event)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(Color(.textQuarternary))
+                        .font(.eveCaption)
+                        .foregroundStyle(Color.eveOnSurfaceFaint)
                         .lineLimit(1)
                 }
+
+                TriggerTag(trigger: reminder.trigger)
             }
 
             Spacer(minLength: 0)
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
+    }
+}
+
+/// Says which half of the visit a reminder belongs to. Small and quiet — it
+/// labels the row rather than competing with its text.
+private struct TriggerTag: View {
+    var trigger: LocationTrigger
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.xxs) {
+            Image(systemName: trigger.symbol)
+            Text(trigger.title)
+        }
+        .font(.eveOverline)
+        .foregroundStyle(Color.accentColor)
+        .padding(.horizontal, Theme.Spacing.xs)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(Color.accentColor.opacity(0.12)))
     }
 }
 

@@ -21,89 +21,13 @@ struct InsightView: View {
 
   var body: some View {
     ZStack {
-        Color(.bgSecondary).ignoresSafeArea()
+      AuroraBackground(focus: 0.1)
 
-        Rectangle()
-            .fill(Color.bgPrimary)
-            .frame(width: 800, height: 500)
-            .blur(radius: 150)
-            .position(x: 200, y: 150)
-            .ignoresSafeArea(edges: .all)
-
-      VStack(spacing: 0) {
-        // ── Character + Chat Bubble ─────────────────────────
-        HStack(alignment: .center, spacing: 16) {
-          // Avatar from xcassets
-          Image("Avatar")
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .frame(width: 79, height: 79)
-
-          // Chat Bubble
-          ZStack(alignment: .leading) {
-            // The triangle pointing left
-//            Path { path in
-//              path.move(to: CGPoint(x: 10, y: 15))
-//              path.addLine(to: CGPoint(x: 0, y: 25))
-//              path.addLine(to: CGPoint(x: 10, y: 35))
-//            }
-//            .fill(Color(.bgSecondary))
-//            .offset(x: -8)
-
-            bubbleText
-              .padding(.horizontal, 16)
-              .padding(.vertical, 12)
-              .background(Color(.bgSecondary))
-              .cornerRadius(12)
-          }
-          Spacer()
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 24)
-        .padding(.bottom, 24)
-
-        // ── Insights Card Container ─────────────────────────
-        ZStack(alignment: .top) {
-          Color(.bgSecondary)
-            .cornerRadius(32, corners: [.topLeft, .topRight])
-            .ignoresSafeArea(edges: .bottom)
-
-          VStack(spacing: 0) {
-            if insights.isEmpty {
-              emptyState
-            } else {
-              ScrollView(showsIndicators: false) {
-                VStack(spacing: 28) {
-                  ForEach(insights) { insight in
-                    InsightRow(
-                      insight: insight,
-                      isExpanded: expandedInsightID == insight.persistentModelID,
-                      onTap: { toggle(insight) },
-                      onEdit: { editingInsight = insight },
-                      onDelete: { delete(insight) }
-                    )
-                  }
-                }
-                .padding(.top, 40)
-                .padding(.horizontal, 32)
-                .padding(.bottom, 16)
-              }
-            }
-
-            // View History button
-            NavigationLink(destination: HistoryView()) {
-              Text("View History")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundColor(.white)
-                .frame(width: 200, height: 44)
-                .background(Color.accentColor)
-                .cornerRadius(22)
-            }
-            .padding(.bottom, 40)
-            .padding(.top, 20)
-          }
-        }
+      VStack(spacing: Theme.Spacing.l) {
+        speechBubble
+        insightsCard
       }
+      .padding(.top, Theme.Spacing.l)
     }
     .navigationTitle("Insight")
     .navigationBarTitleDisplayMode(.inline)
@@ -126,36 +50,111 @@ struct InsightView: View {
     try? InsightManager(context: modelContext).delete(insight)
   }
 
-  // Chat bubble with partial bold text
-  private var bubbleText: some View {
-    Text("Here's what I've \(Text("learned").fontWeight(.bold))\nabout you!")
-      .font(.system(size: 13))
-      .foregroundColor(Color(.textPrimary))
+  // MARK: - Bubble
+
+  /// The same bubble shape Home uses, so Eve speaks the same way on every
+  /// screen rather than in a differently-shaped box per tab.
+  private var speechBubble: some View {
+    HStack(alignment: .top, spacing: Theme.Spacing.s) {
+      Image("Avatar")
+        .resizable()
+        .scaledToFit()
+        .frame(width: 70, height: 70)
+
+      Text("Here's what I've \(Text("learned").fontWeight(.bold)) about you!")
+        .font(.eveBody)
+        .foregroundStyle(Color.eveOnSurface)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.Spacing.m)
+        .background(Color.eveSurface)
+        .cornerRadius(Theme.Radius.card, corners: [.topRight, .bottomLeft, .bottomRight])
+        .cornerRadius(Theme.Spacing.xxs, corners: [.topLeft])
+    }
+    .padding(.horizontal, Theme.Spacing.gutter)
+    .accessibilityElement(children: .combine)
   }
 
+  // MARK: - Card
+
+  /// An inset card holding the beliefs and the History link.
+  ///
+  /// Rounded on every corner and held off the edges, rather than the
+  /// full-bleed bottom sheet this used to be — the History button now sits
+  /// inside it, so the card reads as one panel instead of a sheet with a
+  /// button floating under it.
+  private var insightsCard: some View {
+    VStack(spacing: 0) {
+
+      if insights.isEmpty {
+        emptyState
+      } else {
+        ScrollView {
+          LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+            ForEach(insights) { insight in
+              InsightRow(
+                insight: insight,
+                isExpanded: expandedInsightID == insight.persistentModelID,
+                onTap: { toggle(insight) },
+                onEdit: { editingInsight = insight },
+                onDelete: { delete(insight) }
+              )
+            }
+          }
+          .padding(.horizontal, Theme.Spacing.l)
+          .padding(.vertical, Theme.Spacing.l)
+        }
+        .scrollIndicators(.hidden)
+      }
+
+      viewHistoryButton
+        .padding(.top, Theme.Spacing.s)
+        .padding(.bottom, Theme.Spacing.l)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(Color.eveSurface)
+    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
+    .padding(.horizontal, Theme.Spacing.gutter)
+    .padding(.bottom, Theme.Spacing.gutter)
+  }
+
+  private var viewHistoryButton: some View {
+    NavigationLink(destination: HistoryView()) {
+      Text("View History")
+        .font(.eveButton)
+        .foregroundStyle(.white)
+        // Grows with the label rather than a fixed 200×44 box, so it doesn't
+        // clip at larger Dynamic Type sizes.
+        .padding(.horizontal, Theme.Spacing.xxl)
+        .padding(.vertical, Theme.Spacing.s)
+        .background(Capsule().fill(Color.accentColor))
+    }
+  }
 
   private var emptyState: some View {
-    VStack(spacing: 12) {
+    VStack(spacing: Theme.Spacing.s) {
       Image(systemName: "brain")
         .font(.system(size: 44))
-        .foregroundColor(Color(.textQuarternary))
+        .foregroundStyle(Color.eveOnSurfaceFaint)
+
       Text("No insights yet")
-        .font(.system(size: 18, weight: .bold))
-        .foregroundColor(Color(.textPrimary))
-      Text("Tap Eve on the home screen and I'll start learning your routine. What I learn appears here — always yours to correct.")
-        .font(.system(size: 14))
-        .foregroundColor(Color(.textTertiary))
+        .font(.eveSectionTitle)
+        .foregroundStyle(Color.eveOnSurface)
+
+      Text("Eve learns your routine as your days go by. What she picks up appears here — always yours to correct.")
+        .font(.eveDetail)
+        .foregroundStyle(Color.eveOnSurfaceMuted)
         .multilineTextAlignment(.center)
         .fixedSize(horizontal: false, vertical: true)
     }
-    .padding(.top, 60)
-    .padding(.horizontal, 40)
+    .padding(.top, Theme.Spacing.xxl)
+    .padding(.horizontal, Theme.Spacing.xxl)
     .frame(maxHeight: .infinity, alignment: .top)
   }
 }
 
-/// One insight: a tappable headline + confidence that reveals the AI's
-/// reasoning (and edit/delete) when expanded.
+/// One belief: a tappable line that reveals Eve's reasoning — and edit/delete
+/// — when expanded.
 struct InsightRow: View {
   let insight: AIInsight
   var isExpanded: Bool
@@ -163,42 +162,30 @@ struct InsightRow: View {
   var onEdit: () -> Void
   var onDelete: () -> Void
 
-  /// "Confirmed by you" once the user has corrected it, otherwise the model's confidence.
-  private var confidenceText: String {
-    insight.isUserEdited
-      ? "Confirmed by you"
-      : "\(Int((insight.confidence * 100).rounded()))% confident"
-  }
-
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
 
       // ── Header (tap to expand) ─────────────────────────────
       Button(action: onTap) {
-        HStack(alignment: .top, spacing: 16) {
+        HStack(alignment: .top, spacing: Theme.Spacing.s) {
           Image(systemName: "checkmark.circle.fill")
-            .font(.system(size: 24))
-            .foregroundColor(.accentColor)
-            .padding(.top, 2)
+            .font(.title3)
+            .foregroundStyle(Color.accentColor)
 
-          VStack(alignment: .leading, spacing: 4) {
-            Text(insight.value)
-              .font(.system(size: 17, weight: .regular))
-              .foregroundColor(Color(.textPrimary))
-              .fixedSize(horizontal: false, vertical: true)
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .multilineTextAlignment(.leading)
+          Text(insight.value)
+            .font(.eveBody)
+            .foregroundStyle(Color.eveOnSurface)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .multilineTextAlignment(.leading)
 
-            Text(confidenceText)
-              .font(.system(size: 13))
-              .foregroundColor(Color(.textTertiary))
-          }
-
+          // The only thing telling the user a row opens. Without it the
+          // reasoning and the edit/delete actions are invisible.
           Image(systemName: "chevron.right")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundColor(Color(.textTertiary))
+            .font(.eveDetail.weight(.semibold))
+            .foregroundStyle(Color.eveOnSurfaceMuted)
             .rotationEffect(.degrees(isExpanded ? 90 : 0))
-            .padding(.top, 6)
+            .padding(.top, 4)
         }
         .contentShape(Rectangle())
       }
@@ -206,37 +193,38 @@ struct InsightRow: View {
 
       // ── Expanded reasoning + actions ───────────────────────
       if isExpanded {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
 
-          VStack(alignment: .leading, spacing: 4) {
+          VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
             Text("Why Eve believes this")
-              .font(.system(size: 12, weight: .semibold))
-              .foregroundColor(Color(.textTertiary))
+              .font(.eveCaption)
+              .foregroundStyle(Color.eveOnSurfaceMuted)
 
             Text(insight.sourceSummary)
-              .font(.system(size: 14))
-              .foregroundColor(Color(.textPrimary))
+              .font(.eveDetail)
+              .foregroundStyle(Color.eveOnSurface)
               .fixedSize(horizontal: false, vertical: true)
               .frame(maxWidth: .infinity, alignment: .leading)
           }
 
-          HStack(spacing: 20) {
+          HStack(spacing: Theme.Spacing.l) {
             Button(action: onEdit) {
               Label("Edit", systemImage: "pencil")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.accentColor)
+                .font(.eveCaption)
+                .foregroundStyle(Color.accentColor)
             }
             Button(role: .destructive, action: onDelete) {
               Label("Delete", systemImage: "trash")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.red)
+                .font(.eveCaption)
+                .foregroundStyle(.red)
             }
-            Spacer()
+            Spacer(minLength: 0)
           }
           .buttonStyle(.plain)
         }
-        .padding(.leading, 40)
-        .padding(.top, 12)
+        // Lines the reasoning up under the belief's text, past the tick.
+        .padding(.leading, 34)
+        .padding(.top, Theme.Spacing.s)
         .transition(.opacity.combined(with: .move(edge: .top)))
       }
     }

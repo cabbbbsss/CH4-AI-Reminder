@@ -9,11 +9,15 @@ import Foundation
 import EventKit
 import SwiftData
 
-/// Keeps the SwiftData mirror of Calendar & Reminders fresh.
+/// Keeps the SwiftData mirror of the user's Calendar fresh.
 ///
 /// - Performs the initial ±33-day import.
 /// - Listens for `.EKEventStoreChanged` and resyncs automatically when
-///   the user adds/edits/deletes anything in the Calendar or Reminders apps.
+///   the user adds/edits/deletes anything in the Calendar app.
+///
+/// Eve reads calendar events only. It used to mirror the Reminders app too,
+/// which meant a second system prompt the moment the dashboard opened; that
+/// data is no longer part of the product.
 /// - Diffs incoming data against the local mirror so History can record
 ///   what actually changed instead of blind re-imports.
 @Observable
@@ -21,12 +25,10 @@ final class EventKitSyncManager {
 
     private(set) var lastSync: Date?
 
-    /// nil until the permission dialogs have been answered.
+    /// nil until the permission dialog has been answered.
     private(set) var hasCalendarAccess: Bool?
-    private(set) var hasReminderAccess: Bool?
 
     private let calendarService: CalendarService
-    private let reminderService: ReminderService
     private let historyLogger: HistoryLogger
     private let context: ModelContext
 
@@ -35,24 +37,35 @@ final class EventKitSyncManager {
 
     init(context: ModelContext) {
 
-        // One shared store: both services talk to the same EventKit
-        // connection, and iOS posts one change-notification stream for it.
-        let sharedStore = EKEventStore()
-
-        self.calendarService = CalendarService(eventStore: sharedStore)
-        self.reminderService = ReminderService(eventStore: sharedStore)
+        self.calendarService = CalendarService(eventStore: EKEventStore())
         self.historyLogger = HistoryLogger(context: context)
         self.context = context
 
     }
 
     /// Requests access, runs the first sync, then starts listening for changes.
+    ///
+    /// Split into two callable halves below so onboarding's learning log can
+    /// show connecting and importing as separate steps — and, more usefully,
+    /// tell "we couldn't get access" apart from "we got access and your
+    /// calendar was empty", which this one call used to collapse together.
     func start() async {
+        guard await requestAccess() else { return }
+        await beginSyncing()
+    }
 
+    /// Asks for Calendar access and records the answer.
+    @discardableResult
+    func requestAccess() async -> Bool {
         hasCalendarAccess = (try? await calendarService.requestAccess()) ?? false
-        hasReminderAccess = (try? await reminderService.requestAccess()) ?? false
+        return hasCalendarAccess == true
+    }
 
-        guard hasCalendarAccess == true || hasReminderAccess == true else { return }
+    /// Imports the calendar and starts watching for changes. A no-op without
+    /// access, so it is always safe to call after `requestAccess()`.
+    func beginSyncing() async {
+
+        guard hasCalendarAccess == true else { return }
 
         await syncNow()
 
@@ -74,16 +87,6 @@ final class EventKitSyncManager {
 
         }
 
-        if hasReminderAccess == true {
-
-            let incoming = await reminderService.fetchIncompleteReminders()
-
-            if let summary = syncReminders(incoming) {
-                summaries.append(summary)
-            }
-
-        }
-
         try? context.save()
 
         lastSync = .now
@@ -94,7 +97,7 @@ final class EventKitSyncManager {
 
             try? historyLogger.log(
                 .calendarImported,
-                title: "Calendar & Reminders synced",
+                title: "Calendar synced",
                 detail: summaries.joined(separator: " · ")
             )
 
@@ -110,9 +113,9 @@ final class EventKitSyncManager {
 
         observationTask = Task { [weak self] in
 
-            // iOS posts this for ANY change in the EventKit database —
-            // events or reminders, made by any app. It doesn't say what
-            // changed, so the response is always a re-fetch.
+            // iOS posts this for ANY change in the EventKit database, made
+            // by any app. It doesn't say what changed, so the response is
+            // always a re-fetch.
             let changes = NotificationCenter.default.notifications(
                 named: .EKEventStoreChanged
             )
@@ -201,58 +204,6 @@ final class EventKitSyncManager {
         guard added + updated + removed > 0 else { return nil }
 
         return "Events: \(added) added, \(updated) updated, \(removed) removed"
-
-    }
-
-    private func syncReminders(_ incoming: [ReminderItem]) -> String? {
-
-        let existing = (try? context.fetch(FetchDescriptor<ReminderItem>())) ?? []
-
-        var byID = Dictionary(
-            existing.map { ($0.reminderIdentifier, $0) },
-            uniquingKeysWith: { first, _ in first }
-        )
-
-        var added = 0
-        var updated = 0
-
-        for reminder in incoming {
-
-            if let current = byID.removeValue(forKey: reminder.reminderIdentifier) {
-
-                if current.title != reminder.title
-                    || current.dueDate != reminder.dueDate
-                    || current.notes != reminder.notes
-                    || current.location != reminder.location {
-
-                    current.title = reminder.title
-                    current.dueDate = reminder.dueDate
-                    current.notes = reminder.notes
-                    current.location = reminder.location
-
-                    updated += 1
-
-                }
-
-            } else {
-
-                context.insert(reminder)
-
-                added += 1
-
-            }
-
-        }
-
-        let removed = byID.count
-
-        for orphan in byID.values {
-            context.delete(orphan)
-        }
-
-        guard added + updated + removed > 0 else { return nil }
-
-        return "Reminders: \(added) added, \(updated) updated, \(removed) removed"
 
     }
 

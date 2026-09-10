@@ -53,6 +53,26 @@ final class LocationReminder {
 
     var createdAt: Date
 
+    /// The day this reminder applies to.
+    ///
+    /// Optional so existing rows migrate untouched; the Locations list falls
+    /// back to `createdAt` for grouping when it's nil, which is what those
+    /// rows effectively meant already.
+    var dueDate: Date?
+
+    /// `LocationTrigger.rawValue` — arriving is the common case, so it's the
+    /// default for every reminder Eve generates.
+    var triggerRaw: String = LocationTrigger.arriving.rawValue
+
+    var trigger: LocationTrigger {
+        get { LocationTrigger(rawValue: triggerRaw) ?? .arriving }
+        set { triggerRaw = newValue.rawValue }
+    }
+
+    /// The date this reminder is filed under. Grouping never has to deal with
+    /// a missing value.
+    var effectiveDate: Date { dueDate ?? createdAt }
+
     init(
         locationID: UUID,
         text: String,
