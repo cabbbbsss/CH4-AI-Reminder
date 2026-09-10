@@ -76,7 +76,7 @@ struct ReminderDecision {
 @Generable
 struct OnboardingQuestion {
 
-    @Guide(description: "A short, simple yes/no question. NEVER ask compound questions. NEVER ask for details like 'when', 'what', 'where', or 'how'. E.g. 'Do you take medication on a schedule?'")
+    @Guide(description: "A short, closed question answerable with only Yes or No. Start with Do/Does/Are/Is/Have/Will/Would/Should/Can. NEVER offer a choice ('X or Y?'). NEVER ask compound questions. NEVER ask for details like 'when', 'what', 'where', or 'how'. E.g. 'Do you take medication on a schedule?'")
     let question: String
 
     @Guide(description: "One of: routine, health, pet, commute, work, preference")
@@ -345,10 +345,12 @@ final class FoundationModelService: ReasoningEngine {
     Generate yes/no questions to improve reminder personalization from user context.
 
     - EVERY question MUST be answerable with a simple Yes or No.
+    - NEVER offer a choice between alternatives. "Do you prefer to work remotely or in an office?" is WRONG: it cannot be answered Yes or No. Ask "Do you usually work from home?" instead.
+    - START every question with an auxiliary verb: Do, Does, Are, Is, Have, Will, Would, Should, Can.
     - NEVER ask compound questions (e.g., "Do you exercise, and if so, when?").
-    - NEVER ask open-ended questions using "when", "what", "where", or "how".
-    - PRIORITIZE questions that confirm concrete patterns visible in the provided calendar and reminders.
-    - ONLY ask about generic topics (like medication, pets, commute) IF they are explicitly hinted at in the context.
+    - NEVER ask open-ended questions using "when", "what", "where", "how", "which", "who", or "why".
+    - When the context lists calendar events, EVERY question MUST be about something named in them — the event, its place, or the people in it. Questions unrelated to the user's calendar are discarded before the user sees them.
+    - ONLY ask about generic topics (like medication, pets, commute) if the context lists no calendar events at all.
     - If there is not enough data to form meaningful questions, return an empty list of questions.
     - Limit each question to ONE sentence.
     - NEVER repeat questions.

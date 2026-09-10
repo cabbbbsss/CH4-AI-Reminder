@@ -16,7 +16,6 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
   var isCalendarGranted: Bool = false
   var isNotificationsGranted: Bool = false
   var isAIEnabled: Bool = false
-  var isReminderGranted: Bool = false
   var hasCompletedOnboarding: Bool = false
 
   private let locationManager = CLLocationManager()
@@ -41,7 +40,6 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
   func refreshStatuses() {
     isLocationGranted = locationManager.authorizationStatus == .authorizedAlways || locationManager.authorizationStatus == .authorizedWhenInUse
     isCalendarGranted = EKEventStore.authorizationStatus(for: .event) == .fullAccess
-    isReminderGranted = EKEventStore.authorizationStatus(for: .reminder) == .fullAccess
 
     UNUserNotificationCenter.current().getNotificationSettings { settings in
       // Completion runs off the main actor; hop back on to touch state.
@@ -73,29 +71,26 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
     }
   }
 
-  func requestReminders() async {
-    do {
-      isReminderGranted = try await eventStore.requestFullAccessToReminders()
-    } catch {
-      print("Failed to request reminder access: \(error)")
-    }
-  }
-
   func enableAI() {
     isAIEnabled = true
     UserDefaults.standard.set(true, forKey: "isAIEnabled")
   }
 
-  /// Requests every permission the app needs, in turn. Called from the
-  /// onboarding Next button: the informational PermissionView explains what
-  /// each is for, and this fires the actual OS prompts when the user proceeds.
-  /// iOS presents the system alerts one at a time.
-  func requestAllPermissions() async {
-    enableAI()                          // app-level consent (no OS prompt exists)
-    requestLocation()                   // prompt shown; result arrives via delegate
-    await requestNotifications()
+  /// The one permission onboarding asks for: Calendar.
+  ///
+  /// Eve builds the routine from calendar events, so that is the only access
+  /// it needs before the app is useful. Everything else is requested at the
+  /// point of use instead of being stacked up behind one Next button:
+  ///
+  /// - Location — when the user adds a place (`AddLocationSheet`), which is
+  ///   the moment a place-based reminder actually becomes possible.
+  /// - Notifications — the first time Eve schedules something to deliver
+  ///   (`NotificationService.scheduleReminder`).
+  ///
+  /// Reminders-app access is gone entirely: Eve reads the calendar only.
+  func requestOnboardingPermissions() async {
+    enableAI()            // app-level consent (no OS prompt exists)
     await requestCalendar()
-    await requestReminders()
   }
 
   func completeOnboarding() {

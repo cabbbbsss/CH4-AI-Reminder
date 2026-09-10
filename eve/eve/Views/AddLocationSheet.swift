@@ -271,12 +271,41 @@ struct AddLocationSheet: View {
 
             selectedCategory = item.pointOfInterestCategory
 
-          apply(
-            name: item.name ?? completion.title,
-            address: item.placemark.title ?? completion.subtitle,
-            coordinate: item.placemark.coordinate
-          )
+            // The iOS 26 replacements for the deprecated `placemark`.
+            // `location` is non-optional here, so there is nothing to unwrap.
+            let coordinate = item.location.coordinate
+
+            // A one-line address for the row's subtitle, best source first:
+            //
+            //  - `addressRepresentations` is the only one that can render a
+            //    single-line form, which is what fits on one line.
+            //  - `MKAddress` carries plain `fullAddress` / `shortAddress`
+            //    strings — it has no formatter of its own.
+            //  - failing both, the completion's own subtitle is already the
+            //    address text the user tapped.
+            let addressString =
+                nonEmpty(item.addressRepresentations?.fullAddress(
+                    includingRegion: false,
+                    singleLine: true
+                ))
+                ?? nonEmpty(item.address?.fullAddress)
+                ?? nonEmpty(completion.subtitle)
+
+            apply(
+                name: item.name ?? completion.title,
+                address: addressString,
+                coordinate: coordinate
+            )
         }
+    }
+
+    /// Trims a candidate string and treats blank as absent, so the address
+    /// fallback chain below skips empty values instead of showing whitespace.
+    private func nonEmpty(_ value: String?) -> String? {
+        guard let value,
+              !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+        return value
     }
 
     private func useCurrentLocation() async {

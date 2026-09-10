@@ -3,6 +3,11 @@ import SwiftData
 import SwiftUI
 import UIKit
 
+/// Width of the timeline's left-hand time column. Every row on the timeline
+/// measures from this, so the spine stays in one straight vertical line —
+/// each row used to repeat the literal `80` independently.
+private let timeColumnWidth: CGFloat = 80
+
 /// All of one event's AI-generated prep reminders share an `occurrenceID`,
 /// `eventTitle`, and `eventDate` (and so the same `reminderDate` — it's
 /// derived from `eventDate`) — they're one notification's worth of prep
@@ -266,12 +271,6 @@ struct CalendarView: View {
     Calendar.current.isDateInToday(selectedDate)
   }
 
-  private var dateHeaderMainText: String {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "EEEE, d MMMM yyyy"
-    return formatter.string(from: selectedDate)
-  }
-
   /// Bundles same-occurrence reminders into one card, ordered by creation
   /// so bullets stay in the order they were generated, then by reminderDate
   /// so the groups themselves are chronological.
@@ -342,38 +341,27 @@ struct CalendarView: View {
         )
         .ignoresSafeArea()
 
-//      GeometryReader { proxy in
-//        Ellipse()
-//          .fill(Color(.bgSecondary))
-//          .frame(width: proxy.size.width * 2.5, height: proxy.size.height * 1.2)
-//          .position(x: proxy.size.width / 2, y: -proxy.size.height * 0.1)
-//      }
-//      .ignoresSafeArea()
-       
-        
       VStack(spacing: 0) {
         // Timeline Container
         ZStack(alignment: .top) {
-          Color(.bgSecondary)
-            .cornerRadius(32, corners: [.topLeft, .topRight])
+          Color.eveSurface
+            .cornerRadius(Theme.Radius.sheet, corners: [.topLeft, .topRight])
             .ignoresSafeArea(edges: .bottom)
-            
-        RoundedRectangle(cornerRadius: 0)
-            .fill(.clear)
-            .frame(height: 80)
-            .glassEffect()
-            .position(x: 200, y: 110)
-            
+
           VStack(spacing: 0) {
             currentMonth
-                  .opacity(0.7)
-              
-            weekStrip
-              .padding(.top, 20)
-              .padding(.bottom, 12)
+              .opacity(0.7)
 
-//            dateHeader
-//              .padding(.bottom, 20)
+            // The glass wash is attached to the week strip itself. It used to
+            // be a free-floating 80pt rectangle pinned at `position(x: 200)`,
+            // which is only the centre of a 400pt-wide screen — everywhere
+            // else it sat visibly off to one side of the dates it framed.
+            weekStrip
+              .padding(.vertical, Theme.Spacing.xs)
+              .glassEffect(in: RoundedRectangle(cornerRadius: Theme.Radius.card))
+              .padding(.horizontal, Theme.Spacing.m)
+              .padding(.top, Theme.Spacing.m)
+              .padding(.bottom, Theme.Spacing.s)
 
             daySwipeArea
               .frame(maxHeight: .infinity)
@@ -391,7 +379,7 @@ struct CalendarView: View {
       .navigationTitle("Calendar")
       .navigationBarTitleDisplayMode(.large)
       .toolbarBackground(.hidden, for: .navigationBar)
-      .tint(Color(.textPrimary))
+      .tint(Color.eveOnSurface)
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) {
           Button {
@@ -399,6 +387,7 @@ struct CalendarView: View {
           } label: {
             Image(systemName: "calendar")
           }
+          .accessibilityLabel("Jump to date")
         }
         ToolbarItem(placement: .topBarTrailing) {
           Button {
@@ -407,6 +396,7 @@ struct CalendarView: View {
             Image(systemName: "arrow.clockwise")
           }
           .disabled(isReloading)
+          .accessibilityLabel("Reload calendar")
         }
       }
       .sheet(isPresented: $isShowingCalendar) {
@@ -481,11 +471,11 @@ struct CalendarView: View {
     
     private var currentMonth: some View {
         Text(getCurrentMonth(from: selectedDate))
-            .font(.system(size: 30, weight: .bold))
-            .foregroundColor(Color(.textPrimary))
+            .font(.eveScreenTitle)
+            .foregroundStyle(Color.eveOnSurface)
             .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.horizontal, 24)
-            .padding(.top, 16)
+            .padding(.horizontal, Theme.Spacing.gutter)
+            .padding(.top, Theme.Spacing.m)
     }
     
     // MARK: - Week strip
@@ -520,20 +510,7 @@ struct CalendarView: View {
         }
       }
     }
-    .padding(.horizontal, 24)
-  }
-
-  // MARK: - Date header
-
-  private var dateHeader: some View {
-    VStack(spacing: 4) {
-      Text(dateHeaderMainText)
-        .font(.system(size: 26, weight: .black, design: .default))
-        .foregroundColor(Color(.textTertiary))
-        .multilineTextAlignment(.center)
-    }
-    .frame(maxWidth: .infinity)
-    .padding(.horizontal, 24)
+    .padding(.horizontal, Theme.Spacing.m)
   }
 
   // MARK: - Day content (swipeable)
@@ -558,25 +535,25 @@ struct CalendarView: View {
     return VStack(spacing: 0) {
       if dayEventsForDate.isEmpty {
         Text("No events synced for this day.")
-          .font(.system(size: 14, weight: .medium))
-          .foregroundColor(Color(.textQuarternary))
-          .padding(.top, 20)
+          .font(.eveBody)
+          .foregroundStyle(Color.eveOnSurfaceFaint)
+          .padding(.top, Theme.Spacing.l)
         Spacer()
       } else {
         if dayRemindersForDate.isEmpty && generating {
-          HStack(spacing: 12) {
+          HStack(spacing: Theme.Spacing.s) {
             Image(systemName: "sparkles")
-              .foregroundColor(Color(.textQuarternary))
+              .foregroundStyle(Color.eveOnSurfaceFaint)
             Text("Eve is preparing your reminders…")
-              .font(.system(size: 14, weight: .semibold))
-              .foregroundColor(Color(.textQuarternary))
+              .font(.eveBody)
+              .foregroundStyle(Color.eveOnSurfaceFaint)
           }
-          .padding(.top, 20)
+          .padding(.top, Theme.Spacing.l)
         } else if dayRemindersForDate.isEmpty {
           Text("Nothing to prepare for this day.")
-            .font(.system(size: 14, weight: .medium))
-            .foregroundColor(Color(.textQuarternary))
-            .padding(.top, 20)
+            .font(.eveBody)
+            .foregroundStyle(Color.eveOnSurfaceFaint)
+            .padding(.top, Theme.Spacing.l)
         }
         
         timelineList(for: date, events: dayEventsForDate, reminders: dayRemindersForDate)
@@ -649,16 +626,16 @@ struct CalendarView: View {
       }
     } label: {
       Text("Today")
-        .font(.system(size: 15, weight: .bold))
-        .padding(.horizontal, 6)
+        .font(.eveCardTitle)
+        .padding(.horizontal, Theme.Spacing.xs)
         .frame(height: 28)
     }
     .buttonStyle(.glass)
     .buttonBorderShape(.capsule)
     .controlSize(.large)
-    .tint(Color(.textPrimary))
-    .padding(.leading, 24)
-    .padding(.bottom, 24)
+    .tint(Color.eveOnSurface)
+    .padding(.leading, Theme.Spacing.gutter)
+    .padding(.bottom, Theme.Spacing.gutter)
     .transition(.opacity.combined(with: .move(edge: .leading)))
   }
 
@@ -669,16 +646,17 @@ struct CalendarView: View {
       isAddingReminder = true
     } label: {
       Image(systemName: "plus")
-        .font(.system(size: 20, weight: .semibold))
-        .frame(width: 24, height: 24)
+        .font(.title3.weight(.semibold))
+        .frame(width: Theme.Spacing.gutter, height: Theme.Spacing.gutter)
     }
     .buttonStyle(.glass)
     .buttonBorderShape(.circle)
-    .background(Color(.bgSecondary))
+    .background(Color.eveSurface)
     .clipShape(Circle())
     .controlSize(.large)
-    .padding(.trailing, 24)
-    .padding(.bottom, 24)
+    .accessibilityLabel("Add reminder")
+    .padding(.trailing, Theme.Spacing.gutter)
+    .padding(.bottom, Theme.Spacing.gutter)
   }
 
   // MARK: - Actions
@@ -716,29 +694,31 @@ struct CalendarView: View {
     /// selecting today doesn't lose that distinction.
     private var circleFillColor: Color {
       guard isSelected else { return .clear }
-      return isToday ? .red : Color(.textTertiary)
+      return isToday ? .red : .eveOnSurfaceMuted
     }
 
     private var numberColor: Color {
-      if isSelected { return isToday ? .white : Color(.textPrimary) }
+      if isSelected { return isToday ? .white : .eveOnSurface }
       if isToday { return .red }
-      return Color(.textTertiary)
+      return .eveOnSurfaceMuted
     }
 
     var body: some View {
-      VStack(spacing: 10) {
+      VStack(spacing: Theme.Spacing.xs) {
         Text(dayLetter)
-          .font(.system(size: 13, weight: .semibold))
-          .foregroundColor(Color(.textTertiary).opacity(0.5))
+          .font(.eveCaption)
+          .foregroundStyle(Color.eveOnSurfaceMuted.opacity(0.5))
 
         Text(dayNumber)
-          .font(.system(size: 20, weight: .bold))
-          .foregroundColor(numberColor)
+          .font(.system(.title3, weight: .bold))
+          .foregroundStyle(numberColor)
           .frame(width: 36, height: 36)
           .background(
             Circle().fill(circleFillColor)
           )
       }
+      .accessibilityElement(children: .combine)
+      .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
   }
 
@@ -753,17 +733,17 @@ struct CalendarView: View {
         // Dimmer than a reminder's own time label — this row is just a
         // bare hour marker, nothing is actually scheduled on it.
         Text(time)
-          .font(.system(size: 15, weight: .bold))
-          .foregroundColor(Color(.textSecondary).opacity(0.5))
-          .frame(width: 80, alignment: .trailing)
+          .font(.eveCardTitle)
+          .foregroundStyle(Color.eveOnSurfaceMuted.opacity(0.6))
+          .frame(width: timeColumnWidth, alignment: .trailing)
 
         ZStack {
           Rectangle()
-            .fill(Color(.textQuarternary))
+            .fill(Color.eveOnSurfaceFaint)
             .frame(width: 4)
         }
-        .frame(width: 20)
-        .padding(.horizontal, 8)
+        .frame(width: Theme.Spacing.l)
+        .padding(.horizontal, Theme.Spacing.xs)
 
         Spacer()
           .frame(maxWidth: .infinity)
@@ -787,43 +767,43 @@ struct CalendarView: View {
         // Left Column: Time — brighter than a bare hour tick, since this
         // row actually has something scheduled on it.
         Text(time)
-          .font(.system(size: 15, weight: .bold))
-          .foregroundColor(Color(.textSecondary))
-          .frame(width: 80, alignment: .trailing)
-          .padding(.top, 12)
+          .font(.eveCardTitle)
+          .foregroundStyle(Color.eveOnSurface)
+          .frame(width: timeColumnWidth, alignment: .trailing)
+          .padding(.top, Theme.Spacing.s)
 
         // Timeline Center
         ZStack {
           Rectangle()
-            .fill(Color(.textQuarternary))
+            .fill(Color.eveOnSurfaceFaint)
             .frame(width: 4)
           Circle()
             .fill(Color.accentColor)
             .frame(width: 10, height: 10)
         }
-        .frame(width: 20)
-        .padding(.horizontal, 8)
-        .padding(.top, 12)
+        .frame(width: Theme.Spacing.l)
+        .padding(.horizontal, Theme.Spacing.xs)
+        .padding(.top, Theme.Spacing.s)
 
         // Right Column: Card. The connector to the spine is a stripe
         // fused to the card's own leading edge, not a separately
         // positioned floating shape — it's part of the card's body, so
         // it can never misalign or fail to render independently of it.
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
           Text(subtitle)
-            .font(.system(size: 10, weight: .bold))
-            .foregroundColor(Color(.textQuarternary))
+            .font(.eveOverline)
+            .foregroundStyle(Color.eveOnSurfaceFaint)
 
-          VStack(alignment: .leading, spacing: 8) {
+          VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             ForEach(reminders) { reminder in
-              HStack(alignment: .top, spacing: 8) {
+              HStack(alignment: .top, spacing: Theme.Spacing.xs) {
                 Circle()
                   .fill(Color.accentColor)
                   .frame(width: 5, height: 5)
                   .padding(.top, 5)
                 Text(reminder.text)
-                  .font(.system(size: 13, weight: .bold))
-                  .foregroundColor(Color(.textPrimary))
+                  .font(.eveDetail.weight(.bold))
+                  .foregroundStyle(Color.eveOnSurface)
                   .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
               }
@@ -832,27 +812,27 @@ struct CalendarView: View {
             }
           }
         }
-        .padding(.leading, 20)
-        .padding(.trailing, 16)
-        .padding(.vertical, 10)
+        .padding(.leading, Theme.Spacing.l)
+        .padding(.trailing, Theme.Spacing.m)
+        .padding(.vertical, Theme.Spacing.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
         // A card fill matching the surrounding panel would make the
-        // border pointless — bgSecondary is the panel's inverse in
+        // border pointless — the surface is the panel's inverse in
         // both light and dark mode, so the card always visibly pops.
-        .background(Color(.bgSecondary))
-        .cornerRadius(8)
+        .background(Color.eveSurface)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
         .overlay(alignment: .leading) {
           Capsule()
             .fill(Color.accentColor)
             .frame(width: 5)
-            .padding(.vertical, 8)
+            .padding(.vertical, Theme.Spacing.xs)
         }
         .overlay(
-          RoundedRectangle(cornerRadius: 8)
+          RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
             .stroke(Color.accentColor, lineWidth: 1.5)
         )
-        .padding(.trailing, 24)
-        .padding(.vertical, 8)
+        .padding(.trailing, Theme.Spacing.gutter)
+        .padding(.vertical, Theme.Spacing.xs)
       }
       .frame(minHeight: 60)
     }
@@ -867,54 +847,54 @@ struct CalendarView: View {
       HStack(alignment: .top, spacing: 0) {
         // Left Column: Time
         Text(time)
-          .font(.system(size: 15, weight: .bold))
-          .foregroundColor(Color(.textPrimary)) // Brighter for actual events
-          .frame(width: 80, alignment: .trailing)
-          .padding(.top, 12)
+          .font(.eveCardTitle)
+          .foregroundStyle(Color.eveOnSurface) // Brighter for actual events
+          .frame(width: timeColumnWidth, alignment: .trailing)
+          .padding(.top, Theme.Spacing.s)
 
         // Timeline Center
         ZStack {
           Rectangle()
-            .fill(Color(.textQuarternary))
+            .fill(Color.eveOnSurfaceFaint)
             .frame(width: 4)
           Circle()
-            .fill(Color(.textPrimary))
+            .fill(Color.eveOnSurface)
             .frame(width: 10, height: 10)
         }
-        .frame(width: 20)
-        .padding(.horizontal, 8)
-        .padding(.top, 12)
+        .frame(width: Theme.Spacing.l)
+        .padding(.horizontal, Theme.Spacing.xs)
+        .padding(.top, Theme.Spacing.s)
 
         // Right Column: Card
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
           Text(title)
-            .font(.system(size: 15, weight: .bold))
-            .foregroundColor(Color(.textPrimary))
+            .font(.eveCardTitle)
+            .foregroundStyle(Color.eveOnSurface)
 
           if let location = location, !location.isEmpty {
-            HStack(spacing: 4) {
+            HStack(spacing: Theme.Spacing.xxs) {
               Image(systemName: "location.fill")
-                .font(.system(size: 10))
+                .font(.eveOverline)
               Text(location)
-                .font(.system(size: 13))
+                .font(.eveDetail)
             }
-            .foregroundColor(Color(.textSecondary))
+            .foregroundStyle(Color.eveOnSurfaceMuted)
           }
         }
-        .padding(.leading, 20)
-        .padding(.trailing, 16)
-        .padding(.vertical, 12)
+        .padding(.leading, Theme.Spacing.l)
+        .padding(.trailing, Theme.Spacing.m)
+        .padding(.vertical, Theme.Spacing.s)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.bgTertiary))
-        .cornerRadius(8)
+        .background(Color.eveSurfaceRaised)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
         .overlay(alignment: .leading) {
           Capsule()
-            .fill(Color(.textPrimary))
+            .fill(Color.eveOnSurface)
             .frame(width: 5)
-            .padding(.vertical, 8)
+            .padding(.vertical, Theme.Spacing.xs)
         }
-        .padding(.trailing, 24)
-        .padding(.vertical, 8)
+        .padding(.trailing, Theme.Spacing.gutter)
+        .padding(.vertical, Theme.Spacing.xs)
       }
       .frame(minHeight: 60)
     }
@@ -929,22 +909,22 @@ struct CalendarView: View {
     var body: some View {
       HStack(alignment: .center, spacing: 0) {
         Text(time)
-          .font(.system(size: 12, weight: .bold))
-          .foregroundColor(.red)
-          .frame(width: 80, alignment: .trailing)
+          .font(.eveCaption)
+          .foregroundStyle(.red)
+          .frame(width: timeColumnWidth, alignment: .trailing)
 
         ZStack {
           Circle()
             .fill(Color.red)
             .frame(width: 8, height: 8)
         }
-        .frame(width: 20)
-        .padding(.horizontal, 8)
+        .frame(width: Theme.Spacing.l)
+        .padding(.horizontal, Theme.Spacing.xs)
 
         Rectangle()
           .fill(Color.red)
           .frame(height: 1.5)
-          .padding(.trailing, 24)
+          .padding(.trailing, Theme.Spacing.gutter)
       }
       .frame(minHeight: 20)
     }

@@ -1,151 +1,164 @@
 import SwiftUI
-import UIKit
 
+/// Onboarding step two: explains what Eve reads, then asks for Calendar.
+///
+/// Eve only needs the calendar to build a routine, so this is the single
+/// permission onboarding requests. Location is asked for later, at the moment
+/// the user actually creates a place-based reminder (see `AddLocationSheet`),
+/// and notifications the first time Eve has something to deliver — permissions
+/// land where the user can see what they buy.
 struct PermissionView: View {
     @Binding var currentStep: Int
     @Bindable var permissionManager = PermissionManager.shared
 
-    /// Guards against double-taps while the OS prompts are being presented.
+    /// Guards against double-taps while the OS prompt is being presented.
     @State private var isRequesting = false
 
+    @State private var hasAppeared = false
+
     var body: some View {
-        ZStack {
-            Color(.bgPrimary).ignoresSafeArea()
+        ZStack(alignment: .bottomTrailing) {
 
-            Rectangle()
-                .fill(Color.bgSecondary.opacity(0.8))
-                .frame(width: 800, height: 500)
-                .blur(radius: 150)
-                .position(x: 200, y: 150)
-                .ignoresSafeArea(edges: .all)
+            // The artwork measures the whole display so the mascot can bleed
+            // off the leading edge; the button below stays inside the safe
+            // area, which is why they are siblings rather than nested.
+            GeometryReader { proxy in
+                let size = proxy.size
 
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Enhance \nYour Assistant")
-                    .font(.system(size: 30, weight: .bold, design: .default))
-                    .foregroundColor(Color(.textPrimary))
-                    .padding(.top, 60)
-                    .padding(.horizontal, 39)
+                ZStack(alignment: .topLeading) {
+                    AuroraBackground()
 
-                Text("EVE works by understanding your world to remind you. All data stored on your device, never anywhere else.")
-                    .font(.system(size: 15, weight: .medium))
-                    .opacity(0.7)
-                    .foregroundColor(Color(.textPrimary))
-                    .padding(.top, 10)
-                    .padding(.horizontal, 39)
-
-                // These rows only explain what EVE will access. The actual
-                // iOS permission prompts are requested when the user taps Next.
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 20) {
-                        PermissionRow(
-                            icon: "apple.intelligence",
-                            iconColor: Color.accentColor,
-                            title: "Apple Intelligence",
-                            description: "Automatically creates personalised reminders for your days, based on your data and context."
-                        )
-
-                        PermissionRow(
-                            icon: "location.fill",
-                            iconColor: Color.accentColor,
-                            title: "Location",
-                            description: "Get reminders when you are at specific places."
-                        )
-                        
-                        PermissionRow(
-                            icon: "calendar",
-                            iconColor: Color.accentColor,
-                            title: "Calendar & Reminders",
-                            description: "Get reminders based on your past and upcoming events and schedule."
-                        )
-
-                        PermissionRow(
-                            icon: "bell.badge.fill",
-                            iconColor: Color.accentColor,
-                            title: "Notifications",
-                            description: "Receives timely nudges and heads-ups so you’re always prepared."
-                        )
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 30)
-                    .padding(.bottom, 20) // Space for floating button
+                    avatar(in: size)
+                    bubble(in: size)
+                    copy(in: size)
                 }
+                .frame(width: size.width, height: size.height)
             }
+            .ignoresSafeArea()
 
-            // Floating Next Button
-            Button {
-                requestPermissionsThenContinue()
-            } label: {
-                Group {
-                    if isRequesting {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "chevron.right")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                    }
-                }
-                .foregroundStyle(Color(.textPrimary))
-                .frame(width: 26, height: 26)
-                .padding(10)
+            nextButton
+                .padding(.trailing, Theme.Spacing.gutter)
+                .padding(.bottom, Theme.Spacing.l)
+        }
+        .overlay(alignment: .bottomLeading) {
+            #if DEBUG
+            // Returns to the splash, which then replays its walk back to here.
+            OnboardingBackButton(destination: 0, currentStep: $currentStep)
+                .padding(.leading, Theme.Spacing.gutter)
+                .padding(.bottom, Theme.Spacing.l)
+            #endif
+        }
+        .task {
+            withAnimation(.spring(response: 0.9, dampingFraction: 0.8)) {
+                hasAppeared = true
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .background(Color(.bgSecondary))
-            .clipShape(Circle())
-            .disabled(isRequesting)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            .padding()
         }
     }
 
-    private func requestPermissionsThenContinue() {
+    // MARK: - Mascot
+
+    /// Mirrors the splash: centred on the leading edge so only Eve's trailing
+    /// half is on screen, leaving the right side of the display for the copy.
+    ///
+    /// Deliberately has no entrance animation of its own. The splash walks its
+    /// mascot to exactly this placement before advancing, so by the time this
+    /// screen mounts Eve is already standing here — scaling her in again would
+    /// put a visible pop in the middle of an otherwise continuous move. The
+    /// bubble and copy below still animate, since they have nothing to match.
+    private func avatar(in size: CGSize) -> some View {
+        Image("Avatar")
+            .resizable()
+            .scaledToFit()
+            .frame(width: size.width * MascotPlacement.permissionWidth)
+            .floating(7, period: MascotPlacement.floatPeriod)
+            .position(
+                x: size.width * MascotPlacement.permissionCenterX,
+                y: size.height * MascotPlacement.centerY
+            )
+    }
+
+    // MARK: - Thought bubble
+
+    private func bubble(in size: CGSize) -> some View {
+        // Tail points left, back towards the mascot on that edge.
+        ThoughtBubble(
+            systemName: "apple.intelligence",
+            tail: .leading,
+            tailDots: 2,
+            width: size.width * 0.31
+        )
+        .floating(5, period: MascotPlacement.bubbleFloatPeriod)
+        .opacity(hasAppeared ? 1 : 0)
+        .offset(y: hasAppeared ? 0 : 8)
+        .position(x: size.width * 0.65, y: size.height * 0.386)
+    }
+
+    // MARK: - Copy
+
+    private func copy(in size: CGSize) -> some View {
+        VStack(alignment: .trailing, spacing: Theme.Spacing.s) {
+            Spacer(minLength: 0)
+                .frame(height: size.height * 0.50)
+
+            Text("Enhance\nYour Assistant")
+                .font(.eveScreenTitle.bold())
+                .foregroundStyle(Color.eveOnSurface)
+                .multilineTextAlignment(.trailing)
+
+            Text("EVE works by understanding your world to remind you. All data stored on your device, never anywhere else.")
+                .font(.eveBody)
+                .foregroundStyle(Color.eveOnSurface.opacity(0.7))
+                .multilineTextAlignment(.trailing)
+                .fixedSize(horizontal: false, vertical: true)
+                // Held to the right half so the lines stack under the heading
+                // instead of running back under the mascot.
+                .frame(maxWidth: size.width * 0.56, alignment: .trailing)
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.trailing, Theme.Spacing.gutter)
+        .opacity(hasAppeared ? 1 : 0)
+    }
+
+    // MARK: - Continue
+
+    private var nextButton: some View {
+        Button {
+            requestCalendarThenContinue()
+        } label: {
+            Group {
+                if isRequesting {
+                    ProgressView()
+                } else {
+                    Image(systemName: "chevron.right")
+                        .font(.title3.weight(.semibold))
+                }
+            }
+            .foregroundStyle(Color.eveOnSurface)
+            .frame(width: 26, height: 26)
+            .padding(Theme.Spacing.s)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .disabled(isRequesting)
+        .accessibilityLabel("Continue")
+    }
+
+    /// Presents the system Calendar prompt, then moves on regardless of the
+    /// answer — the permission is the user's choice, and Eve degrades to an
+    /// empty routine rather than trapping them on this screen.
+    private func requestCalendarThenContinue() {
         guard !isRequesting else { return }
         isRequesting = true
 
         Task {
-            // Present the OS prompts one at a time, then move on regardless
-            // of the answers — permissions are the user's choice.
-            await permissionManager.requestAllPermissions()
+            await permissionManager.requestOnboardingPermissions()
             isRequesting = false
             withAnimation {
                 currentStep = 2
             }
         }
-    }
-}
-
-/// Informational only: shows what kind of data EVE wants to access.
-struct PermissionRow: View {
-    let icon: String
-    let iconColor: Color
-    let title: String
-    let description: String
-
-    var body: some View {
-        HStack(spacing: 16) {
-            Image(systemName: icon)
-                .font(.system(size: 30))
-                .foregroundColor(iconColor)
-                .frame(width: 30)
-                .padding(.trailing, 10)
-                .padding(.leading, 10)
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(title)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(Color(.textPrimary))
-
-                Text(description)
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(Color(.textPrimary))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer()
-        }
-        .padding(20)
-        .background(Color(.bgSecondary))
-        .cornerRadius(20)
     }
 }
 

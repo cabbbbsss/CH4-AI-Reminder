@@ -183,11 +183,25 @@ final class AssistantManager {
 
     /// Asks the model for personalised yes/no onboarding questions.
     /// Returns [] on any failure — the caller supplies a fallback set.
+    /// The onboarding questions worth asking.
+    ///
+    /// Whatever the model returns is filtered before it reaches the screen:
+    /// the screen offers Yes and No, so anything that can't be answered that
+    /// way is dropped, and when the user has a calendar the questions have to
+    /// be about it. An empty result is fine — the view falls back to the
+    /// hand-written set.
     func onboardingQuestions(currentPlace: String?) async -> [OnboardingQuestion] {
+
         let reminderContext = contextBuilder.build(currentPlace: currentPlace)
-        return (try? await foundationModel.generateOnboardingQuestions(
+
+        let generated = (try? await foundationModel.generateOnboardingQuestions(
             from: reminderContext
         )) ?? []
+
+        return QuestionShape.usable(
+            generated,
+            groundedIn: reminderContext.calendarTerms
+        )
     }
 
     /// A short, event-specific prep checklist for one calendar event —

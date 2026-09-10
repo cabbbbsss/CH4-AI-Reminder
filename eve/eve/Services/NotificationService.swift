@@ -25,15 +25,41 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         )) ?? false
     }
 
+    /// Whether Eve may post notifications, asking if it hasn't been decided.
+    ///
+    /// `mayPrompt` is the important half. Onboarding only requests Calendar,
+    /// so the notification prompt lives here — but it must only appear off the
+    /// back of something the user just did. A background resync asking for
+    /// permission suspends until the prompt is answered, which on first launch
+    /// stalls everything queued behind it, so housekeeping passes false and
+    /// simply schedules nothing until permission exists.
+    private func isAllowed(mayPrompt: Bool) async -> Bool {
+        switch await center.notificationSettings().authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        case .notDetermined:
+            return mayPrompt ? await requestPermission() : false
+        default:
+            return false
+        }
+    }
+
     /// Schedules an adaptive reminder.
     /// Pass a date for a timed reminder; nil delivers in ~5 seconds
     /// (useful for "right now" moments and for testing).
+    /// - Parameter mayPrompt: whether an undecided user may be asked now.
+    ///   True for something they just did; false for background work.
     func scheduleReminder(
         id: String = UUID().uuidString,
         title: String,
         body: String,
-        at date: Date? = nil
+        at date: Date? = nil,
+        mayPrompt: Bool = true
     ) async throws {
+
+        // Nothing would be delivered anyway, and adding the request would
+        // hide that fact.
+        guard await isAllowed(mayPrompt: mayPrompt) else { return }
 
         let content = UNMutableNotificationContent()
         content.title = title

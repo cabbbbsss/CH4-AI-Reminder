@@ -1,113 +1,149 @@
 import SwiftUI
 
+/// The splash screen: Eve's mascot running off the trailing edge, a thought
+/// bubble, and the wordmark — held long enough to read, then handed off to
+/// the permission step.
+///
+/// The hand-off is a move, not a cut. Eve walks from the trailing edge to the
+/// leading edge — landing exactly where `PermissionView` draws her — and only
+/// then does the step advance. Both screens read the same `MascotPlacement`
+/// values, so the cross-fade between them has nothing left to move and reads
+/// as one continuous shot.
 struct WelcomeView: View {
     @Binding var currentStep: Int
-    
+
+    /// Drives the entrance so the screen doesn't just appear fully formed —
+    /// it settles in over the beat before it hands off.
+    @State private var hasAppeared = false
+
+    /// Eve is on her way to the permission screen: the wordmark and bubble
+    /// clear out and she crosses to the leading edge.
+    @State private var isDeparting = false
+
+    /// How long the splash holds before Eve sets off.
+    private static let hold: Duration = .seconds(2.5)
+
+    /// How long she takes to cross the screen.
+    private static let departure: Double = 0.95
+
     var body: some View {
-        ZStack {
-            Color(.bgPrimary).ignoresSafeArea()
-            
-            Rectangle()
-                .fill(Color.bgSecondary.opacity(0.8))
-                .frame(width: 800, height: 500)
-                .blur(radius: 100)
-                .position(x: 200, y: 400)
-                .ignoresSafeArea(edges: .all)
-            
-            // Decorative Background Bubbles
-            GeometryReader { geometry in
-                let ratioX = geometry.size.width / 402.0
-                let ratioY = geometry.size.height / 874.0
-                
-                FloatingBubble1()
-                    .position(x: (275 + 76/2) * ratioX, y: (190 + 62/2) * ratioY)
-                FloatingBubble1()
-                    .position(x: (275 + 76/2) * ratioX, y: (190 + 62/2) * ratioY)
-                    .blur(radius: 10)
-                
-                FloatingBubble2()
-                    .position(x: (23 + 76/2) * ratioX, y: (280 + 62/2) * ratioY)
-                
-                FloatingBubble2()
-                    .position(x: (23 + 76/2) * ratioX, y: (280 + 62/2) * ratioY)
-                    .blur(radius: 10)
-                
-                FloatingBubble2(scale: 0.85)
-                    .position(x: (98 + 63/2) * ratioX, y: (170 + 52/2) * ratioY)
-                
-                FloatingBubble2(scale: 0.85)
-                    .position(x: (98 + 63/2) * ratioX, y: (170 + 52/2) * ratioY)
-                    .blur(radius: 10)
-                
-                // Robot Icon
-                Image("Avatar")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 150, height: 150)
-                    .position(x: (122 + 158/2) * ratioX, y: (242 + 158/2) * ratioY)
-                
-                // Text Area
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("EVE")
-                        .font(.system(size: 86, weight: .bold, design: .default))
-                        .foregroundColor(Color(.textPrimary))
-                        .position(x: (20 + 213/2) * ratioX, y: (350 + (86+163)/2) * ratioY)
-                    
-                    Text("Your adaptive routine companion")
-                        .font(.system(size: 30, weight: .bold, design: .default))
-                        .foregroundColor(Color(.textPrimary).opacity(0.59))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .position(x: (75 + 213/2) * ratioX, y: (-5 + (86+163)/2) * ratioY)
-                }
+        // Every element is placed as a fraction of the real screen size, so
+        // the composition holds together from an iPhone SE to an iPad rather
+        // than being pinned to one device's point dimensions.
+        GeometryReader { proxy in
+            let size = proxy.size
+
+            ZStack(alignment: .topLeading) {
+                // Sits low behind the wordmark, then rises to the permission
+                // screen's height as Eve crosses — so the two backgrounds are
+                // identical by the time they cross-fade.
+                AuroraBackground(
+                    focus: isDeparting ? AuroraBackground.defaultFocus : 0.45
+                )
+
+                avatar(in: size)
+                bubble(in: size)
+                wordmark(in: size)
             }
+            .frame(width: size.width, height: size.height)
         }
-        .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                withAnimation {
-                    currentStep = 1
-                }
+        // The mascot is deliberately cut off by the display edge, so the
+        // layout has to measure the full screen, not the safe area.
+        .ignoresSafeArea()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Eve — your adaptive routine companion")
+        // `.task` is cancelled when the view goes away, so the hand-off can't
+        // fire into a screen that's already been replaced.
+        .task {
+            withAnimation(.spring(response: 0.9, dampingFraction: 0.8)) {
+                hasAppeared = true
             }
+
+            try? await Task.sleep(for: Self.hold)
+            guard !Task.isCancelled else { return }
+
+            withAnimation(.easeInOut(duration: Self.departure)) {
+                isDeparting = true
+            }
+
+            // Advance only once she has arrived. Handing off mid-walk would
+            // cross-fade a moving mascot into a stationary one, which is
+            // exactly the jump this sequence is built to avoid.
+            try? await Task.sleep(for: .seconds(Self.departure))
+            guard !Task.isCancelled else { return }
+
+            withAnimation { currentStep = 1 }
         }
     }
-    
-    
-    struct FloatingBubble1: View {
-        var scale: CGFloat = 1.0
-        
-        var body: some View {
-            ZStack(alignment: .topLeading) {
-                Circle().fill(Color.white).frame(width: 5, height: 5)
-                    .offset(x: -10, y: 57)
-                
-                Circle().fill(Color.white).frame(width: 12, height: 12)
-                    .offset(x: -5, y: 45)
-                
-                Ellipse().fill(Color.white).frame(width: 67, height: 54)
-                    .offset(x: 0, y: 0)
-            }
-            .frame(width: 76, height: 62)
-            .scaleEffect(scale)
-        }
+
+    // MARK: - Mascot
+
+    /// Starts centred just past the trailing edge — only her leading half on
+    /// screen — and crosses to the permission screen's placement on departure.
+    private func avatar(in size: CGSize) -> some View {
+        let widthRatio = isDeparting
+            ? MascotPlacement.permissionWidth
+            : MascotPlacement.splashWidth
+
+        let centerXRatio = isDeparting
+            ? MascotPlacement.permissionCenterX
+            : MascotPlacement.splashCenterX
+
+        return Image("Avatar")
+            .resizable()
+            .scaledToFit()
+            .frame(width: size.width * widthRatio)
+            .floating(7, period: MascotPlacement.floatPeriod)
+            .scaleEffect(hasAppeared ? 1 : 0.92)
+            .position(
+                x: size.width * centerXRatio,
+                y: size.height * MascotPlacement.centerY
+            )
     }
-    
-    
-    struct FloatingBubble2: View {
-        var scale: CGFloat = 1.0
-        
-        var body: some View {
-            ZStack(alignment: .topLeading) {
-                Circle().fill(Color.white).frame(width: 5, height: 5)
-                    .offset(x: 90, y: 57)
-                
-                Circle().fill(Color.white).frame(width: 12, height: 12)
-                    .offset(x: 75, y: 45)
-                
-                Ellipse().fill(Color.white).frame(width: 67, height: 54)
-                    .offset(x: 8.75, y: 0)
-            }
-            .frame(width: 76, height: 62)
-            .scaleEffect(scale)
+
+    // MARK: - Thought bubble
+
+    private func bubble(in size: CGSize) -> some View {
+        // Tail points right, towards the mascot bleeding off that edge.
+        ThoughtBubble(systemName: "list.bullet", tail: .trailing, width: size.width * 0.315)
+            .floating(5, period: MascotPlacement.bubbleFloatPeriod)
+            .opacity(hasAppeared && !isDeparting ? 1 : 0)
+            .offset(y: hasAppeared ? 0 : 8)
+            .position(x: size.width * 0.318, y: size.height * 0.395)
+    }
+
+    // MARK: - Wordmark
+
+    private func wordmark(in size: CGSize) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            // Pushes the block to roughly the lower third without pinning it
+            // to the bottom — the mockup leaves deliberate space underneath.
+            Spacer(minLength: 0)
+                .frame(height: size.height * 0.545)
+
+            Text("EVE")
+                // Thin and widely tracked. Capped so the wordmark doesn't
+                // balloon on a large display.
+                .font(.system(size: min(size.width * 0.175, 96), weight: .thin))
+                .tracking(size.width * 0.055)
+                .foregroundStyle(Color.eveOnSurface)
+
+            // The break is explicit: the tagline is set as two balanced lines
+            // under the wordmark, and leaving it to wrap on its own put
+            // "routine" on the second line, which reads worse. maxWidth still
+            // lets it re-wrap rather than run under the mascot at large
+            // Dynamic Type sizes.
+            Text("Your adaptive routine\ncompanion")
+                .font(.eveDetail)
+                .foregroundStyle(Color.eveOnSurface.opacity(0.9))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: size.width * 0.6, alignment: .leading)
+
+            Spacer(minLength: 0)
         }
+        .padding(.leading, Theme.Spacing.gutter)
+        // Clears out as Eve crosses, so she isn't walking over the wordmark.
+        .opacity(hasAppeared && !isDeparting ? 1 : 0)
     }
 }
 

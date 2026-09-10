@@ -17,46 +17,66 @@ struct AILearningView: View {
   /// be re-run once if the user goes and turns it on.
   @State private var analyzedWithoutAI = false
 
+  /// Indent for the streaming checklist. Wider than the standard gutter so
+  /// the rows sit under the mascot rather than running edge to edge.
+  private static let logInset: CGFloat = 56
+
   private var isFinished: Bool {
     !engine.isAnalyzing && engine.analysisProgress >= 1.0
   }
 
   var body: some View {
-    ZStack {
-      background
+    ZStack(alignment: .bottomTrailing) {
+      AuroraBackground()
 
       VStack(spacing: 0) {
         mascotCluster
-          .padding(.top, 16)
+          .padding(.top, Theme.Spacing.m)
 
         Text(headline)
-          .font(.system(size: 32, weight: .bold))
-          .foregroundColor(.textPrimary)
+          .font(.eveScreenTitle.bold())
+          .foregroundStyle(Color.eveOnSurface)
           .multilineTextAlignment(.center)
           .animation(.easeInOut, value: isFinished)
           .animation(.easeInOut, value: aiMissing)
-          
+
         if aiMissing {
 
           missingAICard
-            .padding(.top, 32)
+            .padding(.top, Theme.Spacing.xl)
 
         } else {
 
           learningLog
-            .padding(.top, 36)
-            .padding(.horizontal, 44)
+            .padding(.top, Theme.Spacing.xl)
+            .padding(.horizontal, Self.logInset)
 
         }
 
         Spacer(minLength: 0)
+      }
 
-        if isFinished {
-          continueButton
-        }
+      // Sits over the content rather than in the stack, so the log doesn't
+      // shift down the moment the last step lands and the button appears.
+      if isFinished {
+        continueButton
+          .padding(.trailing, Theme.Spacing.gutter)
+          .padding(.bottom, Theme.Spacing.l)
       }
     }
-    .preferredColorScheme(.dark)
+    .overlay(alignment: .bottomLeading) {
+      #if DEBUG
+      // Always available, unlike Continue — the point is to be able to leave
+      // this screen while the pass is still running.
+      OnboardingBackButton(destination: 1, currentStep: $currentStep)
+        .padding(.leading, Theme.Spacing.gutter)
+        .padding(.bottom, Theme.Spacing.l)
+      #endif
+    }
+    // No forced `.preferredColorScheme(.dark)`. Welcome and Permission follow
+    // the system, so pinning only these two screens to dark made onboarding
+    // flip appearance halfway through for anyone in light mode — and it
+    // overrode the theme preference ContentView applies.
     .task {
       await startIfPossible()
     }
@@ -129,81 +149,65 @@ struct AILearningView: View {
 
   }
 
-  // MARK: - Background
-
-  private var background: some View {
-      ZStack {
-          Color(.bgPrimary).ignoresSafeArea()
-          
-          Rectangle()
-              .fill(Color.bgSecondary.opacity(0.8))
-              .frame(width: 800, height: 500)
-              .blur(radius: 150)
-              .position(x: 200, y: 150)
-              .ignoresSafeArea(edges: .all)
-          
-      }
-    .ignoresSafeArea()
-  }
-
   // MARK: - Mascot + floating data sources
 
+  /// The mascot ringed by the data sources Eve is reading.
+  ///
+  /// The tiles used to sit at fixed ±145pt offsets, which pushed them off the
+  /// edge of a 320pt-wide screen. The spread is now a fraction of the actual
+  /// width, capped so it doesn't sprawl on an iPad.
   private var mascotCluster: some View {
-    ZStack {
-      GlassIconTile(systemName: "calendar", rotation: -14)
-        .offset(x: -125, y: -95)
-        .offset(y: isFloating ? -6 : 6)
-        .animation(
-          .easeInOut(duration: 2.4).repeatForever(autoreverses: true),
-          value: isFloating
-        )
+    GeometryReader { proxy in
+      let spread = min(proxy.size.width * 0.36, 145)
 
-      GlassIconTile(systemName: "location.fill", rotation: 12)
-        .offset(x: 105, y: -115)
-        .offset(y: isFloating ? 6 : -6)
-        .animation(
-          .easeInOut(duration: 2.8).repeatForever(autoreverses: true),
-          value: isFloating
-        )
+      ZStack {
+        GlassIconTile(systemName: "calendar", rotation: -14)
+          .offset(x: -spread * 0.86, y: -95)
+          .offset(y: isFloating ? -6 : 6)
+          .animation(floatAnimation(2.4), value: isFloating)
 
-      GlassIconTile(systemName: "clock", rotation: -10, size: 58)
-        .offset(x: -145, y: 15)
-        .offset(y: isFloating ? -5 : 5)
-        .animation(
-          .easeInOut(duration: 3.0).repeatForever(autoreverses: true),
-          value: isFloating
-        )
+        GlassIconTile(systemName: "location.fill", rotation: 12)
+          .offset(x: spread * 0.72, y: -115)
+          .offset(y: isFloating ? 6 : -6)
+          .animation(floatAnimation(2.8), value: isFloating)
 
-      GlassIconTile(systemName: "checklist", rotation: 10, size: 58)
-        .offset(x: 140, y: 20)
-        .offset(y: isFloating ? 5 : -5)
-        .animation(
-          .easeInOut(duration: 2.6).repeatForever(autoreverses: true),
-          value: isFloating
-        )
+        GlassIconTile(systemName: "clock", rotation: -10, size: 58)
+          .offset(x: -spread, y: 15)
+          .offset(y: isFloating ? -5 : 5)
+          .animation(floatAnimation(3.0), value: isFloating)
 
-//      ThoughtBubble()
-//        .offset(x: 122, y: -62)
-//        .offset(y: isFloating ? -4 : 4)
-//        .animation(
-//          .easeInOut(duration: 2.2).repeatForever(autoreverses: true),
-//          value: isFloating
-//        )
+        GlassIconTile(systemName: "checklist", rotation: 10, size: 58)
+          .offset(x: spread * 0.97, y: 20)
+          .offset(y: isFloating ? 5 : -5)
+          .animation(floatAnimation(2.6), value: isFloating)
 
-      Image("Avatar")
-        .resizable()
-        .scaledToFit()
-        .frame(width: 190, height: 190)
-        .scaleEffect(isFloating ? 1.03 : 0.97)
-        .animation(
-          .easeInOut(duration: 2.0).repeatForever(autoreverses: true),
-          value: isFloating
-        )
+        Image("Avatar")
+          .resizable()
+          .scaledToFit()
+          .frame(width: 190, height: 190)
+          .scaleEffect(isFloating ? 1.03 : 0.97)
+          .animation(floatAnimation(2.0), value: isFloating)
+
+        // Eve is thinking. Empty cloud — the tiles around it already say
+        // what she is thinking about.
+        // Clear of the avatar (radius 95) and tucked into the gap between
+        // the two tiles on that side, so nothing overlaps the face.
+        ThoughtBubble(tail: .leading, tailDots: 2, width: 70)
+          .offset(x: spread * 0.95, y: -75)
+          .offset(y: isFloating ? -4 : 4)
+          .animation(floatAnimation(2.2), value: isFloating)
+      }
+      .frame(width: proxy.size.width, height: proxy.size.height)
     }
     .frame(height: 330)
+    .accessibilityHidden(true)
     .onAppear {
       isFloating = true
     }
+  }
+
+  private func floatAnimation(_ duration: Double) -> Animation {
+    .eveFloat(duration)
   }
 
   // MARK: - Streaming log
@@ -216,8 +220,9 @@ struct AILearningView: View {
           // ✓ when the step had data to work with, ✗ when nothing was
           // available (the relevant permission wasn't granted).
           icon: step.succeeded ? "checkmark" : "xmark",
-          iconColor: step.succeeded ? Color(.textPrimary) : .red,
+          iconColor: step.succeeded ? .accentColor : .red,
           text: step.text,
+          detail: step.detail,
           isActive: false,
           isLast: !engine.isAnalyzing && step.id == engine.completedSteps.last?.id
         )
@@ -226,10 +231,12 @@ struct AILearningView: View {
       if engine.isAnalyzing {
         LearningLogRow(
           icon: "ellipsis",
-          iconColor: Color(.textPrimary),
+          iconColor: .eveOnSurfaceMuted,
+          // Only shown for the instant before the first step names itself.
           text: engine.currentAnalysisTask.isEmpty
-            ? "Processing..."
+            ? "Getting started…"
             : engine.currentAnalysisTask,
+          detail: engine.currentAnalysisDetail,
           isActive: true,
           isLast: true
         )
@@ -244,62 +251,60 @@ struct AILearningView: View {
 
   // MARK: - Missing Apple Intelligence
 
+  /// A light card, matching every other surface on this screen.
+  ///
+  /// It used to be drawn on the inverted panel colour, which put an
+  /// Apple Intelligence glyph in exactly the same colour as its own
+  /// background — the icon was invisible. On `eveSurface` the whole card
+  /// uses the ordinary on-surface colours and can't collide with itself.
   private var missingAICard: some View {
-    
-      VStack(alignment: .leading, spacing: 5) {
-          
-          HStack(alignment: .center, spacing: 16) {
+    HStack(alignment: .top, spacing: Theme.Spacing.m) {
 
-          Image(systemName: "apple.intelligence")
-            .font(.system(size: 40, weight: .regular))
-            .foregroundColor(Color(.textPrimary))
+      Image(systemName: "apple.intelligence")
+        .font(.system(size: 34))
+        .foregroundStyle(Color.accentColor)
 
-              VStack(alignment: .leading, spacing: 5) {
-                  
-                  Text("MISSING")
-                      .font(.system(size: 15, weight: .bold))
-                  
-                  Text("Apple Intelligence")
-                      .font(.system(size: 15, weight: .bold))
-                  
-                  Text("This is required for EVE to learn your routines from your daily context.")
-                      .font(.system(size: 15, weight: .regular))
-                      .opacity(0.85)
-                      .fixedSize(horizontal: false, vertical: true)
-                  
-                  Text("Go to Settings > Apple Intelligence & Siri > Turn on Apple Intelligence")
-                      .font(.system(size: 15, weight: .regular))
-                      .opacity(0.85)
-                      .fixedSize(horizontal: false, vertical: true)
-                      .padding(.bottom, 10)
-                  
-              }
-          }
-          
-          Button {
-            handleEnableTapped()
-          } label: {
-            Text("Enable")
-              .font(.system(size: 14, weight: .bold))
-              .foregroundColor(.textPrimary)
-              .frame(maxWidth: .infinity, alignment: .center)
-              .padding(.horizontal, 100)
-              .padding(.vertical, 10)
-              .background(Color.accentColor, in: Capsule())
-          }
-          .foregroundColor(Color(.textSecondary))
+      VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+        Text("MISSING")
+          .font(.eveCardTitle)
+          .foregroundStyle(Color.eveOnSurface)
+
+        Text("Apple Intelligence.")
+          .font(.eveCardTitle)
+          .foregroundStyle(Color.eveOnSurface)
+
+        Text("This is required for EVE to learn your routines from your daily context.")
+          .font(.eveDetail)
+          .foregroundStyle(Color.eveOnSurface.opacity(0.75))
+          .fixedSize(horizontal: false, vertical: true)
+          .padding(.top, Theme.Spacing.xxs)
+      }
+
+      Spacer(minLength: Theme.Spacing.xs)
+
+      Button {
+        handleEnableTapped()
+      } label: {
+        Text("Allow")
+          .font(.eveCaption)
+          .foregroundStyle(.white)
+          .padding(.horizontal, Theme.Spacing.m)
+          .padding(.vertical, Theme.Spacing.xs)
+          .background(Color.accentColor, in: Capsule())
+      }
+      // Nudged down to sit against the name rather than the MISSING label.
+      .padding(.top, Theme.Spacing.m)
     }
-    .padding(20)
-    .background(
-      Color(.textPrimary),
-      in: RoundedRectangle(cornerRadius: 22, style: .continuous)
-    )
-    .padding(.horizontal, 20)
+    .padding(Theme.Spacing.m)
+    .eveCard(radius: Theme.Radius.panel)
+    .padding(.horizontal, Theme.Spacing.gutter)
     .transition(.move(edge: .bottom).combined(with: .opacity))
   }
 
   // MARK: - Continue
 
+  /// The same circular glass control the permission step uses, so the two
+  /// onboarding screens advance the same way.
   private var continueButton: some View {
     Button {
       // Onboarding isn't finished yet — go to the questions step.
@@ -307,16 +312,16 @@ struct AILearningView: View {
         currentStep = 3
       }
     } label: {
-      Text("Continue")
-        .font(.system(size: 17, weight: .bold))
-        .foregroundColor(Color(.textSecondary))
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .background(Color.white, in: Capsule())
+      Image(systemName: "chevron.right")
+        .font(.title3.weight(.semibold))
+        .foregroundStyle(Color.eveOnSurface)
+        .frame(width: 26, height: 26)
+        .padding(Theme.Spacing.s)
     }
-    .padding(.horizontal, 32)
-    .padding(.bottom, 24)
-    .transition(.move(edge: .bottom).combined(with: .opacity))
+    .buttonStyle(.glass)
+    .buttonBorderShape(.circle)
+    .accessibilityLabel("Continue")
+    .transition(.opacity.combined(with: .scale))
   }
 }
 
@@ -329,83 +334,83 @@ private struct GlassIconTile: View {
 
   var body: some View {
     RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
-      .fill(Color.textPrimary.opacity(0.14))
+      .fill(Color.eveSurface.opacity(0.75))
       .frame(width: size, height: size)
       .overlay(
         RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
-          .stroke(Color.bgPrimary.opacity(0.28), lineWidth: 1)
+          .stroke(Color.eveOnSurface.opacity(0.10), lineWidth: 1)
       )
       .overlay(
         Image(systemName: systemName)
           .font(.system(size: size * 0.4, weight: .medium))
-          .foregroundColor(.textPrimary.opacity(0.9))
+          .foregroundStyle(Color.eveOnSurface.opacity(0.35))
       )
-      .shadow(color: Color.black.opacity(0.18), radius: 10, y: 5)
+      .shadow(color: .black.opacity(0.10), radius: 10, y: 5)
       .rotationEffect(.degrees(rotation))
   }
 }
 
-//private struct ThoughtBubble: View {
-//  var body: some View {
-//    ZStack(alignment: .bottomLeading) {
-//      Ellipse()
-//        .fill(Color.white)
-//        .frame(width: 62, height: 46)
-//
-//      Circle()
-//        .fill(Color.white)
-//        .frame(width: 11, height: 11)
-//        .offset(x: -8, y: 5)
-//
-//      Circle()
-//        .fill(Color.white)
-//        .frame(width: 5, height: 5)
-//        .offset(x: -16, y: 11)
-//    }
-//  }
-//}
-
 private struct LearningLogRow: View {
   let icon: String
-  var iconColor: Color = Color(.textSecondary)
+  var iconColor: Color = .accentColor
   let text: String
+  var detail: String = ""
   var isActive: Bool = false
   var isLast: Bool = false
 
   var body: some View {
-    HStack(alignment: .top, spacing: 14) {
+    HStack(alignment: .top, spacing: Theme.Spacing.s) {
 
       VStack(spacing: 0) {
         ZStack {
           Circle()
-            .fill(Color.bgSecondary)
+            .fill(Color.eveSurface)
             .frame(width: 28, height: 28)
 
           Image(systemName: icon)
-            .font(.system(size: 12, weight: .bold))
-            .foregroundColor(iconColor)
+            .font(.eveCaption.weight(.bold))
+            .foregroundStyle(iconColor)
         }
 
-        // Tail line: full segment between rows, short stub under
-        // the active row (more is coming), nothing after the last.
+        // Tail line: stretches to whatever height this row turned out to be,
+        // short stub under the active row (more is coming), nothing after the
+        // last. It used to be a fixed 30pt, so any row whose detail wrapped to
+        // two lines outgrew its own connector and collided with the next one.
         if !isLast {
           Rectangle()
-            .fill(Color.bgSecondary.opacity(0.55))
-            .frame(width: 2, height: 26)
+            .fill(Color.eveSurface.opacity(0.7))
+            .frame(width: 2)
+            .frame(maxHeight: .infinity)
         } else if isActive {
           Rectangle()
-            .fill(Color.bgSecondary.opacity(0.55))
+            .fill(Color.eveSurface.opacity(0.7))
             .frame(width: 2, height: 16)
         }
       }
+      .frame(maxHeight: .infinity)
 
-      Text(text)
-        .font(.system(size: 14, weight: .semibold))
-        .foregroundColor(isActive ? Color.textPrimary.opacity(0.55) : .white)
-        .padding(.top, 5)
+      VStack(alignment: .leading, spacing: 2) {
+        // The active row stays dimmer, so the step in flight reads as
+        // in-progress rather than done.
+        Text(text)
+          .font(.eveBody)
+          .foregroundStyle(Color.eveOnSurface.opacity(isActive ? 0.55 : 1))
+
+        if !detail.isEmpty {
+          Text(detail)
+            .font(.eveDetail)
+            .foregroundStyle(Color.eveOnSurfaceMuted)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+      }
+      .padding(.top, 3)
+      // The gap between rows lives here rather than on the stack, so the
+      // connector above stretches through it instead of stopping short.
+      .padding(.bottom, isLast ? 0 : Theme.Spacing.m)
 
       Spacer(minLength: 0)
     }
+    .fixedSize(horizontal: false, vertical: true)
     .transition(
       .asymmetric(
         insertion: .move(edge: .bottom).combined(with: .opacity),
