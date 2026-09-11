@@ -16,6 +16,11 @@ import SwiftData
 final class LocationActivityManager {
 
     private(set) var currentPlace: String?
+    private(set) var currentLocation: CLLocation?
+
+    /// The coordinator uses only significant changes; no continuous raw trace
+    /// is retained by this manager.
+    var onSignificantLocationChange: ((CLLocation) -> Void)?
 
     private(set) var accessDenied = false
 
@@ -33,18 +38,26 @@ final class LocationActivityManager {
         self.historyLogger = HistoryLogger(context: context)
     }
 
+    var hasAuthorizedLocation: Bool {
+        let status = locationService.authorizationStatus
+        return status == .authorizedWhenInUse || status == .authorizedAlways
+    }
+
     func start() async {
 
-        let status = await locationService.requestPermission()
+        let status = locationService.authorizationStatus
 
         guard status == .authorizedWhenInUse || status == .authorizedAlways else {
             accessDenied = true
             return
         }
 
+        accessDenied = false
+
         // Baseline: know where we are, but don't log it —
         // "app launched" is not a visit, and would spam the timeline.
         if let location = try? await locationService.currentLocation() {
+            currentLocation = location
             currentPlace = await locationService.placeName(for: location)
         }
 
@@ -65,6 +78,9 @@ final class LocationActivityManager {
     }
 
     private func handleChange(to location: CLLocation) async {
+
+        currentLocation = location
+        onSignificantLocationChange?(location)
 
         guard let place = await locationService.placeName(for: location) else {
             return

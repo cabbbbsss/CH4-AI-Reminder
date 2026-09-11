@@ -106,6 +106,7 @@ struct ReminderEditSheet: View {
 
                 Section {
                     Button("Remove Reminder", role: .destructive) {
+                        LocationReminderNotificationCoordinator.shared.cancel(reminder)
                         router?.remove(reminder)
                         dismiss()
                     }
@@ -157,6 +158,13 @@ struct ReminderEditSheet: View {
 
         try? modelContext.save()
 
+        if let selectedLocationID,
+           let selectedLocation = allLocations.first(where: { $0.id == selectedLocationID }) {
+            Task {
+                await LocationReminderNotificationCoordinator.shared.scheduleAfterManualSave(reminder, at: selectedLocation)
+            }
+        }
+
     }
 
 }
@@ -187,7 +195,8 @@ struct AddReminderSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") {
-                        add()
+                        let reminder = add()
+                        Task { await LocationReminderNotificationCoordinator.shared.scheduleAfterManualSave(reminder, at: location) }
                         dismiss()
                     }
                     .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -196,16 +205,17 @@ struct AddReminderSheet: View {
         }
     }
 
-    private func add() {
+    private func add() -> LocationReminder {
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        let reminder = LocationReminder(locationID: location.id, text: trimmed, itemKey: nil, isSystemManaged: false)
+        guard !trimmed.isEmpty else { return reminder }
 
-        modelContext.insert(
-            LocationReminder(locationID: location.id, text: trimmed, itemKey: nil, isSystemManaged: false)
-        )
+        modelContext.insert(reminder)
 
         try? modelContext.save()
+
+        return reminder
 
     }
 

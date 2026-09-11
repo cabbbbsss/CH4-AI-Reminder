@@ -25,6 +25,15 @@ final class CalendarEvent {
 
     var endDate: Date
 
+    /// All-day events are useful context, but do not have a meaningful
+    /// departure deadline and therefore never receive an adaptive alert.
+    var isAllDay: Bool = false
+
+    /// EventKit supplies this when the event has a structured map location.
+    /// Text-only locations are resolved by AdaptiveNotificationCoordinator.
+    var latitude: Double?
+    var longitude: Double?
+
     /// The event's free-text notes (EKEvent.notes).
     ///
     /// Sent to the model by `ReminderContextBuilder.buildPreparationContext`
@@ -65,6 +74,9 @@ final class CalendarEvent {
         self.title = event.title
         self.startDate = event.startDate
         self.endDate = event.endDate
+        self.isAllDay = event.isAllDay
+        self.latitude = event.structuredLocation?.geoLocation?.coordinate.latitude
+        self.longitude = event.structuredLocation?.geoLocation?.coordinate.longitude
         // Some calendars deliver notes as HTML; store clean plain text so the
         // UI and the model both get readable content, not raw markup.
         self.notes = HTMLText.plainIfNeeded(event.notes)

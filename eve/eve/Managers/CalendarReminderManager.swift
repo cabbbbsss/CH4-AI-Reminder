@@ -181,7 +181,7 @@ final class CalendarReminderManager {
     /// keep it and are not touched.
     func regenerate(for date: Date) async {
 
-        for reminder in existingReminders(for: date) where reminder.isSystemManaged {
+        for reminder in existingReminders(for: date) where reminder.isSystemManaged && !reminder.isCompleted {
             context.delete(reminder)
         }
 
@@ -193,6 +193,11 @@ final class CalendarReminderManager {
 
     func remove(_ reminder: CalendarReminder) {
         context.delete(reminder)
+        try? context.save()
+    }
+
+    func toggleCompletion(for reminder: CalendarReminder) {
+        reminder.isCompleted.toggle()
         try? context.save()
     }
 

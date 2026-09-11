@@ -66,7 +66,7 @@ struct LocationView: View {
             }
         }
         .sheet(item: $editingLocation) { location in
-            LocationEditSheet(location: location)
+            AddLocationSheet(nextSortOrder: location.sortOrder, editingLocation: location)
         }
         .sheet(isPresented: $addingLocation) {
             AddLocationSheet(nextSortOrder: savedLocations.count)
@@ -86,6 +86,7 @@ struct LocationView: View {
                 selectedLocationID = savedLocations.first?.id
             }
             await seedDefaultsIfNeeded()
+            await LocationReminderNotificationCoordinator.shared.reconcile(context: modelContext)
         }
         .onChange(of: savedLocations.map(\.id)) { _, ids in
             // Keep the filter pointed at a place that still exists — e.g. after
@@ -210,7 +211,10 @@ struct LocationView: View {
             ForEach(items) { reminder in
                 ReminderRow(
                     reminder: reminder,
-                    onToggle: { routingManager?.toggleCompletion(reminder) },
+                    onToggle: {
+                        routingManager?.toggleCompletion(reminder)
+                        Task { await LocationReminderNotificationCoordinator.shared.reconcile(context: modelContext) }
+                    },
                     onTap: { editingReminder = reminder }
                 )
                 .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
@@ -333,10 +337,13 @@ struct LocationView: View {
             return
         }
 
-        modelContext.insert(
-            LocationReminder(locationID: location.id, text: trimmed, itemKey: nil, isSystemManaged: false)
-        )
+        let reminder = LocationReminder(locationID: location.id, text: trimmed, itemKey: nil, isSystemManaged: false)
+        modelContext.insert(reminder)
         try? modelContext.save()
+
+        Task {
+            await LocationReminderNotificationCoordinator.shared.scheduleAfterManualSave(reminder, at: location)
+        }
 
         newReminderText = ""
         newReminderFocused = true
@@ -387,6 +394,7 @@ struct LocationView: View {
     private func delete(_ location: SavedLocation) {
 
         for reminder in reminders(for: location) {
+            LocationReminderNotificationCoordinator.shared.cancel(reminder)
             modelContext.delete(reminder)
         }
 
@@ -404,6 +412,7 @@ struct LocationView: View {
     }
 
     private func deleteReminder(_ reminder: LocationReminder) {
+        LocationReminderNotificationCoordinator.shared.cancel(reminder)
         routingManager?.remove(reminder)
     }
 

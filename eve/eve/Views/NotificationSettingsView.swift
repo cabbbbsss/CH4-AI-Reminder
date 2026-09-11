@@ -20,6 +20,8 @@ struct NotificationSettingsView: View {
     @AppStorage("notif.routineReminders") private var routineReminders = true
     @AppStorage("notif.insightAlerts") private var insightAlerts = true
     @AppStorage("notif.actionableNotifications") private var actionableNotifications = true
+    @AppStorage("notif.travelMode") private var travelModeRaw = TravelMode.driving.rawValue
+    @State private var showBackgroundLocationExplanation = false
 
     private var isGranted: Bool { permissionManager.isNotificationsGranted }
 
@@ -73,11 +75,44 @@ struct NotificationSettingsView: View {
                 }
                 .disabled(!isGranted)
                 .opacity(isGranted ? 1 : 0.4)
+
+                SettingsCard {
+                    Picker("Travel mode", selection: $travelModeRaw) {
+                        ForEach(TravelMode.allCases, id: \.rawValue) { mode in
+                            Text(mode.displayName).tag(mode.rawValue)
+                        }
+                    }
+                    .padding(.horizontal, 18)
+
+                    SettingsDivider()
+
+                    Button("Enable adaptive background timing") {
+                        showBackgroundLocationExplanation = true
+                    }
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(Color.accentColor)
+                    .padding(.horizontal, 18)
+                    .frame(height: 44)
+                }
+
+                Text("EVE uses your selected travel mode, confirmed Home/Office pins, and low-power location changes to refine future alerts. Location history stays on this device.")
+                    .font(.system(size: 13))
+                    .foregroundColor(Color(.textQuarternary))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 24)
             }
             .padding(.top, 20)
         }
         // Reflect a permission changed in the Settings app when we return.
         .onAppear { permissionManager.refreshStatuses() }
+        .alert("Enable adaptive background timing?", isPresented: $showBackgroundLocationExplanation) {
+            Button("Not Now", role: .cancel) {}
+            Button("Continue") {
+                Task { await permissionManager.requestAdaptiveBackgroundLocation() }
+            }
+        } message: {
+            Text("EVE first asks for location while you use the app, then may ask separately for Always access so it can refine travel timing in the background.")
+        }
     }
 }
 

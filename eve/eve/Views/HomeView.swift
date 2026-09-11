@@ -21,6 +21,8 @@ extension View {
 struct HomeView: View {
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
+    @Bindable private var permissionManager = PermissionManager.shared
 
     // The composition root ported from TodayView: owns the sync,
     // location and assistant managers and starts them in order.
@@ -124,9 +126,28 @@ struct HomeView: View {
             viewModel = vm
             await vm.start()
 
-            // Populate the suggestion bubble with a real reminder on first
-            // appear — silently, so opening Home doesn't fire a notification.
+            // Let the user see a useful Home reminder before explaining why
+            // notification permission matters.
             await vm.assistant.generateInitialInsights(currentPlace: vm.location.currentPlace)
+
+            let notificationStatus = await permissionManager.requestNotificationsIfUndetermined()
+            if PermissionManager.canDeliverNotifications(notificationStatus) {
+                await vm.adaptiveNotifications.reconcile(currentLocation: vm.location.currentLocation)
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, let viewModel else { return }
+            Task {
+                await viewModel.sync.syncNow()
+                await viewModel.adaptiveNotifications.reconcile(currentLocation: viewModel.location.currentLocation)
+            }
+        }
+        .onChange(of: permissionManager.isLocationGranted) { _, granted in
+            guard granted, let viewModel else { return }
+            Task {
+                await viewModel.location.start()
+                await viewModel.adaptiveNotifications.reconcile(currentLocation: viewModel.location.currentLocation)
+            }
         }
     }
 
@@ -487,4 +508,3 @@ struct TimelineItem: View {
 #Preview {
     HomeView()
 }
-

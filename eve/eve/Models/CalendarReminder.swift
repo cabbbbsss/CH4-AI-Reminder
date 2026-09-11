@@ -34,6 +34,11 @@ final class CalendarReminder {
 
     var isSystemManaged: Bool
 
+    /// Mirrors the completion affordance people expect when scheduled
+    /// reminders appear beside events in a calendar. Defaults to false so
+    /// existing SwiftData stores migrate without requiring a data reset.
+    var isCompleted: Bool = false
+
     var createdAt: Date
 
     /// When this reminder should appear on the timeline: one hour before
@@ -48,6 +53,7 @@ final class CalendarReminder {
         eventDate: Date,
         text: String,
         isSystemManaged: Bool = true,
+        isCompleted: Bool = false,
         createdAt: Date = .now
     ) {
 
@@ -57,6 +63,7 @@ final class CalendarReminder {
         self.eventDate = eventDate
         self.text = text
         self.isSystemManaged = isSystemManaged
+        self.isCompleted = isCompleted
         self.createdAt = createdAt
 
     }

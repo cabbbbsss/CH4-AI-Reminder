@@ -1,971 +1,488 @@
 import Combine
 import SwiftData
 import SwiftUI
-import UIKit
 
-/// All of one event's AI-generated prep reminders share an `occurrenceID`,
-/// `eventTitle`, and `eventDate` (and so the same `reminderDate` — it's
-/// derived from `eventDate`) — they're one notification's worth of prep
-/// items, not separate events, so the timeline shows them as one card.
 private struct CalendarReminderGroup: Identifiable {
-  var occurrenceID: String
-  var eventTitle: String
-  var eventDate: Date
-  var reminderDate: Date
-  var reminders: [CalendarReminder]
-
-  var id: String { occurrenceID }
+    let occurrenceID: String
+    let reminderDate: Date
+    let reminders: [CalendarReminder]
+    var id: String { "\(occurrenceID)-\(reminderDate.timeIntervalSince1970)" }
 }
 
-/// A single row on the timeline: an on-the-hour tick mark, a group of
-/// reminders for one event occurrence, or the live "now" indicator —
-/// merged and sorted by their actual (shown) time.
-private enum CalendarTimelineEntry: Identifiable {
-  case hour(Date)
-  case reminderGroup(CalendarReminderGroup)
-  case event(CalendarEvent)
-  case now(Date)
-
-  var id: String {
-    switch self {
-    case .hour(let date): return "hour-\(date.timeIntervalSince1970)"
-    case .reminderGroup(let group): return "group-\(group.id)"
-    case .event(let event): return "event-\(event.occurrenceID)"
-    case .now: return "now-line"
-    }
-  }
-
-  var sortDate: Date {
-    switch self {
-    case .hour(let date): return date
-    case .reminderGroup(let group): return group.reminderDate
-    case .event(let event): return event.startDate
-    case .now(let date): return date
-    }
-  }
+private struct DayCanvasItem: Identifiable {
+    enum Kind { case event(CalendarEvent), reminder(CalendarReminderGroup) }
+    let id: String
+    let startMinute: Int
+    let endMinute: Int
+    let kind: Kind
 }
 
-/// A horizontally-paged carousel: renders the previous/current/next page
-/// (offsets -1, 0, 1) side by side and slides between them on drag,
-/// snapping to a full page instead of cross-fading in place. Both
-/// directions are live — the system's edge swipe-to-go-back gesture is
-/// disabled separately (see `PopGestureGuard`) so a rightward swipe here
-/// can never be mistaken for backing out of Calendar.
-private struct SwipeCarousel<Content: View>: View {
-  let content: (Int) -> Content
-  let onCommit: (Int) -> Void
-  var useSimultaneousGesture: Bool = false
+private struct CalendarSwipePager<Content: View>: View {
+    let content: (Int) -> Content
+    let onCommit: (Int) -> Void
+    @State private var dragOffset: CGFloat = 0
+    @State private var isAnimating = false
 
-  @State private var dragOffset: CGFloat = 0
-  @State private var isAnimating = false
-
-  var body: some View {
-    GeometryReader { geo in
-      let width = max(geo.size.width, 1)
-
-      let pages = HStack(spacing: 0) {
-        content(-1).frame(width: width, height: geo.size.height)
-        content(0).frame(width: width, height: geo.size.height)
-        content(1).frame(width: width, height: geo.size.height)
-      }
-      .offset(x: -width + dragOffset)
-
-      if useSimultaneousGesture {
-        pages.simultaneousGesture(dragGesture(width: width))
-      } else {
-        pages.gesture(dragGesture(width: width))
-      }
-    }
-  }
-
-  private func dragGesture(width: CGFloat) -> some Gesture {
-    DragGesture(minimumDistance: 16)
-      .onChanged { value in
-        guard !isAnimating else { return }
-        guard abs(value.translation.width) > abs(value.translation.height) else { return }
-        dragOffset = value.translation.width
-      }
-      .onEnded { value in
-        guard !isAnimating else { return }
-        guard abs(value.translation.width) > abs(value.translation.height) else {
-          withAnimation(.easeOut(duration: 0.2)) { dragOffset = 0 }
-          return
+    var body: some View {
+        GeometryReader { proxy in
+            let width = max(proxy.size.width, 1)
+            HStack(spacing: 0) {
+                content(-1).frame(width: width, height: proxy.size.height)
+                content(0).frame(width: width, height: proxy.size.height)
+                content(1).frame(width: width, height: proxy.size.height)
+            }
+            .offset(x: -width + dragOffset)
+            .simultaneousGesture(dragGesture(width: width))
         }
-        let threshold = width * 0.22
-        if value.translation.width < -threshold {
-          commit(direction: 1, width: width)
-        } else if value.translation.width > threshold {
-          commit(direction: -1, width: width)
-        } else {
-          withAnimation(.easeOut(duration: 0.2)) { dragOffset = 0 }
-        }
-      }
-  }
-
-  private func commit(direction: Int, width: CGFloat) {
-    isAnimating = true
-    withAnimation(.easeOut(duration: 0.28)) {
-      dragOffset = CGFloat(-direction) * width
-    }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
-      onCommit(direction)
-      dragOffset = 0
-      isAnimating = false
-    }
-  }
-}
-
-/// Suppresses the navigation controller's interactive swipe-to-go-back
-/// gesture while Calendar is on screen, restoring it on the way out.
-/// Calendar has its own full-width bidirectional swipe for day/week
-/// paging; without this, a swipe that merely starts near the left edge is
-/// sometimes claimed by the screen-edge pop gesture instead — popping back
-/// to Home when the user only meant to page to the previous day.
-///
-/// Mirrors what Apple's own Calendar does on its day view: no swipe ever
-/// navigates back to the month — horizontal swipes page days, and the only
-/// way back is the "< July" button.
-///
-/// Earlier, narrower attempts still let swipes through. Why each part of
-/// this version matters:
-///  - iOS 26 split swipe-back into TWO gesture recognizers: the classic
-///    edge pan (`interactivePopGestureRecognizer`) and a full-content-area
-///    pan (`interactiveContentPopGestureRecognizer`) that triggers a pop
-///    from a rightward swipe anywhere on screen. Both must be suppressed;
-///    disabling only the edge one is why right-swipes kept "sometimes"
-///    popping to Home.
-///  - Sweeps *every* `UINavigationController` reachable from all window
-///    scenes, not just `self.navigationController` — SwiftUI may host our
-///    content outside the nav controller's view-controller subtree, so
-///    resolving a single `navigationController` could land on nil / the
-///    wrong one, silently disabling nothing.
-///  - Sets `isEnabled = false` AND installs itself as each recognizer's
-///    delegate, returning false from `gestureRecognizerShouldBegin`.
-///    `NavigationStack` may flip `isEnabled` back on during its own layout
-///    passes, so the delegate refusal is the layer that holds.
-///  - Driven from the SwiftUI view's `onAppear`/`onDisappear` (plus a
-///    one-runloop retry and periodic re-asserts), rather than a hosted
-///    helper view controller whose lifecycle timing proved unreliable.
-private final class PopGestureGuard: NSObject, UIGestureRecognizerDelegate {
-
-  /// One recognizer's original state, so it can be restored faithfully
-  /// even if several nav controllers were swept.
-  private final class Capture {
-    weak var gesture: UIGestureRecognizer?
-    let wasEnabled: Bool
-    weak var previousDelegate: UIGestureRecognizerDelegate?
-    init(_ gesture: UIGestureRecognizer) {
-      self.gesture = gesture
-      self.wasEnabled = gesture.isEnabled
-      self.previousDelegate = gesture.delegate
-    }
-  }
-
-  private var captures: [Capture] = []
-  private var capturedIDs = Set<ObjectIdentifier>()
-
-  func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-    false
-  }
-
-  func disable() {
-    for gesture in Self.popRecognizers() {
-      // Capture each recognizer's original state exactly once, before we
-      // touch it, so a repeated disable() never records our own values.
-      if capturedIDs.insert(ObjectIdentifier(gesture)).inserted {
-        captures.append(Capture(gesture))
-      }
-      gesture.isEnabled = false
-      gesture.delegate = self
-    }
-  }
-
-  func restore() {
-    for capture in captures {
-      guard let gesture = capture.gesture else { continue }
-      gesture.isEnabled = capture.wasEnabled
-      gesture.delegate = capture.previousDelegate
-    }
-    captures.removeAll()
-    capturedIDs.removeAll()
-  }
-
-  /// Every navigation controller's pop recognizer anywhere in the app's
-  /// window hierarchy, de-duplicated.
-  private static func popRecognizers() -> [UIGestureRecognizer] {
-    var navigationControllers: [UINavigationController] = []
-    var seen = Set<ObjectIdentifier>()
-
-    func walk(_ viewController: UIViewController?) {
-      guard let viewController else { return }
-      if let nav = viewController as? UINavigationController,
-         seen.insert(ObjectIdentifier(nav)).inserted {
-        navigationControllers.append(nav)
-      }
-      viewController.children.forEach(walk)
-      walk(viewController.presentedViewController)
     }
 
-    for scene in UIApplication.shared.connectedScenes {
-      guard let windowScene = scene as? UIWindowScene else { continue }
-      for window in windowScene.windows {
-        walk(window.rootViewController)
-      }
+    private func dragGesture(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 14)
+            .onChanged { value in
+                guard !isAnimating, abs(value.translation.width) > abs(value.translation.height) else { return }
+                dragOffset = value.translation.width
+            }
+            .onEnded { value in
+                guard !isAnimating else { return }
+                guard abs(value.translation.width) > abs(value.translation.height) else {
+                    withAnimation(.easeOut(duration: 0.18)) { dragOffset = 0 }
+                    return
+                }
+                let direction: Int?
+                if value.translation.width < -(width * 0.22) { direction = 1 }
+                else if value.translation.width > width * 0.22 { direction = -1 }
+                else { direction = nil }
+                guard let direction else {
+                    withAnimation(.easeOut(duration: 0.18)) { dragOffset = 0 }
+                    return
+                }
+                isAnimating = true
+                withAnimation(.easeInOut(duration: 0.25)) { dragOffset = CGFloat(-direction) * width }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    onCommit(direction)
+                    dragOffset = 0
+                    isAnimating = false
+                }
+            }
     }
-
-    // iOS 26 split swipe-back into TWO recognizers: the classic edge pan
-    // (`interactivePopGestureRecognizer`) plus a new full-content-area pan
-    // (`interactiveContentPopGestureRecognizer`) that recognizes a
-    // rightward swipe ANYWHERE on screen. Suppressing only the edge one —
-    // all this guard did before — leaves every mid-screen right-swipe free
-    // to pop; that was exactly the intermittent escape-to-Home. Grab both.
-    return navigationControllers.flatMap { nav in
-      [nav.interactivePopGestureRecognizer, nav.interactiveContentPopGestureRecognizer]
-        .compactMap { $0 }
-    }
-  }
 }
 
 struct CalendarView: View {
-  @Environment(\.modelContext) private var modelContext
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
+    @Query(sort: \CalendarEvent.startDate) private var events: [CalendarEvent]
+    @Query(sort: \CalendarReminder.eventDate) private var reminders: [CalendarReminder]
 
-  @Query(sort: \CalendarEvent.startDate) private var events: [CalendarEvent]
-  @Query(sort: \CalendarReminder.eventDate) private var reminders: [CalendarReminder]
+    @State private var selectedDate: Date = .now
+    @State private var displayedWeekStart: Date = Calendar.weekStart(containing: .now)
+    @State private var isShowingDatePicker = false
+    @State private var isGenerating = false
+    @State private var editingReminder: CalendarReminder?
+    @State private var selectedEvent: CalendarEvent?
+    @State private var isAddingReminder = false
+    @State private var currentTime: Date = .now
+    @State private var reminderManager: CalendarReminderManager?
+    @State private var syncManager: EventKitSyncManager?
 
-  @State private var selectedDate: Date = .now
-  @State private var displayedWeekStart: Date = Calendar.weekStart(containing: .now)
-  @State private var isShowingCalendar = false
-  @State private var isReloading = false
-  @State private var isGenerating = false
-  @State private var editingReminder: CalendarReminder?
-  @State private var isAddingReminder = false
-  @State private var currentTime: Date = .now
+    private var palette: CalendarPalette { CalendarPalette(colorScheme: colorScheme) }
+    private var isToday: Bool { Calendar.current.isDateInToday(selectedDate) }
 
-  @State private var reminderManager: CalendarReminderManager?
-  @State private var syncManager: EventKitSyncManager?
-
-  /// Kills the swipe-to-go-back gesture while Calendar owns the screen, so
-  /// paging the date can't be misread as backing out. See `PopGestureGuard`.
-  @State private var popGuard = PopGestureGuard()
-
-  private func dayEvents(_ date: Date) -> [CalendarEvent] {
-    events.filter { Calendar.current.isDate($0.startDate, inSameDayAs: date) }
-  }
-
-  private func dayReminders(_ date: Date) -> [CalendarReminder] {
-    reminders
-      .filter { Calendar.current.isDate($0.eventDate, inSameDayAs: date) }
-      .sorted { $0.reminderDate < $1.reminderDate }
-  }
-
-  private func date(byAddingDays days: Int, to date: Date) -> Date {
-    Calendar.current.date(byAdding: .day, value: days, to: date) ?? date
-  }
-
-  private var isToday: Bool {
-    Calendar.current.isDateInToday(selectedDate)
-  }
-
-  private var dateHeaderMainText: String {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "EEEE, d MMMM yyyy"
-    return formatter.string(from: selectedDate)
-  }
-
-  /// Bundles same-occurrence reminders into one card, ordered by creation
-  /// so bullets stay in the order they were generated, then by reminderDate
-  /// so the groups themselves are chronological.
-  private func reminderGroups(from dayReminders: [CalendarReminder]) -> [CalendarReminderGroup] {
-    Dictionary(grouping: dayReminders, by: \.occurrenceID)
-      .compactMap { occurrenceID, items -> CalendarReminderGroup? in
-        guard let first = items.first else { return nil }
-        return CalendarReminderGroup(
-          occurrenceID: occurrenceID,
-          eventTitle: first.eventTitle,
-          eventDate: first.eventDate,
-          reminderDate: first.reminderDate,
-          reminders: items.sorted { $0.createdAt < $1.createdAt }
-        )
-      }
-      .sorted { $0.reminderDate < $1.reminderDate }
-  }
-
-  private func timelineEntries(for date: Date, events dayEvents: [CalendarEvent], reminders dayReminders: [CalendarReminder]) -> [CalendarTimelineEntry] {
-    let groups = reminderGroups(from: dayReminders)
-    let calendar = Calendar.current
-
-    let eventDates = dayEvents.map { $0.startDate }
-    let reminderDates = groups.map { $0.reminderDate }
-    let allDates = eventDates + reminderDates
-
-    guard let firstDate = allDates.min(), let lastDate = allDates.max() else { return [] }
-
-    let startHour = calendar.date(
-      bySettingHour: calendar.component(.hour, from: firstDate),
-      minute: 0, second: 0, of: firstDate
-    ) ?? firstDate
-
-    let endHour = calendar.date(
-      bySettingHour: calendar.component(.hour, from: lastDate),
-      minute: 0, second: 0, of: lastDate
-    ) ?? lastDate
-
-    let occupiedHours = Set(allDates.map { calendar.component(.hour, from: $0) })
-
-    var entries: [CalendarTimelineEntry] = []
-    var cursor = startHour
-
-    while cursor <= endHour {
-      if !occupiedHours.contains(calendar.component(.hour, from: cursor)) {
-        entries.append(.hour(cursor))
-      }
-      cursor = calendar.date(byAdding: .hour, value: 1, to: cursor) ?? endHour.addingTimeInterval(3600)
-    }
-
-    entries.append(contentsOf: groups.map { .reminderGroup($0) })
-    entries.append(contentsOf: dayEvents.map { .event($0) })
-
-    if calendar.isDateInToday(date), currentTime >= startHour, currentTime <= endHour.addingTimeInterval(3600) {
-      entries.append(.now(currentTime))
-    }
-
-    return entries.sorted { $0.sortDate < $1.sortDate }
-   }
-
-  var body: some View {
-    ZStack {
-        
-        LinearGradient(
-            colors: [Color(.gradientPrimaryStart), Color(.bgPrimary)],
-            startPoint: .bottom,
-            endPoint: .top
-        )
-        .ignoresSafeArea()
-
-//      GeometryReader { proxy in
-//        Ellipse()
-//          .fill(Color(.bgSecondary))
-//          .frame(width: proxy.size.width * 2.5, height: proxy.size.height * 1.2)
-//          .position(x: proxy.size.width / 2, y: -proxy.size.height * 0.1)
-//      }
-//      .ignoresSafeArea()
-       
-        
-      VStack(spacing: 0) {
-        // Timeline Container
-        ZStack(alignment: .top) {
-          Color(.bgSecondary)
-            .cornerRadius(32, corners: [.topLeft, .topRight])
-            .ignoresSafeArea(edges: .bottom)
-            
-        RoundedRectangle(cornerRadius: 0)
-            .fill(.clear)
-            .frame(height: 80)
-            .glassEffect()
-            .position(x: 200, y: 110)
-            
-          VStack(spacing: 0) {
-            currentMonth
-                  .opacity(0.7)
-              
-            weekStrip
-              .padding(.top, 20)
-              .padding(.bottom, 12)
-
-//            dateHeader
-//              .padding(.bottom, 20)
-
-            daySwipeArea
-              .frame(maxHeight: .infinity)
-          }
+    var body: some View {
+        ZStack {
+            palette.background.ignoresSafeArea()
+            VStack(spacing: 0) {
+                calendarCard
+                .padding(.top, 18)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 8)
+            }
         }
-      }
-      .overlay(alignment: .bottomLeading) {
-        if !isToday {
-          todayButton
-        }
-      }
-      .overlay(alignment: .bottomTrailing) {
-        addReminderButton
-      }
-      .navigationTitle("Calendar")
-      .navigationBarTitleDisplayMode(.large)
-      .toolbarBackground(.hidden, for: .navigationBar)
-      .tint(Color(.textPrimary))
-      .toolbar {
-        ToolbarItem(placement: .topBarTrailing) {
-          Button {
-            isShowingCalendar = true
-          } label: {
-            Image(systemName: "calendar")
-          }
-        }
-        ToolbarItem(placement: .topBarTrailing) {
-          Button {
-            Task { await reload() }
-          } label: {
-            Image(systemName: "arrow.clockwise")
-          }
-          .disabled(isReloading)
-        }
-      }
-      .sheet(isPresented: $isShowingCalendar) {
-        NavigationStack {
-          DatePicker("Select Date", selection: $selectedDate, displayedComponents: [.date])
-            .datePickerStyle(.graphical)
-            .padding()
-            .navigationTitle("Select Date")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-              ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Done") {
-                  isShowingCalendar = false
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Calendar").font(.headline.weight(.semibold)).foregroundStyle(palette.primaryText)
+            }
+            ToolbarItem(placement: .topBarLeading) {
+                if !isToday {
+                    Button("Today") { withAnimation(.easeInOut(duration: 0.2)) { selectedDate = .now } }
+                        .buttonStyle(.glass).tint(palette.toolbarTint)
+                        .accessibilityHint("Returns to today's schedule")
                 }
-              }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { isAddingReminder = true } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 20, weight: .semibold))
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.circle)
+                .controlSize(.large)
+                .tint(Color.accentColor)
+                .accessibilityLabel("Add reminder")
             }
         }
-        .presentationDetents([.medium, .large])
-      }
-      .sheet(item: $editingReminder) { reminder in
-        CalendarReminderEditSheet(reminder: reminder, manager: reminderManager)
-      }
-      .sheet(isPresented: $isAddingReminder) {
-        CalendarReminderAddSheet(date: selectedDate)
-      }
-      .onChange(of: selectedDate) { _, newDate in
-        displayedWeekStart = Calendar.weekStart(containing: newDate)
-        // NavigationStack can reassert gesture state during its own
-        // updates — re-suppress after every page so the guard never lapses.
-        popGuard.disable()
-      }
-      .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { date in
-        currentTime = date
-        popGuard.disable()
-      }
-      .task {
-        if reminderManager == nil {
-          reminderManager = CalendarReminderManager(context: modelContext)
+        .sheet(isPresented: $isShowingDatePicker) {
+            NavigationStack {
+                DatePicker("Select Date", selection: $selectedDate, displayedComponents: [.date])
+                    .datePickerStyle(.graphical).padding()
+                    .navigationTitle("Select Date").navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { isShowingDatePicker = false } } }
+            }.presentationDetents([.medium, .large])
         }
-        if syncManager == nil {
-          syncManager = EventKitSyncManager(context: modelContext)
-          await syncManager?.start()
+        .sheet(item: $editingReminder) { CalendarReminderEditSheet(reminder: $0, manager: reminderManager) }
+        .sheet(item: $selectedEvent) { CalendarEventDetailSheet(event: $0) }
+        .sheet(isPresented: $isAddingReminder) { CalendarReminderAddSheet(date: selectedDate) }
+        .onChange(of: selectedDate) { _, date in displayedWeekStart = Calendar.weekStart(containing: date) }
+        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { currentTime = $0 }
+        .task {
+            if reminderManager == nil { reminderManager = CalendarReminderManager(context: modelContext) }
+            if syncManager == nil {
+                syncManager = EventKitSyncManager(context: modelContext)
+                await syncManager?.start()
+            }
         }
-      }
-      .task(id: selectedDate) {
-        if reminderManager == nil {
-          reminderManager = CalendarReminderManager(context: modelContext)
+        .task(id: selectedDate) {
+            if reminderManager == nil { reminderManager = CalendarReminderManager(context: modelContext) }
+            isGenerating = true
+            await reminderManager?.ensureReminders(for: selectedDate)
+            isGenerating = false
         }
-        isGenerating = true
-        await reminderManager?.ensureReminders(for: selectedDate)
-        isGenerating = false
-      }
-      .onAppear {
-        popGuard.disable()
-        // The nav hierarchy may not be fully wired on the first tick of a
-        // push; re-apply next runloop so we don't miss the recognizer.
-        DispatchQueue.main.async { popGuard.disable() }
-      }
-      .onDisappear {
-        popGuard.restore()
-      }
     }
-  }
 
-    // MARK: - Month
-    
-    private func getCurrentMonth(from date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM"
-        return formatter.string(from: date)
+    private var calendarCard: some View {
+        VStack(spacing: 0) {
+            monthButton
+                .padding(.top, 18)
+                .padding(.bottom, 12)
+
+            weekStrip
+                .padding(.vertical, 7)
+                .glassEffect(
+                    .regular,
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                )
+                .padding(.horizontal, 0)
+                .padding(.bottom, 10)
+
+            if isGenerating {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Preparing EVE reminders…")
+                }
+                .font(.caption.weight(.medium))
+                .foregroundStyle(palette.secondaryText)
+                .padding(.bottom, 8)
+                .accessibilityElement(children: .combine)
+            }
+
+            dayPager
+        }
+        .background(palette.canvas.opacity(colorScheme == .dark ? 0.96 : 0.88))
+        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(.white.opacity(colorScheme == .dark ? 0.08 : 0.28), lineWidth: 0.8)
+        }
     }
-    
-    private var currentMonth: some View {
-        Text(getCurrentMonth(from: selectedDate))
-            .font(.system(size: 30, weight: .bold))
-            .foregroundColor(Color(.textPrimary))
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.horizontal, 24)
-            .padding(.top, 16)
+
+    private var monthButton: some View {
+        Button { isShowingDatePicker = true } label: {
+            HStack(spacing: 6) {
+                Text(selectedDate.formatted(.dateTime.month(.wide)))
+                Image(systemName: "chevron.up.chevron.down").font(.caption.weight(.bold))
+            }
+            .font(.title2.weight(.bold)).foregroundStyle(palette.primaryText)
+            .frame(maxWidth: .infinity).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(selectedDate.formatted(.dateTime.month(.wide))) calendar")
+        .accessibilityHint("Opens date picker")
     }
-    
-    // MARK: - Week strip
 
-  private var weekStrip: some View {
-    SwipeCarousel(
-      content: { offset in
-        weekRow(for: date(byAddingDays: offset * 7, to: displayedWeekStart))
-      },
-      onCommit: { direction in
-        displayedWeekStart = date(byAddingDays: direction * 7, to: displayedWeekStart)
-      }
-    )
-    .frame(height: 72)
-  }
+    private var weekStrip: some View {
+        CalendarSwipePager(
+            content: { offset in weekRow(for: date(byAddingDays: offset * 7, to: displayedWeekStart)) },
+            onCommit: { direction in displayedWeekStart = date(byAddingDays: direction * 7, to: displayedWeekStart) }
+        ).frame(height: 66)
+    }
 
-  private func weekRow(for weekStart: Date) -> some View {
-    HStack(spacing: 0) {
-      ForEach(0..<7, id: \.self) { offset in
-        let day = Calendar.current.date(byAdding: .day, value: offset, to: weekStart) ?? weekStart
-        WeekDayCell(
-          date: day,
-          isSelected: Calendar.current.isDate(day, inSameDayAs: selectedDate),
-          isToday: Calendar.current.isDateInToday(day)
+    private var dayPager: some View {
+        CalendarSwipePager(
+            content: { offset in
+                let date = date(byAddingDays: offset, to: selectedDate)
+                return DayTimeline(
+                    date: date, events: events, reminders: reminders, currentTime: currentTime,
+                    palette: palette,
+                    onEventTap: { selectedEvent = $0 },
+                    onReminderTap: { editingReminder = $0 },
+                    onToggleReminder: { reminderManager?.toggleCompletion(for: $0) }
+                )
+            },
+            onCommit: { direction in
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    selectedDate = date(byAddingDays: direction, to: selectedDate)
+                }
+            }
         )
-        .frame(maxWidth: .infinity)
-        .contentShape(Rectangle())
-        .onTapGesture {
-          withAnimation(.easeInOut(duration: 0.2)) {
-            selectedDate = day
-          }
+    }
+
+    private func weekRow(for weekStart: Date) -> some View {
+        HStack(spacing: 0) {
+            ForEach(0..<7, id: \.self) { offset in
+                let date = date(byAddingDays: offset, to: weekStart)
+                Button { withAnimation(.easeInOut(duration: 0.2)) { selectedDate = date } } label: {
+                    VStack(spacing: 5) {
+                        Text(date.formatted(.dateTime.weekday(.narrow)))
+                            .font(.caption2.weight(.medium)).foregroundStyle(palette.secondaryText)
+                        Text(date.formatted(.dateTime.day()))
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(Calendar.current.isDate(date, inSameDayAs: selectedDate) ? .white : palette.primaryText)
+                            .frame(width: 34, height: 34)
+                            .background(Circle().fill(Calendar.current.isDate(date, inSameDayAs: selectedDate) ? palette.accent : .clear))
+                    }.frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(date.formatted(date: .complete, time: .omitted))
+                .accessibilityAddTraits(Calendar.current.isDate(date, inSameDayAs: selectedDate) ? .isSelected : [])
+            }
+        }.padding(.horizontal, 22)
+    }
+
+    private func date(byAddingDays days: Int, to date: Date) -> Date {
+        Calendar.current.date(byAdding: .day, value: days, to: date) ?? date
+    }
+
+}
+
+private struct DayTimeline: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let date: Date
+    let events: [CalendarEvent]
+    let reminders: [CalendarReminder]
+    let currentTime: Date
+    let palette: CalendarPalette
+    let onEventTap: (CalendarEvent) -> Void
+    let onReminderTap: (CalendarReminder) -> Void
+    let onToggleReminder: (CalendarReminder) -> Void
+    @State private var didInitialScroll = false
+
+    private var hourHeight: CGFloat { dynamicTypeSize.isAccessibilitySize ? 72 : 56 }
+    private let timeGutter: CGFloat = 58
+    private var dayStart: Date { Calendar.current.startOfDay(for: date) }
+    private var dayEnd: Date { Calendar.current.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart.addingTimeInterval(86_400) }
+    private var allDayEvents: [CalendarEvent] { events.filter { $0.isAllDay && $0.startDate < dayEnd && $0.endDate > dayStart } }
+    private var timedEvents: [CalendarEvent] { events.filter { !$0.isAllDay && $0.startDate < dayEnd && $0.endDate > dayStart } }
+
+    private var reminderGroups: [CalendarReminderGroup] {
+        let dayReminders = reminders.filter { Calendar.current.isDate($0.reminderDate, inSameDayAs: date) }
+        return Dictionary(grouping: dayReminders) { "\($0.occurrenceID)-\($0.reminderDate.timeIntervalSince1970)" }
+            .compactMap { _, values in
+                guard let first = values.first else { return nil }
+                return CalendarReminderGroup(occurrenceID: first.occurrenceID, reminderDate: first.reminderDate, reminders: values.sorted { $0.createdAt < $1.createdAt })
+            }.sorted { $0.reminderDate < $1.reminderDate }
+    }
+
+    private var canvasItems: [DayCanvasItem] {
+        let eventItems = timedEvents.map { event -> DayCanvasItem in
+            let start = minuteOffset(for: max(event.startDate, dayStart))
+            let end = max(minuteOffset(for: min(event.endDate, dayEnd)), start + 24)
+            return DayCanvasItem(id: "event-\(event.occurrenceID)", startMinute: start, endMinute: end, kind: .event(event))
         }
-      }
-    }
-    .padding(.horizontal, 24)
-  }
-
-  // MARK: - Date header
-
-  private var dateHeader: some View {
-    VStack(spacing: 4) {
-      Text(dateHeaderMainText)
-        .font(.system(size: 26, weight: .black, design: .default))
-        .foregroundColor(Color(.textTertiary))
-        .multilineTextAlignment(.center)
-    }
-    .frame(maxWidth: .infinity)
-    .padding(.horizontal, 24)
-  }
-
-  // MARK: - Day content (swipeable)
-
-  private var daySwipeArea: some View {
-    SwipeCarousel(
-      content: { offset in
-        dayContent(for: date(byAddingDays: offset, to: selectedDate))
-      },
-      onCommit: { direction in
-        selectedDate = date(byAddingDays: direction, to: selectedDate)
-      },
-      useSimultaneousGesture: true
-    )
-  }
-
-  private func dayContent(for date: Date) -> some View {
-    let dayEventsForDate = dayEvents(date)
-    let dayRemindersForDate = dayReminders(date)
-    let generating = Calendar.current.isDate(date, inSameDayAs: selectedDate) && isGenerating
-
-    return VStack(spacing: 0) {
-      if dayEventsForDate.isEmpty {
-        Text("No events synced for this day.")
-          .font(.system(size: 14, weight: .medium))
-          .foregroundColor(Color(.textQuarternary))
-          .padding(.top, 20)
-        Spacer()
-      } else {
-        if dayRemindersForDate.isEmpty && generating {
-          HStack(spacing: 12) {
-            Image(systemName: "sparkles")
-              .foregroundColor(Color(.textQuarternary))
-            Text("Eve is preparing your reminders…")
-              .font(.system(size: 14, weight: .semibold))
-              .foregroundColor(Color(.textQuarternary))
-          }
-          .padding(.top, 20)
-        } else if dayRemindersForDate.isEmpty {
-          Text("Nothing to prepare for this day.")
-            .font(.system(size: 14, weight: .medium))
-            .foregroundColor(Color(.textQuarternary))
-            .padding(.top, 20)
+        let reminderItems = reminderGroups.map { group -> DayCanvasItem in
+            let start = minuteOffset(for: group.reminderDate)
+            return DayCanvasItem(id: "reminder-\(group.id)", startMinute: start, endMinute: min(1_440, start + max(30, group.reminders.count * 30)), kind: .reminder(group))
         }
-        
-        timelineList(for: date, events: dayEventsForDate, reminders: dayRemindersForDate)
-      }
+        return eventItems + reminderItems
     }
-  }
 
-  // MARK: - Timeline
+    var body: some View {
+        VStack(spacing: 0) {
+            if !allDayEvents.isEmpty { allDayLane.padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 6) }
+            ScrollViewReader { proxy in
+                ScrollView(.vertical) {
+                    GeometryReader { geometry in dayCanvas(width: geometry.size.width) }
+                        .frame(height: hourHeight * 24)
+                }
+                .scrollIndicators(.hidden).background(palette.canvas)
+                .task(id: date) {
+                    didInitialScroll = false
+                    await scrollInitially(using: proxy)
+                }
+            }
+        }.background(palette.canvas)
+    }
 
-  private func timelineList(for date: Date, events dayEvents: [CalendarEvent], reminders dayReminders: [CalendarReminder]) -> some View {
-    List {
-      ForEach(timelineEntries(for: date, events: dayEvents, reminders: dayReminders)) { entry in
-        switch entry {
-        case .hour(let hourDate):
-          CalendarTimelineRow(time: hourDate.formatted(date: .omitted, time: .shortened))
-            .listRowInsets(EdgeInsets())
-            .listRowSeparator(.hidden)
-            .listRowBackground(Color.clear)
+    private var allDayLane: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("ALL-DAY").font(.caption2.weight(.semibold)).foregroundStyle(palette.secondaryText)
+            ForEach(allDayEvents) { event in
+                Button { onEventTap(event) } label: {
+                    Text(event.title).font(.caption.weight(.semibold)).foregroundStyle(palette.eventText).lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 9).padding(.vertical, 7)
+                        .background(palette.eventFill).clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }.buttonStyle(.plain)
+            }
+        }
+    }
 
-        case .reminderGroup(let group):
-          CalendarReminderGroupRow(
-            time: group.reminderDate.formatted(date: .omitted, time: .shortened),
-            subtitle: "For \(group.eventTitle) at \(group.eventDate.formatted(date: .omitted, time: .shortened))",
-            reminders: group.reminders,
-            onSelect: { reminder in editingReminder = reminder }
-          )
-          .listRowInsets(EdgeInsets())
-          .listRowSeparator(.hidden)
-          .listRowBackground(Color.clear)
-          
+    @ViewBuilder private func dayCanvas(width: CGFloat) -> some View {
+        let placements = CalendarDayLayout.placements(for: canvasItems.map { CalendarDayInterval(id: $0.id, startMinute: $0.startMinute, endMinute: $0.endMinute) })
+        let placementByID = Dictionary(uniqueKeysWithValues: placements.map { ($0.id, $0) })
+        let contentWidth = max(width - timeGutter - 10, 1)
+        ZStack(alignment: .topLeading) {
+            ForEach(0..<24, id: \.self) { hour in hourRule(hour: hour, contentWidth: contentWidth).id("hour-\(hour)") }
+            ForEach(canvasItems) { item in
+                if let placement = placementByID[item.id] {
+                    let columnWidth = (contentWidth - CGFloat(placement.columnCount - 1) * 3) / CGFloat(placement.columnCount)
+                    dayItem(item)
+                        .frame(width: columnWidth, height: blockHeight(for: item))
+                        .offset(x: timeGutter + CGFloat(placement.column) * (columnWidth + 3), y: yPosition(for: item.startMinute))
+                }
+            }
+            if Calendar.current.isDateInToday(date) {
+                let minute = minuteOffset(for: currentTime)
+                if (0...1_440).contains(minute) { nowLine(minute: minute, width: contentWidth) }
+            }
+        }.background(palette.canvas)
+    }
+
+    private func hourRule(hour: Int, contentWidth: CGFloat) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(hourDate(hour).formatted(date: .omitted, time: .shortened))
+                .font(.caption2).foregroundStyle(palette.secondaryText).frame(width: timeGutter - 8, alignment: .trailing).offset(y: -7)
+            Rectangle().fill(palette.gridLine).frame(width: contentWidth, height: 0.5)
+        }.offset(y: CGFloat(hour) * hourHeight)
+    }
+
+    @ViewBuilder private func dayItem(_ item: DayCanvasItem) -> some View {
+        switch item.kind {
         case .event(let event):
-          CalendarEventRow(
-            time: event.startDate.formatted(date: .omitted, time: .shortened),
-            title: event.title,
-            location: event.location
-          )
-          .listRowInsets(EdgeInsets())
-          .listRowSeparator(.hidden)
-          .listRowBackground(Color.clear)
-
-        case .now(let nowDate):
-          CalendarNowLineRow(time: nowDate.formatted(date: .omitted, time: .shortened))
-            .listRowInsets(EdgeInsets())
-            .listRowSeparator(.hidden)
-            .listRowBackground(Color.clear)
-            .allowsHitTesting(false)
+            EventBlock(event: event, palette: palette).onTapGesture { onEventTap(event) }
+                .accessibilityElement(children: .combine).accessibilityAddTraits(.isButton)
+        case .reminder(let group):
+            ReminderBlock(group: group, palette: palette, onTap: onReminderTap, onToggle: onToggleReminder)
         }
-      }
-
-      Color.clear
-        .frame(height: 40)
-        .listRowInsets(EdgeInsets())
-        .listRowSeparator(.hidden)
-        .listRowBackground(Color.clear)
-    }
-    .listStyle(.plain)
-    .scrollContentBackground(.hidden)
-    .scrollIndicators(.hidden)
-    .background(Color.clear)
-  }
-
-  // MARK: - Floating buttons
-
-  /// Bottom-left "Today" button, mirroring native Calendar — only shown
-  /// once the user has navigated away from today, jumps straight back.
-  private var todayButton: some View {
-    Button {
-      withAnimation(.easeInOut(duration: 0.2)) {
-        selectedDate = .now
-      }
-    } label: {
-      Text("Today")
-        .font(.system(size: 15, weight: .bold))
-        .padding(.horizontal, 6)
-        .frame(height: 28)
-    }
-    .buttonStyle(.glass)
-    .buttonBorderShape(.capsule)
-    .controlSize(.large)
-    .tint(Color(.textPrimary))
-    .padding(.leading, 24)
-    .padding(.bottom, 24)
-    .transition(.opacity.combined(with: .move(edge: .leading)))
-  }
-
-  /// Bottom-right "+" button — opens a dedicated sheet to add a reminder
-  /// by hand for the day currently on screen.
-  private var addReminderButton: some View {
-    Button {
-      isAddingReminder = true
-    } label: {
-      Image(systemName: "plus")
-        .font(.system(size: 20, weight: .semibold))
-        .frame(width: 24, height: 24)
-    }
-    .buttonStyle(.glass)
-    .buttonBorderShape(.circle)
-    .background(Color(.bgSecondary))
-    .clipShape(Circle())
-    .controlSize(.large)
-    .padding(.trailing, 24)
-    .padding(.bottom, 24)
-  }
-
-  // MARK: - Actions
-
-  private func reload() async {
-    isReloading = true
-    await syncManager?.syncNow()
-    isGenerating = true
-    await reminderManager?.regenerate(for: selectedDate)
-    isGenerating = false
-    isReloading = false
-  }
-
-  // MARK: - Row views
-
-  private struct WeekDayCell: View {
-    var date: Date
-    var isSelected: Bool
-    var isToday: Bool
-
-    private var dayLetter: String {
-      let formatter = DateFormatter()
-      formatter.dateFormat = "EEEEE"
-      return formatter.string(from: date)
     }
 
-    private var dayNumber: String {
-      let formatter = DateFormatter()
-      formatter.dateFormat = "d"
-      return formatter.string(from: date)
+    private func nowLine(minute: Int, width: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            Text(currentTime.formatted(date: .omitted, time: .shortened)).font(.caption2.weight(.bold)).foregroundStyle(palette.accent)
+                .frame(width: timeGutter - 4, alignment: .trailing).padding(.trailing, 4)
+            Circle().fill(palette.accent).frame(width: 8, height: 8)
+            Rectangle().fill(palette.accent).frame(width: width - 4, height: 1.5)
+        }.offset(y: yPosition(for: minute) - 4).accessibilityHidden(true)
     }
 
-    /// Today is always called out in red — the same red used by the live
-    /// "now" line on the timeline — whether or not it's also selected, so
-    /// selecting today doesn't lose that distinction.
-    private var circleFillColor: Color {
-      guard isSelected else { return .clear }
-      return isToday ? .red : Color(.textTertiary)
-    }
+    private func yPosition(for minutes: Int) -> CGFloat { CGFloat(minutes) / 60 * hourHeight }
+    private func blockHeight(for item: DayCanvasItem) -> CGFloat { max(32, CGFloat(item.endMinute - item.startMinute) / 60 * hourHeight - 2) }
+    private func minuteOffset(for date: Date) -> Int { max(0, min(1_440, Int(date.timeIntervalSince(dayStart) / 60))) }
+    private func hourDate(_ hour: Int) -> Date { Calendar.current.date(byAdding: .hour, value: hour, to: dayStart) ?? dayStart }
 
-    private var numberColor: Color {
-      if isSelected { return isToday ? .white : Color(.textPrimary) }
-      if isToday { return .red }
-      return Color(.textTertiary)
+    private func scrollInitially(using proxy: ScrollViewProxy) async {
+        guard !didInitialScroll else { return }
+        didInitialScroll = true
+        let target: Int
+        if Calendar.current.isDateInToday(date) { target = max(0, Calendar.current.component(.hour, from: currentTime) - 1) }
+        else if let first = canvasItems.map(\.startMinute).min() { target = max(0, first / 60 - 1) }
+        else { target = 8 }
+        await Task.yield()
+        proxy.scrollTo("hour-\(target)", anchor: .top)
     }
+}
 
+private struct EventBlock: View {
+    let event: CalendarEvent
+    let palette: CalendarPalette
     var body: some View {
-      VStack(spacing: 10) {
-        Text(dayLetter)
-          .font(.system(size: 13, weight: .semibold))
-          .foregroundColor(Color(.textTertiary).opacity(0.5))
-
-        Text(dayNumber)
-          .font(.system(size: 20, weight: .bold))
-          .foregroundColor(numberColor)
-          .frame(width: 36, height: 36)
-          .background(
-            Circle().fill(circleFillColor)
-          )
-      }
-    }
-  }
-
-  /// An on-the-hour tick: just the time and a spine segment. Suppressed
-  /// entirely for any hour a reminder group already occupies (see
-  /// `timelineEntries`), so it never duplicates a card's own time label.
-  private struct CalendarTimelineRow: View {
-    var time: String
-
-    var body: some View {
-      HStack(alignment: .center, spacing: 0) {
-        // Dimmer than a reminder's own time label — this row is just a
-        // bare hour marker, nothing is actually scheduled on it.
-        Text(time)
-          .font(.system(size: 15, weight: .bold))
-          .foregroundColor(Color(.textSecondary).opacity(0.5))
-          .frame(width: 80, alignment: .trailing)
-
-        ZStack {
-          Rectangle()
-            .fill(Color(.textQuarternary))
-            .frame(width: 4)
+        HStack(spacing: 0) {
+            Capsule().fill(palette.accent).frame(width: 3).padding(.vertical, 4)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.title).font(.caption.weight(.bold)).lineLimit(2)
+                Text("\(event.startDate.formatted(date: .omitted, time: .shortened)) – \(event.endDate.formatted(date: .omitted, time: .shortened))").font(.caption2).lineLimit(1)
+                if let location = event.location, !location.isEmpty { Text(location).font(.caption2).lineLimit(1) }
+            }.foregroundStyle(palette.eventText).padding(.horizontal, 7).padding(.vertical, 6)
+            Spacer(minLength: 0)
         }
-        .frame(width: 20)
-        .padding(.horizontal, 8)
-
-        Spacer()
-          .frame(maxWidth: .infinity)
-      }
-      .frame(minHeight: 60)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(palette.eventFill).clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
-  }
+}
 
-  /// One card per event occurrence: every reminder generated for that
-  /// event (a single notification's worth of prep items) is listed inside
-  /// it as its own tappable row, rather than each getting a separate card
-  /// with a repeated time label.
-  private struct CalendarReminderGroupRow: View {
-    var time: String
-    var subtitle: String
-    var reminders: [CalendarReminder]
-    var onSelect: (CalendarReminder) -> Void
-
+private struct ReminderBlock: View {
+    let group: CalendarReminderGroup
+    let palette: CalendarPalette
+    let onTap: (CalendarReminder) -> Void
+    let onToggle: (CalendarReminder) -> Void
     var body: some View {
-      HStack(alignment: .top, spacing: 0) {
-        // Left Column: Time — brighter than a bare hour tick, since this
-        // row actually has something scheduled on it.
-        Text(time)
-          .font(.system(size: 15, weight: .bold))
-          .foregroundColor(Color(.textSecondary))
-          .frame(width: 80, alignment: .trailing)
-          .padding(.top, 12)
-
-        // Timeline Center
-        ZStack {
-          Rectangle()
-            .fill(Color(.textQuarternary))
-            .frame(width: 4)
-          Circle()
-            .fill(Color.accentColor)
-            .frame(width: 10, height: 10)
-        }
-        .frame(width: 20)
-        .padding(.horizontal, 8)
-        .padding(.top, 12)
-
-        // Right Column: Card. The connector to the spine is a stripe
-        // fused to the card's own leading edge, not a separately
-        // positioned floating shape — it's part of the card's body, so
-        // it can never misalign or fail to render independently of it.
-        VStack(alignment: .leading, spacing: 8) {
-          Text(subtitle)
-            .font(.system(size: 10, weight: .bold))
-            .foregroundColor(Color(.textQuarternary))
-
-          VStack(alignment: .leading, spacing: 8) {
-            ForEach(reminders) { reminder in
-              HStack(alignment: .top, spacing: 8) {
-                Circle()
-                  .fill(Color.accentColor)
-                  .frame(width: 5, height: 5)
-                  .padding(.top, 5)
-                Text(reminder.text)
-                  .font(.system(size: 13, weight: .bold))
-                  .foregroundColor(Color(.textPrimary))
-                  .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
-              }
-              .contentShape(Rectangle())
-              .onTapGesture { onSelect(reminder) }
+        VStack(alignment: .leading, spacing: 3) {
+            ForEach(group.reminders) { reminder in
+                HStack(spacing: 7) {
+                    Button { onToggle(reminder) } label: {
+                        Image(systemName: reminder.isCompleted ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(reminder.isCompleted ? palette.secondaryText : palette.accent).font(.body)
+                    }.buttonStyle(.plain).accessibilityLabel(reminder.isCompleted ? "Mark reminder incomplete" : "Complete reminder")
+                    Button { onTap(reminder) } label: {
+                        Text(reminder.text).font(.caption.weight(.semibold)).strikethrough(reminder.isCompleted)
+                            .foregroundStyle(reminder.isCompleted ? palette.secondaryText : palette.primaryText).lineLimit(2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }.buttonStyle(.plain).accessibilityLabel("Edit reminder: \(reminder.text)")
+                }.opacity(reminder.isCompleted ? 0.55 : 1)
             }
-          }
         }
-        .padding(.leading, 20)
-        .padding(.trailing, 16)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        // A card fill matching the surrounding panel would make the
-        // border pointless — bgSecondary is the panel's inverse in
-        // both light and dark mode, so the card always visibly pops.
-        .background(Color(.bgSecondary))
-        .cornerRadius(8)
-        .overlay(alignment: .leading) {
-          Capsule()
-            .fill(Color.accentColor)
-            .frame(width: 5)
-            .padding(.vertical, 8)
-        }
-        .overlay(
-          RoundedRectangle(cornerRadius: 8)
-            .stroke(Color.accentColor, lineWidth: 1.5)
-        )
-        .padding(.trailing, 24)
-        .padding(.vertical, 8)
-      }
-      .frame(minHeight: 60)
+        .padding(.horizontal, 7).padding(.vertical, 6).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(palette.reminderFill)
+        .overlay { RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(palette.reminderStroke, lineWidth: 1) }
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
-  }
+}
 
-  private struct CalendarEventRow: View {
-    var time: String
-    var title: String
-    var location: String?
-
+private struct CalendarEventDetailSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let event: CalendarEvent
     var body: some View {
-      HStack(alignment: .top, spacing: 0) {
-        // Left Column: Time
-        Text(time)
-          .font(.system(size: 15, weight: .bold))
-          .foregroundColor(Color(.textPrimary)) // Brighter for actual events
-          .frame(width: 80, alignment: .trailing)
-          .padding(.top, 12)
-
-        // Timeline Center
-        ZStack {
-          Rectangle()
-            .fill(Color(.textQuarternary))
-            .frame(width: 4)
-          Circle()
-            .fill(Color(.textPrimary))
-            .frame(width: 10, height: 10)
-        }
-        .frame(width: 20)
-        .padding(.horizontal, 8)
-        .padding(.top, 12)
-
-        // Right Column: Card
-        VStack(alignment: .leading, spacing: 4) {
-          Text(title)
-            .font(.system(size: 15, weight: .bold))
-            .foregroundColor(Color(.textPrimary))
-
-          if let location = location, !location.isEmpty {
-            HStack(spacing: 4) {
-              Image(systemName: "location.fill")
-                .font(.system(size: 10))
-              Text(location)
-                .font(.system(size: 13))
+        NavigationStack {
+            List {
+                Section {
+                    LabeledContent("Starts", value: event.startDate.formatted(date: .abbreviated, time: .shortened))
+                    LabeledContent("Ends", value: event.endDate.formatted(date: .abbreviated, time: .shortened))
+                    if let location = event.location, !location.isEmpty { LabeledContent("Location", value: location) }
+                    if let attendees = event.attendees, !attendees.isEmpty { LabeledContent("Attendees", value: attendees) }
+                }
+                if let notes = event.notes, !notes.isEmpty { Section("Notes") { Text(notes) } }
             }
-            .foregroundColor(Color(.textSecondary))
-          }
+            .navigationTitle(event.title).navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
-        .padding(.leading, 20)
-        .padding(.trailing, 16)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.bgTertiary))
-        .cornerRadius(8)
-        .overlay(alignment: .leading) {
-          Capsule()
-            .fill(Color(.textPrimary))
-            .frame(width: 5)
-            .padding(.vertical, 8)
-        }
-        .padding(.trailing, 24)
-        .padding(.vertical, 8)
-      }
-      .frame(minHeight: 60)
     }
-  }
+}
 
-  /// The live "current time" indicator, mirroring the red now-line in
-  /// Apple's Calendar app. Aligned to the same time/center columns as
-  /// `CalendarTimelineRow` so it reads as a line running through the day.
-  private struct CalendarNowLineRow: View {
-    var time: String
-
-    var body: some View {
-      HStack(alignment: .center, spacing: 0) {
-        Text(time)
-          .font(.system(size: 12, weight: .bold))
-          .foregroundColor(.red)
-          .frame(width: 80, alignment: .trailing)
-
-        ZStack {
-          Circle()
-            .fill(Color.red)
-            .frame(width: 8, height: 8)
-        }
-        .frame(width: 20)
-        .padding(.horizontal, 8)
-
-        Rectangle()
-          .fill(Color.red)
-          .frame(height: 1.5)
-          .padding(.trailing, 24)
-      }
-      .frame(minHeight: 20)
-    }
-  }
+private struct CalendarPalette {
+    let colorScheme: ColorScheme
+    var background: LinearGradient { LinearGradient(colors: colorScheme == .dark ? [Color(red: 0.035, green: 0.10, blue: 0.18), Color(red: 0.08, green: 0.19, blue: 0.31)] : [Color(red: 0.72, green: 0.85, blue: 0.96), Color(red: 0.89, green: 0.94, blue: 0.99)], startPoint: .bottom, endPoint: .top) }
+    var canvas: Color { colorScheme == .dark ? Color(red: 0.08, green: 0.16, blue: 0.25) : Color(red: 0.90, green: 0.95, blue: 1.0) }
+    var accent: Color { colorScheme == .dark ? Color(red: 0.31, green: 0.67, blue: 1.0) : Color(red: 0.18, green: 0.58, blue: 0.94) }
+    var primaryText: Color { colorScheme == .dark ? Color(red: 0.91, green: 0.96, blue: 1.0) : Color(red: 0.09, green: 0.22, blue: 0.38) }
+    var secondaryText: Color { colorScheme == .dark ? Color(red: 0.57, green: 0.70, blue: 0.83) : Color(red: 0.42, green: 0.56, blue: 0.71) }
+    var gridLine: Color { colorScheme == .dark ? Color.white.opacity(0.18) : Color(red: 0.44, green: 0.62, blue: 0.80).opacity(0.42) }
+    var eventFill: Color { colorScheme == .dark ? Color(red: 0.12, green: 0.31, blue: 0.50) : Color(red: 0.76, green: 0.85, blue: 0.94) }
+    var eventText: Color { primaryText }
+    var reminderFill: Color { colorScheme == .dark ? Color(red: 0.09, green: 0.21, blue: 0.33) : Color.white.opacity(0.62) }
+    var reminderStroke: Color { accent.opacity(colorScheme == .dark ? 0.65 : 0.45) }
+    var toolbarTint: Color { accent.opacity(0.2) }
 }
 
 private extension Calendar {
-  /// Sunday-anchored start of the week containing `date`, using a fixed
-  /// Sunday-first calendar regardless of device locale — the week strip's
-  /// layout (S M T W T F S) should stay consistent for every user.
-  static func weekStart(containing date: Date) -> Date {
-    var calendar = Calendar.current
-    calendar.firstWeekday = 1
-    let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
-    return calendar.date(from: components) ?? date
-  }
+    static func weekStart(containing date: Date) -> Date {
+        var calendar = Calendar.current
+        calendar.firstWeekday = 1
+        let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
+        return calendar.date(from: components) ?? date
+    }
 }
 
 #Preview {
-  NavigationStack {
-    CalendarView()
-  }
-  .modelContainer(for: CalendarEvent.self, inMemory: true)
+    NavigationStack { CalendarView() }
+        .modelContainer(for: [CalendarEvent.self, CalendarReminder.self], inMemory: true)
 }

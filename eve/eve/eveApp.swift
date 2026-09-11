@@ -7,6 +7,7 @@ struct eveApp: App {
     // Seed the default-ON notification category toggles so a fresh install
     // honors them before the user ever opens the Notification settings screen.
     NotificationPreferences.registerDefaults()
+    _ = NotificationService.shared
   }
 
   var sharedModelContainer: ModelContainer = {
@@ -16,6 +17,8 @@ struct eveApp: App {
       HistoryItem.self,
       QuestionAnswer.self,
       CalendarEvent.self,
+      AdaptiveNotificationRecord.self,
+      CommuteSample.self,
       CalendarReminder.self,
       ReminderItem.self,
       SavedLocation.self,

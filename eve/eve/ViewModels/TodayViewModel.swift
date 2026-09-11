@@ -20,11 +20,13 @@ final class TodayViewModel {
 
     let assistant: AssistantManager
 
+    let adaptiveNotifications: AdaptiveNotificationCoordinator
+
     private let notifications: NotificationService
 
     init(context: ModelContext) {
 
-        let notifications = NotificationService()
+        let notifications = NotificationService.shared
 
         self.notifications = notifications
         self.sync = EventKitSyncManager(context: context)
@@ -33,13 +35,27 @@ final class TodayViewModel {
             context: context,
             notificationService: notifications
         )
+        self.adaptiveNotifications = AdaptiveNotificationCoordinator(
+            context: context,
+            notifications: notifications
+        )
 
     }
 
     /// Sequential on purpose: one permission dialog at a time.
     func start() async {
+        sync.onSyncCompleted = { [weak self] in
+            guard let self else { return }
+            await self.adaptiveNotifications.reconcile(currentLocation: self.location.currentLocation)
+        }
+        location.onSignificantLocationChange = { [weak self] location in
+            Task { @MainActor [weak self] in
+                await self?.adaptiveNotifications.observeSignificantLocation(location)
+            }
+        }
         await sync.start()
         await location.start()
+        await adaptiveNotifications.reconcile(currentLocation: location.currentLocation)
     }
 
     /// Refreshes the Home suggestion bubble without scheduling a notification.

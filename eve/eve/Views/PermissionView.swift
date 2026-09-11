@@ -33,8 +33,9 @@ struct PermissionView: View {
                     .padding(.top, 10)
                     .padding(.horizontal, 39)
 
-                // These rows only explain what EVE will access. The actual
-                // iOS permission prompts are requested when the user taps Next.
+                // These rows explain what EVE can access. Calendar and
+                // Reminders are requested here; location and notifications
+                // are requested later when the user reaches those features.
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 20) {
                         PermissionRow(
@@ -48,7 +49,7 @@ struct PermissionView: View {
                             icon: "location.fill",
                             iconColor: Color.accentColor,
                             title: "Location",
-                            description: "Get reminders when you are at specific places."
+                            description: "EVE asks when you add a place or enable adaptive travel timing."
                         )
                         
                         PermissionRow(
@@ -62,7 +63,7 @@ struct PermissionView: View {
                             icon: "bell.badge.fill",
                             iconColor: Color.accentColor,
                             title: "Notifications",
-                            description: "Receives timely nudges and heads-ups so you’re always prepared."
+                            description: "EVE asks after your first Home reminder is ready."
                         )
                     }
                     .padding(.horizontal, 20)
@@ -103,9 +104,9 @@ struct PermissionView: View {
         isRequesting = true
 
         Task {
-            // Present the OS prompts one at a time, then move on regardless
-            // of the answers — permissions are the user's choice.
-            await permissionManager.requestAllPermissions()
+            // Calendar and Reminders are useful for first-run learning. The
+            // more sensitive location and notification prompts stay contextual.
+            await permissionManager.requestOnboardingPermissions()
             isRequesting = false
             withAnimation {
                 currentStep = 2

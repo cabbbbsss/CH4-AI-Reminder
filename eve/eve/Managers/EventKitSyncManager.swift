@@ -33,6 +33,10 @@ final class EventKitSyncManager {
     private var observationTask: Task<Void, Never>?
     private var pendingSync: Task<Void, Never>?
 
+    /// The adaptive notification coordinator attaches here so an EventKit
+    /// change updates pending alerts after the SwiftData mirror is saved.
+    var onSyncCompleted: (() async -> Void)?
+
     init(context: ModelContext) {
 
         // One shared store: both services talk to the same EventKit
@@ -87,6 +91,8 @@ final class EventKitSyncManager {
         try? context.save()
 
         lastSync = .now
+
+        await onSyncCompleted?()
 
         // Only write History when something actually changed,
         // so the timeline stays meaningful.
@@ -167,7 +173,10 @@ final class EventKitSyncManager {
                     || current.notes != event.notes
                     || current.location != event.location
                     || current.attendees != event.attendees
-                    || current.meetingURL != event.meetingURL {
+                    || current.meetingURL != event.meetingURL
+                    || current.isAllDay != event.isAllDay
+                    || current.latitude != event.latitude
+                    || current.longitude != event.longitude {
 
                     current.title = event.title
                     current.startDate = event.startDate
@@ -176,6 +185,10 @@ final class EventKitSyncManager {
                     current.location = event.location
                     current.attendees = event.attendees
                     current.meetingURL = event.meetingURL
+
+                    current.isAllDay = event.isAllDay
+                    current.latitude = event.latitude
+                    current.longitude = event.longitude
 
                     updated += 1
 

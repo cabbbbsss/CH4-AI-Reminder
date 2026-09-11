@@ -120,6 +120,9 @@ struct CalendarReminderAddSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") {
                         save()
+                        Task {
+                            await PermissionRecoveryCoordinator.shared.checkNotificationsAfterManualReminder()
+                        }
                         dismiss()
                     }
                     .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)

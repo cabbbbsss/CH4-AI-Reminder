@@ -73,7 +73,7 @@ final class AILearningEngine {
     }
 
     // The same managers HomeView uses; here they run once, up front.
-    let notifications = NotificationService()
+    let notifications = NotificationService.shared
     let sync = EventKitSyncManager(context: context)
     let location = LocationActivityManager(context: context)
     let assistant = AssistantManager(
@@ -88,10 +88,14 @@ final class AILearningEngine {
       return sync.hasCalendarAccess == true || sync.hasReminderAccess == true
     }
 
-    // 2. Establish where the user is right now. Succeeds if location is allowed.
-    await runStep("Detecting your location…", progress: 0.55) {
-      await location.start()
-      return !location.accessDenied
+    // 2. Use existing location access, but never interrupt onboarding to ask.
+    if location.hasAuthorizedLocation {
+      await runStep("Detecting your location…", progress: 0.55) {
+        await location.start()
+        return !location.accessDenied
+      }
+    } else {
+      analysisProgress = 0.55
     }
 
     lastKnownPlace = location.currentPlace
