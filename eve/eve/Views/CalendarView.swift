@@ -91,30 +91,17 @@ struct CalendarView: View {
         ZStack {
             palette.background.ignoresSafeArea()
             VStack(spacing: 0) {
+                calendarHeader
+                    .padding(.top, Theme.Spacing.l)
+                    .padding(.horizontal, Theme.Spacing.gutter)
+
                 calendarCard
                 .padding(.top, 18)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 8)
             }
         }
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.hidden, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text("Calendar").font(.headline.weight(.semibold)).foregroundStyle(palette.primaryText)
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { isAddingReminder = true } label: {
-                    Image(systemName: "plus")
-                        .font(.title3)
-                        .foregroundStyle(Color.eveOnSurface)
-                        .padding(Theme.Spacing.xs)
-                }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .accessibilityLabel("Add reminder")
-            }
-        }
+        .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $isShowingDatePicker) {
             NavigationStack {
                 DatePicker("Select Date", selection: $selectedDate, displayedComponents: [.date])
@@ -140,6 +127,31 @@ struct CalendarView: View {
             isGenerating = true
             await reminderManager?.ensureReminders(for: selectedDate)
             isGenerating = false
+        }
+    }
+
+    /// Kept outside `ToolbarItem` so iOS cannot wrap the button in the
+    /// navigation bar's wide automatic Liquid Glass capsule. The button uses
+    /// the exact same view structure and modifiers as Home's Settings button.
+    private var calendarHeader: some View {
+        ZStack {
+            Text("Calendar")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(palette.primaryText)
+
+            HStack {
+                Spacer()
+
+                Button { isAddingReminder = true } label: {
+                    Image(systemName: "plus")
+                        .font(.title3)
+                        .foregroundStyle(Color.eveOnSurface)
+                        .padding(Theme.Spacing.xs)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .accessibilityLabel("Add reminder")
+            }
         }
     }
 
