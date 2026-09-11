@@ -20,7 +20,6 @@ struct eveApp: App {
       AdaptiveNotificationRecord.self,
       CommuteSample.self,
       CalendarReminder.self,
-      ReminderItem.self,
       SavedLocation.self,
       LocationReminder.self,
       LocationAssignment.self,

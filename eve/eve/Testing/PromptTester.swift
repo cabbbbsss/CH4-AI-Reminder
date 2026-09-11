@@ -25,7 +25,6 @@ struct MockScenario: Decodable {
     let eventLocation: String?
     let guests: [String]?
     let upcomingEvents: [String]
-    let pendingReminders: [String]
     let insights: [String]
     let recentHistory: [String]
     let answeredQuestions: [String]
@@ -42,7 +41,6 @@ struct MockScenario: Decodable {
             eventLocation: eventLocation,
             guests: guests,
             upcomingEvents: upcomingEvents,
-            pendingReminders: pendingReminders,
             insights: insights,
             recentHistory: recentHistory,
             answeredQuestions: answeredQuestions
@@ -128,8 +126,8 @@ final class PromptTester: ObservableObject {
     }
 
     private func checkRAGUsed(context: ReminderContext) -> Bool {
-        // RAG is effectively considered "used" if there are any retrieved insights, upcoming events, or pending reminders injected.
-        return !context.insights.isEmpty || !context.upcomingEvents.isEmpty || !context.pendingReminders.isEmpty
+        // RAG is effectively considered "used" if there are any retrieved insights or upcoming events injected.
+        return !context.insights.isEmpty || !context.upcomingEvents.isEmpty
     }
 
     // MARK: - Markdown Logger

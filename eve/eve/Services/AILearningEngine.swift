@@ -9,15 +9,20 @@ import FoundationModels
 struct LearningStep: Identifiable {
   let id = UUID()
   let text: String
+  /// The quieter second line under the step. While a step is in flight this
+  /// says what Eve is doing; once it lands it is replaced by what she
+  /// actually found, so the finished log reports results rather than
+  /// repeating the promise.
+  let detail: String
   let succeeded: Bool
 }
 
 /// Drives the onboarding "learning" screen.
 ///
-/// This runs the REAL pipeline — it imports Calendar & Reminders into
-/// SwiftData, detects the current place, then asks the Foundation Model
-/// to summarise first insights — while exposing streaming progress
-/// (currentAnalysisTask / completedSteps) for AILearningView.
+/// This runs the REAL pipeline — it imports the Calendar into SwiftData,
+/// then asks the Foundation Model to summarise first insights — while
+/// exposing streaming progress (currentAnalysisTask / completedSteps)
+/// for AILearningView.
 @Observable
 final class AILearningEngine {
   static let shared = AILearningEngine()
@@ -36,6 +41,9 @@ final class AILearningEngine {
   var analysisProgress: Double = 0.0
   var currentAnalysisTask: String = ""
 
+  /// The second line shown under the in-flight step.
+  var currentAnalysisDetail: String = ""
+
   /// Steps that have finished, in order — drives the streaming log UI.
   var completedSteps: [LearningStep] = []
 
@@ -43,8 +51,12 @@ final class AILearningEngine {
   /// model at the end of the learning pass (falls back to a default set).
   var onboardingQuestions: [OnboardingQuestion] = []
 
-  /// The place detected during the learning pass, reused when the
-  /// questions screen refines insights at the end of onboarding.
+  /// The last place Eve detected, reused when the questions screen refines
+  /// insights at the end of onboarding.
+  ///
+  /// Stays nil through onboarding now that location isn't requested there —
+  /// it only fills in once the user grants location from the Locations tab.
+  /// Every consumer takes it as an optional.
   private(set) var lastKnownPlace: String?
 
   /// A safe default set used when the model can't generate questions.
@@ -57,12 +69,26 @@ final class AILearningEngine {
     OnboardingQuestion(question: "Would you like reminders before you leave home?", category: "preference")
   ]
 
+  /// What a step reports back: whether it had anything to work with, and the
+  /// line to show underneath it once it's finished.
+  private struct StepOutcome {
+    let succeeded: Bool
+    let detail: String
+  }
+
+  /// "1 event" / "36 events". A bare interpolation gives "1 events", which is
+  /// exactly the kind of small wrongness that makes a screen feel unfinished.
+  private static func counted(_ count: Int, _ singular: String, _ plural: String) -> String {
+    "\(count) \(count == 1 ? singular : plural)"
+  }
+
   func analyzeUserRoutines(context: ModelContext?) async {
 
     isAnalyzing = true
     analysisProgress = 0.0
     completedSteps = []
     currentAnalysisTask = ""
+    currentAnalysisDetail = ""
 
     defer { isAnalyzing = false }
 
@@ -73,70 +99,130 @@ final class AILearningEngine {
     }
 
     // The same managers HomeView uses; here they run once, up front.
+    //
+    // No LocationActivityManager: onboarding asks for Calendar and nothing
+    // else, and starting the location manager here would fire the system
+    // location prompt — the thing moving it out of onboarding was meant to
+    // avoid. Location is requested from the Locations tab instead.
     let notifications = NotificationService.shared
     let sync = EventKitSyncManager(context: context)
-    let location = LocationActivityManager(context: context)
     let assistant = AssistantManager(
       context: context,
       notificationService: notifications
     )
 
-    // 1. Pull the user's real Calendar & Reminders into SwiftData.
-    //    Succeeds if at least one of the two was granted — that's still data.
-    await runStep("Importing your Calendar & Reminders…", progress: 0.3) {
-      await sync.start()
-      return sync.hasCalendarAccess == true || sync.hasReminderAccess == true
+    // 1. Ask EventKit for access. Its own step, so a refusal reads as
+    //    "we couldn't connect" rather than "your calendar is empty".
+    await runStep(
+      "Connecting to your calendar…",
+      running: "Checking Eve can read your events",
+      progress: 0.25
+    ) {
+      let granted = await sync.requestAccess()
+
+      return StepOutcome(
+        succeeded: granted,
+        detail: granted
+          ? "Eve can read your schedule"
+          : "Calendar access is off — you can turn it on in Settings"
+      )
     }
 
-    // 2. Use existing location access, but never interrupt onboarding to ask.
-    if location.hasAuthorizedLocation {
-      await runStep("Detecting your location…", progress: 0.55) {
-        await location.start()
-        return !location.accessDenied
+    // 2. Pull the user's real Calendar into SwiftData.
+    await runStep(
+      "Reading your calendar…",
+      running: "Looking through the past few weeks",
+      progress: 0.5
+    ) {
+      guard sync.hasCalendarAccess == true else {
+        return StepOutcome(
+          succeeded: false,
+          detail: "Skipped — there's no calendar to read yet"
+        )
       }
-    } else {
-      analysisProgress = 0.55
-    }
 
-    lastKnownPlace = location.currentPlace
+      await sync.beginSyncing()
+
+      let events = (try? context.fetchCount(FetchDescriptor<CalendarEvent>())) ?? 0
+
+      return StepOutcome(
+        succeeded: true,
+        detail: events == 0
+          ? "Your calendar is clear for now — Eve will catch up later"
+          : "Found \(Self.counted(events, "event", "events")) to learn from"
+      )
+    }
 
     // 3. Let the Foundation Model summarise first insights (no notification).
-    //    Routines come from schedule data, so this needs calendar OR reminders.
-    //    Location alone isn't enough — that step is marked ✗ (but location still
-    //    enriches the learning when calendar/reminders are also available).
-    await runStep("Learning your routines…", progress: 0.8) {
-      let hasRoutineData = sync.hasCalendarAccess == true || sync.hasReminderAccess == true
-      if hasRoutineData {
-        // Extract durable beliefs from the imported calendar/reminders,
-        // not a reminder decision — so learning actually produces insights.
-        await assistant.learnInsights(currentPlace: location.currentPlace)
+    //    Routines come from schedule data, so this needs the calendar.
+    await runStep(
+      "Learning your routines…",
+      running: "Working out what repeats each week",
+      progress: 0.75
+    ) {
+      guard sync.hasCalendarAccess == true else {
+        return StepOutcome(
+          succeeded: false,
+          detail: "Needs your calendar before it can spot a pattern"
+        )
       }
-      return hasRoutineData
+
+      // Counted around the call, so the line reports what this pass actually
+      // learned rather than everything Eve has ever believed.
+      let before = (try? context.fetchCount(FetchDescriptor<AIInsight>())) ?? 0
+
+      // Extract durable beliefs from the imported calendar, not a reminder
+      // decision — so learning actually produces insights.
+      await assistant.learnInsights(currentPlace: lastKnownPlace)
+
+      let learned = max(0, ((try? context.fetchCount(FetchDescriptor<AIInsight>())) ?? 0) - before)
+
+      return StepOutcome(
+        succeeded: true,
+        detail: learned == 0
+          ? "No clear pattern yet — give it time"
+          : "Picked up \(Self.counted(learned, "thing", "things")) about your week"
+      )
     }
 
     // 4. Prepare personalised questions. This ALWAYS succeeds: with data the
     //    questions confirm patterns; without data they gather what the model
     //    still needs to know about the user.
-    await runStep("Preparing a few questions…", progress: 1.0) {
+    await runStep(
+      "Preparing a few questions…",
+      running: "Deciding what's still worth asking",
+      progress: 1.0
+    ) {
       let generated = await assistant.onboardingQuestions(
-        currentPlace: location.currentPlace
+        currentPlace: lastKnownPlace
       )
       self.onboardingQuestions = generated.isEmpty ? Self.fallbackQuestions : generated
-      return true
+
+      return StepOutcome(
+        succeeded: true,
+        detail: "\(Self.counted(self.onboardingQuestions.count, "question", "questions")) ready for you"
+      )
     }
   }
 
   /// Marks a step active, awaits its work, then records the outcome —
   /// producing the streaming checklist the onboarding screen renders.
-  /// The work closure returns whether the step actually had data to act on.
+  ///
+  /// `running` is shown while the step is in flight; the outcome's own detail
+  /// replaces it once the step lands, so a finished row says what was found
+  /// instead of restating what was about to happen.
   private func runStep(
     _ task: String,
+    running: String,
     progress: Double,
-    _ work: () async -> Bool
+    _ work: () async -> StepOutcome
   ) async {
     currentAnalysisTask = task
-    let succeeded = await work()
+    currentAnalysisDetail = running
+    let outcome = await work()
     analysisProgress = progress
-    completedSteps.append(LearningStep(text: task, succeeded: succeeded))
+    completedSteps.append(
+      LearningStep(text: task, detail: outcome.detail, succeeded: outcome.succeeded)
+    )
   }
 }

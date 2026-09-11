@@ -16,7 +16,6 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
   var isCalendarGranted: Bool = false
   var isNotificationsGranted: Bool = false
   var isAIEnabled: Bool = false
-  var isReminderGranted: Bool = false
   var hasCompletedOnboarding: Bool = false
 
   private let locationManager = CLLocationManager()
@@ -42,7 +41,6 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
   func refreshStatuses() {
     isLocationGranted = locationManager.authorizationStatus == .authorizedAlways || locationManager.authorizationStatus == .authorizedWhenInUse
     isCalendarGranted = EKEventStore.authorizationStatus(for: .event) == .fullAccess
-    isReminderGranted = EKEventStore.authorizationStatus(for: .reminder) == .fullAccess
 
     UNUserNotificationCenter.current().getNotificationSettings { settings in
       // Completion runs off the main actor; hop back on to touch state.
@@ -65,8 +63,7 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
     locationManager.authorizationStatus
   }
 
-  /// Requests location only when the user has reached a feature that needs it.
-  /// A prior decision is returned without attempting to re-prompt iOS.
+  /// Requests location only at the point a location reminder needs it.
   func requestLocationIfUndetermined() async -> CLAuthorizationStatus {
     let status = locationManager.authorizationStatus
     guard status == .notDetermined else { return status }
@@ -77,10 +74,15 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
     }
   }
 
-  /// Requested only after the user enables adaptive background timing.
+  /// Elevates a previously granted foreground location permission only after
+  /// the user explicitly enables adaptive background timing.
   func requestAdaptiveBackgroundLocation() async {
     let status = await requestLocationIfUndetermined()
     guard status == .authorizedWhenInUse else { return }
+    locationManager.requestAlwaysAuthorization()
+  }
+
+  func requestLocation() {
     locationManager.requestAlwaysAuthorization()
   }
 
@@ -93,37 +95,29 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
     }
   }
 
+  func requestNotifications() async {
+    do {
+      isNotificationsGranted = try await UNUserNotificationCenter.current()
+        .requestAuthorization(options: [.alert, .sound, .badge])
+    } catch {
+      print("Failed to request notification access: \(error)")
+    }
+  }
+
   func notificationAuthorizationStatus() async -> UNAuthorizationStatus {
     await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
   }
 
-  /// Requests notification authorization only for the first decision. iOS
-  /// records a denial, so callers can use the returned status to offer Settings.
   func requestNotificationsIfUndetermined() async -> UNAuthorizationStatus {
     let status = await notificationAuthorizationStatus()
     guard status == .notDetermined else {
       isNotificationsGranted = Self.canDeliverNotifications(status)
       return status
     }
-
-    do {
-      _ = try await UNUserNotificationCenter.current()
-        .requestAuthorization(options: [.alert, .sound, .badge])
-    } catch {
-      print("Failed to request notification access: \(error)")
-    }
-
+    await requestNotifications()
     let updatedStatus = await notificationAuthorizationStatus()
     isNotificationsGranted = Self.canDeliverNotifications(updatedStatus)
     return updatedStatus
-  }
-
-  func requestReminders() async {
-    do {
-      isReminderGranted = try await eventStore.requestFullAccessToReminders()
-    } catch {
-      print("Failed to request reminder access: \(error)")
-    }
   }
 
   func enableAI() {
@@ -131,12 +125,21 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
     UserDefaults.standard.set(true, forKey: "isAIEnabled")
   }
 
-  /// Onboarding asks only for information needed to learn the initial routine.
-  /// Location and notification prompts are deferred until their visible feature.
+  /// The one permission onboarding asks for: Calendar.
+  ///
+  /// Eve builds the routine from calendar events, so that is the only access
+  /// it needs before the app is useful. Everything else is requested at the
+  /// point of use instead of being stacked up behind one Next button:
+  ///
+  /// - Location — when the user adds a place (`AddLocationSheet`), which is
+  ///   the moment a place-based reminder actually becomes possible.
+  /// - Notifications — the first time Eve schedules something to deliver
+  ///   (`NotificationService.scheduleReminder`).
+  ///
+  /// Reminders-app access is gone entirely: Eve reads the calendar only.
   func requestOnboardingPermissions() async {
-    enableAI()                          // app-level consent (no OS prompt exists)
+    enableAI()            // app-level consent (no OS prompt exists)
     await requestCalendar()
-    await requestReminders()
   }
 
   func completeOnboarding() {

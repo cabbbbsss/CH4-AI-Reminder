@@ -32,75 +32,104 @@ struct OnboardingQuestionsView: View {
 
   var body: some View {
     ZStack {
-      background
+      AuroraBackground()
 
       VStack(alignment: .leading, spacing: 0) {
 
-        // Subtitle
         Text("EVE has a few questions to\nrefine your reminders.")
-          .font(.system(size: 17, weight: .regular))
-          .foregroundColor(Color(.textPrimary).opacity(0.55))
-          .padding(.top, 120)
+          .font(.eveBody)
+          .foregroundStyle(Color.eveOnSurface.opacity(0.55))
+          .padding(.top, 100)
 
-        // Progress
-        Text("\(min(index + 1, questions.count)) of \(questions.count)")
-          .font(.system(size: 13, weight: .semibold))
-          .foregroundColor(Color(.textPrimary).opacity(0.4))
-          .padding(.top, 24)
+        progress
+          .padding(.top, Theme.Spacing.xl)
 
         if let question = questions[safe: index] {
 
-          // Question text
           Text(question.question)
-            .font(.system(size: 22, weight: .bold))
-            .foregroundColor(Color(.textPrimary))
+            .font(.eveHeadline)
+            .foregroundStyle(Color.eveOnSurface)
             .fixedSize(horizontal: false, vertical: true)
-            .padding(.top, 12)
+            .padding(.top, Theme.Spacing.s)
             .id(index) // re-triggers the transition per question
             .transition(questionTransition)
 
-          // Answers
-          VStack(spacing: 16) {
+          VStack(spacing: Theme.Spacing.m) {
             answerButton(title: "Yes", value: true)
             answerButton(title: "No", value: false)
           }
-          .padding(.top, 28)
+          .padding(.top, Theme.Spacing.xxl)
         }
 
         Spacer()
 
-        // Bottom bar: back chevron on the left.
-        HStack {
-          if index > 0 {
-            Button {
-              goingForward = false
-              withAnimation(.easeInOut) { index -= 1 }
-            } label: {
-              Image(systemName: "chevron.left")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundColor(Color(.textPrimary).opacity(0.8))
-            }
-          }
-
-          Spacer()
-
-          Button {
-            complete()
-          } label: {
-            Text("Skip")
-              .font(.system(size: 16, weight: .semibold))
-              .foregroundColor(Color(.textPrimary).opacity(0.8))
-          }
-        }
-        .padding(.bottom, 40)
+        bottomBar
+          .padding(.bottom, Theme.Spacing.xxl)
       }
-      .padding(.horizontal, 36)
+      .padding(.horizontal, Theme.Spacing.gutter)
     }
-    .preferredColorScheme(.dark)
+    // Follows the system appearance like the rest of onboarding, rather than
+    // pinning this one step to dark.
     .onAppear {
       // Size the answer store to the question count once.
       if answers.count != questions.count {
         answers = Array(repeating: nil, count: questions.count)
+      }
+    }
+  }
+
+  /// A counter plus a filling track — "3 of 7" alone gave no sense of how
+  /// much of onboarding was left at a glance.
+  private var progress: some View {
+    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+      Text("\(min(index + 1, questions.count)) of \(questions.count)")
+        .font(.eveCaption)
+        .foregroundStyle(Color.eveOnSurface.opacity(0.4))
+
+      GeometryReader { proxy in
+        let fraction = questions.isEmpty
+          ? 0
+          : CGFloat(index + 1) / CGFloat(questions.count)
+
+        ZStack(alignment: .leading) {
+          Capsule()
+            .fill(Color.eveOnSurface.opacity(0.15))
+
+          Capsule()
+            .fill(Color.accentColor)
+            .frame(width: proxy.size.width * fraction)
+        }
+      }
+      .frame(height: 4)
+      .animation(.easeInOut(duration: 0.25), value: index)
+      .accessibilityHidden(true)
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("Question \(min(index + 1, questions.count)) of \(questions.count)")
+  }
+
+  private var bottomBar: some View {
+    HStack {
+      if index > 0 {
+        Button {
+          goingForward = false
+          withAnimation(.easeInOut) { index -= 1 }
+        } label: {
+          Image(systemName: "chevron.left")
+            .font(.title3.weight(.semibold))
+            .foregroundStyle(Color.eveOnSurface.opacity(0.8))
+        }
+        .accessibilityLabel("Previous question")
+      }
+
+      Spacer()
+
+      Button {
+        complete()
+      } label: {
+        Text("Skip")
+          .font(.eveButton)
+          .foregroundStyle(Color.eveOnSurface.opacity(0.8))
       }
     }
   }
@@ -117,7 +146,7 @@ struct OnboardingQuestionsView: View {
   // MARK: - Answer button
 
   private func answerButton(title: String, value: Bool) -> some View {
-    // Both options start neutral; only the chosen one turns blue (+ a checkmark),
+    // Both options start neutral; only the chosen one fills in (+ a checkmark),
     // which is what the user sees when they go back to an answered question.
     let isSelected = answers[safe: index].flatMap { $0 } == value
 
@@ -125,24 +154,27 @@ struct OnboardingQuestionsView: View {
       answer(value)
     } label: {
       Text(title)
-        .font(.system(size: 16, weight: .bold))
-        .foregroundColor(isSelected ? .white : Color(.textPrimary))
+        .font(.eveButton)
+        .foregroundStyle(isSelected ? .white : Color.eveOnSurface)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
+        .padding(.vertical, Theme.Spacing.m)
+        // Pinned to the capsule's leading edge instead of nudged inward with
+        // `.padding(.leading, 130)`, which put the tick in a different place
+        // relative to the word on every screen width.
         .overlay(alignment: .leading) {
           if isSelected {
             Image(systemName: "checkmark.circle.fill")
-              .font(.system(size: 15, weight: .bold))
-              .foregroundColor(.white)
-              .padding(.leading, 130)
+              .font(.eveCaption)
+              .foregroundStyle(.white)
+              .padding(.leading, Theme.Spacing.l)
           }
         }
         .background {
           Capsule()
-            .fill(isSelected ? Color.accentColor : Color.clear)
+            .fill(isSelected ? Color.accentColor : .clear)
             .overlay {
               if !isSelected {
-                Capsule().stroke(Color(.textPrimary).opacity(0.4), lineWidth: 1.5)
+                Capsule().stroke(Color.eveOnSurface.opacity(0.4), lineWidth: 1.5)
               }
             }
         }
@@ -207,23 +239,6 @@ struct OnboardingQuestionsView: View {
     }
 
     try? modelContext.save()
-  }
-
-  // MARK: - Background
-
-    private var background: some View {
-        
-       ZStack {
-        Color(.bgPrimary).ignoresSafeArea()
-        
-        Rectangle()
-            .fill(Color.bgSecondary.opacity(0.8))
-            .frame(width: 800, height: 500)
-            .blur(radius: 150)
-            .position(x: 200, y: 150)
-            .ignoresSafeArea(edges: .all)
-    }
-    .ignoresSafeArea()
   }
 }
 

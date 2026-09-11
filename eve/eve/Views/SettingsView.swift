@@ -70,14 +70,6 @@ struct SettingsView: View {
                             )
                         }
                         SettingsDivider()
-                        SettingsNavRow(icon: "checklist", label: "Reminder") {
-                            PermissionStatusSettingsView(
-                                title: "Reminder",
-                                statusKeyPath: \.isReminderGranted,
-                                description: "EVE reads and creates reminders so it can nudge you at the right time. Reminder access is managed by iOS — use the Settings app to change it."
-                            )
-                        }
-                        SettingsDivider()
                         SettingsNavRow(icon: "location.fill", label: "Location") {
                             PermissionStatusSettingsView(
                                 title: "Location",

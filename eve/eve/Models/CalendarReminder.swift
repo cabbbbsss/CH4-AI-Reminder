@@ -34,18 +34,79 @@ final class CalendarReminder {
 
     var isSystemManaged: Bool
 
-    /// Mirrors the completion affordance people expect when scheduled
-    /// reminders appear beside events in a calendar. Defaults to false so
-    /// existing SwiftData stores migrate without requiring a data reset.
+    /// Ticked off in Today's Routine.
     var isCompleted: Bool = false
 
     var createdAt: Date
 
-    /// When this reminder should appear on the timeline: one hour before
-    /// the event it's for.
-    var reminderDate: Date {
-        eventDate.addingTimeInterval(-3600)
+    // MARK: - User-editable detail
+
+    /// The second line on the routine row, and the body of its notification.
+    var notes: String?
+
+    /// A link the reminder is about. Display-only.
+    var url: String?
+
+    /// The time the user set, which overrides the generated one.
+    ///
+    /// Optional rather than a plain stored date so existing rows keep working:
+    /// `reminderDate` still derives from the event when nobody has edited it,
+    /// which is exactly the old behaviour and needs no migration.
+    var scheduledDate: Date?
+
+    /// False for an all-day reminder — it still has a date, just no clock time.
+    var hasTime: Bool = true
+
+    /// The `SavedLocation` this reminder is tied to, if any. Reaching or
+    /// leaving there delivers it (see `LocationActivityManager`).
+    var locationID: UUID?
+
+    /// Which half of the visit delivers it. Only meaningful with a location.
+    var locationTriggerRaw: String = LocationTrigger.arriving.rawValue
+
+    var locationTrigger: LocationTrigger {
+        get { LocationTrigger(rawValue: locationTriggerRaw) ?? .arriving }
+        set { locationTriggerRaw = newValue.rawValue }
     }
+
+    /// `RepeatRule.rawValue`. Stored raw because SwiftData persists primitives.
+    var repeatRuleRaw: String = RepeatRule.never.rawValue
+
+    /// Minutes before `reminderDate` that the notification fires.
+    var earlyReminderMinutes: Int = 0
+
+    /// Groups every instance of one repeating series, so the next occurrence
+    /// can tell whether it has already been created.
+    var seriesID: UUID?
+
+    // MARK: - Derived
+
+    /// When this reminder appears on the timeline.
+    ///
+    /// The user's own time wins; otherwise it falls back to an hour before the
+    /// event it was generated from.
+    var reminderDate: Date {
+        scheduledDate ?? eventDate.addingTimeInterval(-3600)
+    }
+
+    var repeatRule: RepeatRule {
+        get { RepeatRule(rawValue: repeatRuleRaw) ?? .never }
+        set { repeatRuleRaw = newValue.rawValue }
+    }
+
+    var earlyReminder: EarlyReminder {
+        get { EarlyReminder(rawValue: earlyReminderMinutes) ?? .none }
+        set { earlyReminderMinutes = newValue.rawValue }
+    }
+
+    /// When the notification should actually be delivered.
+    var fireDate: Date {
+        reminderDate.addingTimeInterval(-Double(earlyReminderMinutes) * 60)
+    }
+
+    /// Stable identifier for this reminder's pending notification, so it can
+    /// be cancelled and replaced whenever the reminder is edited.
+    var notificationID: String { "calendar-reminder-\(id.uuidString)" }
 
     init(
         occurrenceID: String,
@@ -53,7 +114,6 @@ final class CalendarReminder {
         eventDate: Date,
         text: String,
         isSystemManaged: Bool = true,
-        isCompleted: Bool = false,
         createdAt: Date = .now
     ) {
 
@@ -63,7 +123,6 @@ final class CalendarReminder {
         self.eventDate = eventDate
         self.text = text
         self.isSystemManaged = isSystemManaged
-        self.isCompleted = isCompleted
         self.createdAt = createdAt
 
     }
