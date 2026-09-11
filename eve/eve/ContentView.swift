@@ -1,10 +1,14 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct ContentView: View {
   @AppStorage("onboardingStep") private var currentStep: Int = 0
   @Bindable private var permissionManager = PermissionManager.shared
+  @Bindable private var permissionRecovery = PermissionRecoveryCoordinator.shared
   @Environment(\.modelContext) private var modelContext
+  @Environment(\.openURL) private var openURL
+  @Environment(\.scenePhase) private var scenePhase
 
   @AppStorage("appThemePreference") private var themeRaw = AppThemePreference.system.rawValue
 
@@ -42,6 +46,23 @@ struct ContentView: View {
       // passing observations that would otherwise re-enter every prompt.
       // A no-op once the store is clean.
       try? InsightManager(context: modelContext).pruneMalformed()
+    }
+    .onChange(of: scenePhase) { _, phase in
+      if phase == .active {
+        permissionManager.refreshStatuses()
+      }
+    }
+    .alert(item: $permissionRecovery.activeRecovery) { recovery in
+      Alert(
+        title: Text(recovery.title),
+        message: Text(recovery.message),
+        primaryButton: .default(Text("Open Settings")) {
+          if let url = URL(string: UIApplication.openSettingsURLString) {
+            openURL(url)
+          }
+        },
+        secondaryButton: .cancel(Text("Not Now"))
+      )
     }
   }
 }

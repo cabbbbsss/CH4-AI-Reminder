@@ -30,9 +30,7 @@ struct SettingsView: View {
         )
     }
 
-    // TEMPORARY — state for the notification preview demo. Delete with the section below.
-    @State private var notificationService = NotificationService()
-    @State private var demoRunning = false
+    private let notificationService = NotificationService.shared
 
     @AppStorage("appThemePreference") private var themeRaw = AppThemePreference.system.rawValue
     @Environment(\.colorScheme) private var systemScheme
@@ -102,33 +100,14 @@ struct SettingsView: View {
 //                    }
 //                }
 
-                // TEMPORARY — Notification preview demo. Delete this whole section when done.
-                SettingsSection(header: "Notification Preview (Demo)") {
+                SettingsSection(header: "Notification Diagnostics") {
                     SettingsCard {
                         Button {
-                            demoRunning = true
-                            Task { await notificationService.startDemoNotifications() }
+                            Task { try? await notificationService.scheduleTestNotification() }
                         } label: {
-                            SettingsRow(icon: "bell.badge.fill", label: "Start demo (fires every 10s)", showChevron: false)
+                            SettingsRow(icon: "bell.badge.fill", label: "Send test notification (5s)", showChevron: false)
                         }
                         .buttonStyle(.plain)
-
-                        SettingsDivider()
-
-                        Button {
-                            demoRunning = false
-                            notificationService.cancelDemoNotifications()
-                        } label: {
-                            SettingsRow(icon: "bell.slash.fill", label: "Stop demo", showChevron: false)
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    if demoRunning {
-                        Text("Sending sample event, reminder, and location notifications every 10 seconds for ~5 minutes. Lock your phone or leave the app to see them on the lock screen.")
-                            .font(.system(size: 13))
-                            .foregroundColor(Color(.textTertiary))
-                            .padding(.horizontal, 24)
                     }
                 }
             }

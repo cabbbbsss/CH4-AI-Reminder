@@ -104,7 +104,7 @@ final class AILearningEngine {
     // else, and starting the location manager here would fire the system
     // location prompt — the thing moving it out of onboarding was meant to
     // avoid. Location is requested from the Locations tab instead.
-    let notifications = NotificationService()
+    let notifications = NotificationService.shared
     let sync = EventKitSyncManager(context: context)
     let assistant = AssistantManager(
       context: context,

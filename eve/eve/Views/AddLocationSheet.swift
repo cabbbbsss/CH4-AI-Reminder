@@ -17,6 +17,7 @@ import SwiftData
 import MapKit
 import CoreLocation
 import Observation
+import UIKit
 
 /// Wraps `MKLocalSearchCompleter` so the view gets live autocomplete results as
 /// the user types. Main-actor isolated to match the app's default isolation;
@@ -61,8 +62,11 @@ struct AddLocationSheet: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @Bindable private var permissionManager = PermissionManager.shared
 
     var nextSortOrder: Int = 0
+    var editingLocation: SavedLocation?
 
     @State private var completer = LocationSearchCompleter()
     @State private var locationService = LocationService()
@@ -90,6 +94,7 @@ struct AddLocationSheet: View {
 
     @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var isResolving = false
+    @State private var locationAccessDenied = false
 
     var body: some View {
         NavigationStack {
@@ -109,6 +114,22 @@ struct AddLocationSheet: View {
                     nameField
                     
                     searchField
+
+                    if locationAccessDenied {
+                        Button {
+                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                openURL(url)
+                            }
+                        } label: {
+                            Label("Location access is off — open Settings to use Current Location", systemImage: "location.slash")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(Color.accentColor)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.plain)
+                    }
                     
                     List {
                         Button {
@@ -171,6 +192,25 @@ struct AddLocationSheet: View {
                 }
                 .onAppear { searchFocused = true }
             }
+        }
+        .onAppear {
+            guard let editingLocation else { return }
+            placeName = editingLocation.name
+            selectedAddress = editingLocation.address
+            if let latitude = editingLocation.latitude, let longitude = editingLocation.longitude {
+                apply(
+                    name: editingLocation.name,
+                    address: editingLocation.address,
+                    coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+                )
+            }
+        }
+        .task {
+            // Searching and manually placing a pin never need location, but
+            // this is the intentional point to request Current Location.
+            guard editingLocation == nil else { return }
+            let status = await permissionManager.requestLocationIfUndetermined()
+            locationAccessDenied = status == .denied || status == .restricted
         }
     }
 
@@ -356,17 +396,30 @@ struct AddLocationSheet: View {
         // model refine it in the background below.
         let categoryIcon = LocationIconResolver.icon(for: selectedCategory)
 
-        let location = SavedLocation(
-            name: name.isEmpty ? (selectedName ?? searchText) : name,
-            address: selectedAddress,
-            iconName: categoryIcon ?? LocationIconResolver.defaultIcon,
-            latitude: coordinate.latitude,
-            longitude: coordinate.longitude,
-            sortOrder: nextSortOrder
-        )
-
-        modelContext.insert(location)
+        let location: SavedLocation
+        if let editingLocation {
+            editingLocation.name = name.isEmpty ? (selectedName ?? searchText) : name
+            editingLocation.address = selectedAddress
+            editingLocation.latitude = coordinate.latitude
+            editingLocation.longitude = coordinate.longitude
+            if let categoryIcon { editingLocation.iconName = categoryIcon }
+            location = editingLocation
+        } else {
+            location = SavedLocation(
+                name: name.isEmpty ? (selectedName ?? searchText) : name,
+                address: selectedAddress,
+                iconName: categoryIcon ?? LocationIconResolver.defaultIcon,
+                latitude: coordinate.latitude,
+                longitude: coordinate.longitude,
+                sortOrder: nextSortOrder
+            )
+            modelContext.insert(location)
+        }
         try? modelContext.save()
+
+        Task {
+            await LocationReminderNotificationCoordinator.shared.reconcile(context: modelContext)
+        }
 
         if categoryIcon == nil {
             // Deliberately unstructured so it outlives the sheet's dismissal

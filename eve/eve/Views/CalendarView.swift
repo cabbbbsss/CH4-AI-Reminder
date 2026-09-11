@@ -333,7 +333,7 @@ struct CalendarView: View {
 
   var body: some View {
     ZStack {
-        
+
         LinearGradient(
             colors: [Color(.gradientPrimaryStart), Color(.bgPrimary)],
             startPoint: .bottom,
@@ -462,13 +462,13 @@ struct CalendarView: View {
   }
 
     // MARK: - Month
-    
+
     private func getCurrentMonth(from date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMMM"
         return formatter.string(from: date)
     }
-    
+
     private var currentMonth: some View {
         Text(getCurrentMonth(from: selectedDate))
             .font(.eveScreenTitle)
@@ -477,7 +477,7 @@ struct CalendarView: View {
             .padding(.horizontal, Theme.Spacing.gutter)
             .padding(.top, Theme.Spacing.m)
     }
-    
+
     // MARK: - Week strip
 
   private var weekStrip: some View {
@@ -555,7 +555,7 @@ struct CalendarView: View {
             .foregroundStyle(Color.eveOnSurfaceFaint)
             .padding(.top, Theme.Spacing.l)
         }
-        
+
         timelineList(for: date, events: dayEventsForDate, reminders: dayRemindersForDate)
       }
     }
@@ -583,7 +583,7 @@ struct CalendarView: View {
           .listRowInsets(EdgeInsets())
           .listRowSeparator(.hidden)
           .listRowBackground(Color.clear)
-          
+
         case .event(let event):
           CalendarEventRow(
             time: event.startDate.formatted(date: .omitted, time: .shortened),

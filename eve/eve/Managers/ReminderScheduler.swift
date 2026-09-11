@@ -28,7 +28,7 @@ final class ReminderScheduler {
     /// launch and after every edit.
     private static let pendingLimit = 60
 
-    init(context: ModelContext, notifications: NotificationService = NotificationService()) {
+    init(context: ModelContext, notifications: NotificationService = .shared) {
         self.context = context
         self.notifications = notifications
     }

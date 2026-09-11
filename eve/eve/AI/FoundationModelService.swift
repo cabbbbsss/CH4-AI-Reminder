@@ -43,6 +43,15 @@ struct EventPreparation {
 }
 
 @Generable
+private struct ProposedEventTiming {
+    @Guide(description: "Preparation time in minutes, from 5 through 120.")
+    let preparationMinutes: Int
+
+    @Guide(description: "One short, concrete preparation action grounded in the event context, or an empty string when none is justified.")
+    let action: String
+}
+
+@Generable
 struct PlaceIconSuggestion {
 
     @Guide(description: "The single best-matching icon name, copied exactly from the allowed list in the instructions")
@@ -229,6 +238,17 @@ final class FoundationModelService: ReasoningEngine {
     \(UntrustedText.instructionRule)
     """
 
+    private let timingInstructions = """
+    Estimate how much preparation time this one event deserves for this user.
+
+    - Return 5 through 120 minutes.
+    - Use only the supplied event details, relevant reminders, and confirmed insights.
+    - Prefer a small amount of preparation for ordinary meetings; increase it only when concrete preparation is stated.
+    - The action must be one concise, grounded thing to do or bring. Return an empty action if no concrete action is supported.
+
+    \(UntrustedText.instructionRule)
+    """
+
     /// Built from `LocationIconResolver.catalog` so the icons offered to the
     private var iconInstructions: String {
         """
@@ -317,6 +337,21 @@ final class FoundationModelService: ReasoningEngine {
 
         return response.content.items
 
+    }
+
+    func suggestTiming(forPromptText promptText: String) async throws -> EventTimingSuggestion {
+        try requireAvailableModel()
+        let session = LanguageModelSession(instructions: timingInstructions)
+        let response = try await session.respond(
+            to: promptText,
+            generating: ProposedEventTiming.self,
+            options: Self.factual
+        )
+        let content = response.content
+        return EventTimingSuggestion(
+            preparationMinutes: min(120, max(5, content.preparationMinutes)),
+            action: content.action.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : content.action
+        )
     }
 
     /// A short, activity-based reminder for one calendar event already tied

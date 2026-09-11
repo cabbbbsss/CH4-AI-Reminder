@@ -213,7 +213,7 @@ struct OnboardingQuestionsView: View {
     Task {
       let assistant = AssistantManager(
         context: context,
-        notificationService: NotificationService()
+        notificationService: NotificationService.shared
       )
       await assistant.learnInsights(currentPlace: place)
     }

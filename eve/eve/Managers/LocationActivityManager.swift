@@ -16,6 +16,11 @@ import SwiftData
 final class LocationActivityManager {
 
     private(set) var currentPlace: String?
+    private(set) var currentLocation: CLLocation?
+
+    /// Adaptive calendar reminders only observe meaningful changes; raw
+    /// locations are never retained as a continuous trace.
+    var onSignificantLocationChange: ((CLLocation) -> Void)?
 
     private(set) var accessDenied = false
 
@@ -64,6 +69,7 @@ final class LocationActivityManager {
         // Baseline: know where we are, but don't log it —
         // "app launched" is not a visit, and would spam the timeline.
         if let location = try? await locationService.currentLocation() {
+            currentLocation = location
             currentPlace = await locationService.placeName(for: location)
             // Baseline, so the first change knows where it came from.
             previousCoordinate = location.coordinate
@@ -86,6 +92,9 @@ final class LocationActivityManager {
     }
 
     private func handleChange(to location: CLLocation) async {
+
+        currentLocation = location
+        onSignificantLocationChange?(location)
 
         guard let place = await locationService.placeName(for: location) else {
             return

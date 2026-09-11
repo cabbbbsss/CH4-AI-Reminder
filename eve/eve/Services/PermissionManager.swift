@@ -20,6 +20,7 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
 
   private let locationManager = CLLocationManager()
   private let eventStore = EKEventStore()
+  private var locationContinuation: CheckedContinuation<CLAuthorizationStatus, Never>?
 
   override init() {
     super.init()
@@ -44,9 +45,41 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
     UNUserNotificationCenter.current().getNotificationSettings { settings in
       // Completion runs off the main actor; hop back on to touch state.
       Task { @MainActor in
-        self.isNotificationsGranted = (settings.authorizationStatus == .authorized)
+        self.isNotificationsGranted = Self.canDeliverNotifications(settings.authorizationStatus)
       }
     }
+  }
+
+  static func canDeliverNotifications(_ status: UNAuthorizationStatus) -> Bool {
+    switch status {
+    case .authorized, .provisional, .ephemeral:
+      return true
+    default:
+      return false
+    }
+  }
+
+  func locationAuthorizationStatus() -> CLAuthorizationStatus {
+    locationManager.authorizationStatus
+  }
+
+  /// Requests location only at the point a location reminder needs it.
+  func requestLocationIfUndetermined() async -> CLAuthorizationStatus {
+    let status = locationManager.authorizationStatus
+    guard status == .notDetermined else { return status }
+
+    return await withCheckedContinuation { continuation in
+      locationContinuation = continuation
+      locationManager.requestWhenInUseAuthorization()
+    }
+  }
+
+  /// Elevates a previously granted foreground location permission only after
+  /// the user explicitly enables adaptive background timing.
+  func requestAdaptiveBackgroundLocation() async {
+    let status = await requestLocationIfUndetermined()
+    guard status == .authorizedWhenInUse else { return }
+    locationManager.requestAlwaysAuthorization()
   }
 
   func requestLocation() {
@@ -69,6 +102,22 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
     } catch {
       print("Failed to request notification access: \(error)")
     }
+  }
+
+  func notificationAuthorizationStatus() async -> UNAuthorizationStatus {
+    await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+  }
+
+  func requestNotificationsIfUndetermined() async -> UNAuthorizationStatus {
+    let status = await notificationAuthorizationStatus()
+    guard status == .notDetermined else {
+      isNotificationsGranted = Self.canDeliverNotifications(status)
+      return status
+    }
+    await requestNotifications()
+    let updatedStatus = await notificationAuthorizationStatus()
+    isNotificationsGranted = Self.canDeliverNotifications(updatedStatus)
+    return updatedStatus
   }
 
   func enableAI() {
@@ -103,6 +152,10 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
   nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
     MainActor.assumeIsolated {
       isLocationGranted = manager.authorizationStatus == .authorizedAlways || manager.authorizationStatus == .authorizedWhenInUse
+      if manager.authorizationStatus != .notDetermined {
+        locationContinuation?.resume(returning: manager.authorizationStatus)
+        locationContinuation = nil
+      }
     }
   }
 }
