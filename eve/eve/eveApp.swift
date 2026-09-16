@@ -23,6 +23,7 @@ struct eveApp: App {
       SavedLocation.self,
       LocationReminder.self,
       LocationAssignment.self,
+      ContextualPreference.self
     ])
     let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
     

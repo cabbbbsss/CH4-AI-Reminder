@@ -115,6 +115,17 @@ struct InsightExtraction {
 
 }
 
+@Generable
+struct ContextualDeduction {
+
+    @Guide(description: "Inference scratchpad to reason about the event and common sense associations")
+    let thoughtProcess: String
+
+    @Guide(description: "2-4 commonly associated items or tasks the user might need for this event. Example: ['gloves', 'whey', 'AirPods'] for a Gym event. Empty if nothing specific applies.")
+    let items: [String]
+
+}
+
 /// The only gateway to Apple's on-device model.
 /// Input: ReminderContext. Output: ReminderDecision. Nothing else.
 ///
@@ -369,6 +380,35 @@ final class FoundationModelService: ReasoningEngine {
         let response = try await session.respond(
             to: promptText,
             generating: EventPreparation.self,
+            options: Self.factual
+        )
+
+        return response.content.items
+
+    }
+
+    let contextualDeductionInstructions = """
+    Analyze the upcoming event and deduce commonly associated items or micro-tasks the user might need.
+
+    - Use common sense inference based on the event's activity (e.g., "Gym" -> gloves, whey, AirPods).
+    - Limit to 2-4 items.
+    - Keep items short (1-3 words).
+    - NEVER hallucinate completely irrelevant items. If the event is generic (e.g., "Meeting"), return an empty list unless context strongly implies specific needs.
+    - Do not repeat items already explicitly mentioned in the event description.
+
+    \(UntrustedText.instructionRule)
+    """
+
+    /// Deduces items a user might need for an upcoming event, used for pre-event proactive learning prompts.
+    func deduceContextualItems(forPromptText promptText: String) async throws -> [String] {
+
+        try requireAvailableModel()
+
+        let session = LanguageModelSession(instructions: contextualDeductionInstructions)
+
+        let response = try await session.respond(
+            to: promptText,
+            generating: ContextualDeduction.self,
             options: Self.factual
         )
 

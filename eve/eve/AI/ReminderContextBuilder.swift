@@ -41,7 +41,8 @@ final class ReminderContextBuilder {
             upcomingEvents: upcomingEvents(),
             insights: insights(),
             recentHistory: recentHistory(),
-            answeredQuestions: answeredQuestions()
+            answeredQuestions: answeredQuestions(),
+            contextualPreferences: contextualPreferences()
         )
 
     }
@@ -776,6 +777,13 @@ final class ReminderContextBuilder {
             (lead: "Q: ", untrusted: $0.question, trail: " — A: \($0.answer)")
         })
 
+    }
+    
+    private func contextualPreferences() -> [String] {
+        let prefs = (try? context.fetch(FetchDescriptor<ContextualPreference>())) ?? []
+        return englishOnlyDelimiting(prefs.filter { $0.isUserConfirmed && !$0.items.isEmpty }.map {
+            (lead: "", untrusted: "\($0.eventType): \($0.items.joined(separator: ", "))", trail: "")
+        })
     }
 
 }

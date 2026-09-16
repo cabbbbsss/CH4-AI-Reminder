@@ -14,9 +14,11 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     static let calendarPrefix = "eve.adaptive.calendar."
     static let locationPrefix = "eve.location.reminder."
     static let adaptiveCategory = "eve.adaptive.calendar"
+    static let learningCategory = "eve.learning.confirmation"
 
     private let center = UNUserNotificationCenter.current()
     var onFeedback: ((String, NotificationFeedback) -> Void)?
+    var onLearningFeedback: ((String, String, [String]) -> Void)?
 
     private override init() {
         super.init()
@@ -25,15 +27,28 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func registerCategories() {
-        let actions = [
+        let adaptiveActions = [
             UNNotificationAction(identifier: "done", title: "Done", options: []),
             UNNotificationAction(identifier: "tooEarly", title: "Too Early", options: []),
             UNNotificationAction(identifier: "tooLate", title: "Too Late", options: [])
         ]
+        
+        let learningActions = [
+            UNNotificationAction(identifier: "yes", title: "Yes", options: []),
+            UNNotificationAction(identifier: "no", title: "No thanks", options: []),
+            UNNotificationAction(identifier: "customize", title: "Customize...", options: [.foreground])
+        ]
+        
         center.setNotificationCategories([
             UNNotificationCategory(
                 identifier: Self.adaptiveCategory,
-                actions: actions,
+                actions: adaptiveActions,
+                intentIdentifiers: [],
+                options: [.customDismissAction]
+            ),
+            UNNotificationCategory(
+                identifier: Self.learningCategory,
+                actions: learningActions,
                 intentIdentifiers: [],
                 options: [.customDismissAction]
             )
@@ -140,6 +155,40 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     }
 
+    func scheduleLearningConfirmation(
+        id: String = UUID().uuidString,
+        eventType: String,
+        items: [String],
+        at date: Date
+    ) async throws {
+        guard await isAllowed(mayPrompt: false) else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "\(eventType) coming up!"
+        content.body = "Should I remind you to bring your \(items.joined(separator: ", ")) later?"
+        content.sound = .default
+        content.categoryIdentifier = Self.learningCategory
+        content.userInfo = ["eventType": eventType, "items": items]
+
+        let components = Calendar.current.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second],
+            from: date
+        )
+
+        let trigger = UNCalendarNotificationTrigger(
+            dateMatching: components,
+            repeats: false
+        )
+
+        try await center.add(
+            UNNotificationRequest(
+                identifier: "eve.learning.\(id)",
+                content: content,
+                trigger: trigger
+            )
+        )
+    }
+
     func cancelReminder(id: String) {
         center.removePendingNotificationRequests(withIdentifiers: [id])
     }
@@ -219,18 +268,27 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
-        guard response.notification.request.content.categoryIdentifier == Self.adaptiveCategory,
-              let occurrenceID = response.notification.request.content.userInfo["occurrenceID"] as? String
-        else { return }
-        let feedback: NotificationFeedback?
-        switch response.actionIdentifier {
-        case "done": feedback = .done
-        case "tooEarly": feedback = .tooEarly
-        case "tooLate": feedback = .tooLate
-        default: feedback = nil
+        let category = response.notification.request.content.categoryIdentifier
+        
+        if category == Self.adaptiveCategory {
+            guard let occurrenceID = response.notification.request.content.userInfo["occurrenceID"] as? String else { return }
+            let feedback: NotificationFeedback?
+            switch response.actionIdentifier {
+            case "done": feedback = .done
+            case "tooEarly": feedback = .tooEarly
+            case "tooLate": feedback = .tooLate
+            default: feedback = nil
+            }
+            guard let feedback else { return }
+            await MainActor.run { self.onFeedback?(occurrenceID, feedback) }
+            
+        } else if category == Self.learningCategory {
+            guard let eventType = response.notification.request.content.userInfo["eventType"] as? String,
+                  let items = response.notification.request.content.userInfo["items"] as? [String] else { return }
+            
+            let action = response.actionIdentifier
+            await MainActor.run { self.onLearningFeedback?(action, eventType, items) }
         }
-        guard let feedback else { return }
-        await MainActor.run { self.onFeedback?(occurrenceID, feedback) }
     }
 
     // MARK: - TEMPORARY: Notification preview demo

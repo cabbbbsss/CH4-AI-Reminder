@@ -35,6 +35,12 @@ struct HomeView: View {
     /// Keeps notifications in step with edits and grows repeating series.
     @State private var scheduler: ReminderScheduler?
 
+    /// Continuously evaluates upcoming events for proactive learning.
+    @State private var learningScheduler: LearningScheduler?
+
+    @State private var isCustomizingContext = false
+    @State private var customizeEventType: String = ""
+
     /// Which row's title is being edited, by reminder id.
     ///
     /// Held here rather than inside `RoutineRow` because dismissing the
@@ -123,6 +129,9 @@ struct HomeView: View {
             let scheduler = ReminderScheduler(context: modelContext)
             self.scheduler = scheduler
 
+            let lScheduler = LearningScheduler(context: modelContext)
+            self.learningScheduler = lScheduler
+
             // These two don't depend on each other — one builds the day's
             // routine from the calendar, the other asks the model what matters
             // right now. Both can take seconds on device, and in sequence the
@@ -133,7 +142,8 @@ struct HomeView: View {
             async let read: Void = vm.assistant.generateInitialInsights(
                 currentPlace: vm.location.currentPlace
             )
-            _ = await (generated, read)
+            async let evaluated: Void = lScheduler.evaluateUpcomingEvents()
+            _ = await (generated, read, evaluated)
 
             // Rebuild the pending notifications from the store — without this a
             // reinstall or a reboot leaves every existing reminder silent.
@@ -169,6 +179,15 @@ struct HomeView: View {
         }
         .sheet(item: $editingReminder) { reminder in
             ReminderDetailsView(reminder: reminder)
+        }
+        .sheet(isPresented: $isCustomizingContext) {
+            ContextualCustomizeView(eventType: customizeEventType)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenContextualCustomize"))) { notification in
+            if let eventType = notification.userInfo?["eventType"] as? String {
+                customizeEventType = eventType
+                isCustomizingContext = true
+            }
         }
         // --- Automatic re-reads -------------------------------------------
         // The bubble is no longer tappable, so it has to keep itself current.
