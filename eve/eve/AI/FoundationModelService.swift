@@ -195,7 +195,8 @@ final class FoundationModelService: ReasoningEngine {
     - Body MUST be exactly ONE sentence, max 18 words.
     - Start immediately with the action. NEVER use "You've mentioned...", "Since...", or explain reasoning.
     - NEVER restate a belief back as though it were new.
-    - If an event location or room number is provided in the context, you MUST include it in the body.
+    - Include the event location in the body ONLY if an explicit 'Event location' is provided. Do NOT extract or guess locations from the event description.
+    - NEVER invent or hallucinate locations, room numbers, or preparation items that are not explicitly stated.
     - If multiple relevant insights or pending reminders exist for an event, you MUST combine them into a single sentence.
     - Ask a follow-up question ONLY to meaningfully improve understanding.
     - Address user by name occasionally, only if known.

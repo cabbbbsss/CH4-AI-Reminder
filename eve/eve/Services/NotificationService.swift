@@ -159,9 +159,10 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         id: String = UUID().uuidString,
         eventType: String,
         items: [String],
-        at date: Date
+        at date: Date,
+        mayPrompt: Bool = true
     ) async throws {
-        guard await isAllowed(mayPrompt: false) else { return }
+        guard await isAllowed(mayPrompt: mayPrompt) else { return }
 
         let content = UNMutableNotificationContent()
         content.title = "\(eventType) coming up!"
