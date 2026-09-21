@@ -37,6 +37,13 @@ final class EventKitSyncManager {
 
     /// The adaptive notification coordinator attaches here so an EventKit
     /// change updates pending alerts after the SwiftData mirror is saved.
+    ///
+    /// Deliberately not observable: it is wiring, assigned once, and no view
+    /// reads it. Observing it also breaks the build — with approachable
+    /// concurrency on, the written `() async -> Void` infers as
+    /// `nonisolated(nonsending)` while the macro's backing store keeps the
+    /// type as spelled, and the generated setter can't reconcile the two.
+    @ObservationIgnored
     var onSyncCompleted: (() async -> Void)?
 
     init(context: ModelContext) {
