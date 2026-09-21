@@ -26,6 +26,11 @@ final class LocationReminderNotificationCoordinator {
             await PermissionManager.shared.notificationAuthorizationStatus()
         ) else { return }
         await schedule(reminder, at: location)
+
+        // Registering the geofence is not enough: the OS only wakes EVE for a
+        // region entry under Always, so ask for the upgrade once the reminder
+        // that needs it exists.
+        await PermissionManager.shared.ensureAlwaysLocationForPlaceReminders()
     }
 
     func reconcile(context: ModelContext) async {

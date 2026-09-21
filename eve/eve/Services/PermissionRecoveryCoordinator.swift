@@ -10,13 +10,29 @@ final class PermissionRecoveryCoordinator {
 
     enum Recovery: Identifiable {
         case notifications
+        case backgroundLocation
 
-        var id: String { "notifications" }
+        var id: String {
+            switch self {
+            case .notifications: "notifications"
+            case .backgroundLocation: "backgroundLocation"
+            }
+        }
 
-        var title: String { "Notifications are off" }
+        var title: String {
+            switch self {
+            case .notifications: "Notifications are off"
+            case .backgroundLocation: "Location is set to While Using"
+            }
+        }
 
         var message: String {
-            "Your reminder was saved, but EVE cannot notify you until notifications are enabled in Settings."
+            switch self {
+            case .notifications:
+                "Your reminder was saved, but EVE cannot notify you until notifications are enabled in Settings."
+            case .backgroundLocation:
+                "Your place reminder was saved, but EVE can only alert you on arrival while it is open. Set Location to Always in Settings to be reminded when EVE is closed."
+            }
         }
     }
 
@@ -24,6 +40,11 @@ final class PermissionRecoveryCoordinator {
 
     func presentNotificationsRecovery() {
         activeRecovery = .notifications
+    }
+
+    /// iOS asks for Always at most once; after that Settings is the only route.
+    func presentBackgroundLocationRecovery() {
+        activeRecovery = .backgroundLocation
     }
 
     /// A saved manual reminder is never conditional on permission. This only
