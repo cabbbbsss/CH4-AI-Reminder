@@ -75,6 +75,7 @@ struct AddLocationSheet: View {
 
     @State private var searchText = ""
     @FocusState private var searchFocused: Bool
+    @FocusState private var nameFocused: Bool
 
     /// The name the place will be saved under — always visible at the top so
     /// the user names the place themselves. Picking a search result only
@@ -131,44 +132,51 @@ struct AddLocationSheet: View {
                         .buttonStyle(.plain)
                     }
                     
-                    List {
-                        Button {
-                            Task { await useCurrentLocation() }
-                        } label: {
-                            row(
-                                icon: "location.fill",
-                                iconColor: Color(.textQuarternary),
-                                title: "Current Location",
-                                subtitle: "Use where you are now",
-                                selected: false
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        
-                        ForEach(Array(completer.results.enumerated()), id: \.offset) { _, completion in
-                            Button {
-                                select(completion)
-                            } label: {
-                                row(
-                                    icon: "mappin.circle.fill",
-                                    iconColor: Color.red,
-                                    title: completion.title,
-                                    subtitle: completion.subtitle,
-                                    selected: completion.title == selectedTitle
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .listStyle(.plain)
-                    
-                    if let coordinate = selectedCoordinate {
+                    // Either the results or the map, never both stacked: with
+                    // a fixed-height map under a list, the keyboard left less
+                    // room than the two needed and the whole column slid up
+                    // under the navigation bar, name field first. The map
+                    // takes whatever height is left and lets the keyboard
+                    // cover it, so the fields above stay put while typing.
+                    if let coordinate = selectedCoordinate, !searchFocused {
                         Map(position: $cameraPosition) {
                             Marker(placeName.isEmpty ? (selectedName ?? "Selected place") : placeName, coordinate: coordinate)
                                 .tint(Color.red)
                         }
-                        .frame(height: 535)
+                        .frame(maxHeight: .infinity)
+                        .ignoresSafeArea(.keyboard, edges: .bottom)
                         .transition(.move(edge: .bottom))
+                    } else {
+                        List {
+                            Button {
+                                Task { await useCurrentLocation() }
+                            } label: {
+                                row(
+                                    icon: "location.fill",
+                                    iconColor: Color(.textQuarternary),
+                                    title: "Current Location",
+                                    subtitle: "Use where you are now",
+                                    selected: false
+                                )
+                            }
+                            .buttonStyle(.plain)
+
+                            ForEach(Array(completer.results.enumerated()), id: \.offset) { _, completion in
+                                Button {
+                                    select(completion)
+                                } label: {
+                                    row(
+                                        icon: "mappin.circle.fill",
+                                        iconColor: Color.red,
+                                        title: completion.title,
+                                        subtitle: completion.subtitle,
+                                        selected: completion.title == selectedTitle
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .listStyle(.plain)
                     }
                 }
                 .navigationTitle("Location")
@@ -190,7 +198,11 @@ struct AddLocationSheet: View {
                         .disabled(!canSave)
                     }
                 }
-                .onAppear { searchFocused = true }
+                .onAppear {
+                    // Adding starts with a search; editing starts with the
+                    // name, which is usually what the pencil was tapped for.
+                    if editingLocation == nil { searchFocused = true } else { nameFocused = true }
+                }
             }
         }
         .onAppear {
@@ -229,6 +241,7 @@ struct AddLocationSheet: View {
             Image(systemName: "tag.fill")
                 .foregroundColor(Color(.textQuarternary))
             TextField("Place name", text: $placeName)
+                .focused($nameFocused)
                 .autocorrectionDisabled()
         }
         .padding(.horizontal, 14)
