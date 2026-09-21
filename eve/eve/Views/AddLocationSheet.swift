@@ -399,12 +399,20 @@ struct AddLocationSheet: View {
 
         guard let location = try? await locationService.currentLocation() else { return }
 
-        let name = await locationService.placeName(for: location) ?? "Current Location"
+        // One reverse geocode for both halves. `placeName` alone folds the
+        // address into the name when the spot has no name of its own, which
+        // left nothing to store as the address — so a place added from here
+        // showed up on the Location tab with no address under it.
+        let details = await locationService.placeDetails(for: location)
 
         selectedTitle = nil
         selectedCategory = nil
         searchFocused = false
-        apply(name: name, address: nil, coordinate: location.coordinate)
+        apply(
+            name: details.name ?? details.address ?? "Current Location",
+            address: details.address,
+            coordinate: location.coordinate
+        )
     }
 
     private func apply(name: String, address: String?, coordinate: CLLocationCoordinate2D) {
