@@ -5,6 +5,7 @@ import UserNotifications
 /// Evaluates upcoming calendar events and deduces proactive contextual learning items
 /// (e.g. deduce "gloves" for a "Gym" event).
 /// If deductions are found, it schedules a confirmation notification roughly 1 hour before.
+@MainActor
 final class LearningScheduler {
     
     private let context: ModelContext
@@ -86,27 +87,23 @@ final class LearningScheduler {
     private func bindNotificationFeedback() {
         notifications.onLearningFeedback = { [weak self] action, eventType, items in
             guard let self else { return }
-            Task {
+            Task { @MainActor in
                 if action == "yes" {
                     await self.handleYes(eventType: eventType, items: items)
                 } else if action == "no" {
                     await self.handleNo(eventType: eventType)
                 } else if action == "customize" {
-                    await MainActor.run {
-                        NotificationCenter.default.post(
-                            name: NSNotification.Name("OpenContextualCustomize"),
-                            object: nil,
-                            userInfo: ["eventType": eventType, "items": items]
-                        )
-                    }
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("OpenContextualCustomize"),
+                        object: nil,
+                        userInfo: ["eventType": eventType, "items": items]
+                    )
                 } else if action == UNNotificationDefaultActionIdentifier {
-                    await MainActor.run {
-                        NotificationCenter.default.post(
-                            name: NSNotification.Name("OpenContextualAlert"),
-                            object: nil,
-                            userInfo: ["eventType": eventType, "items": items]
-                        )
-                    }
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("OpenContextualAlert"),
+                        object: nil,
+                        userInfo: ["eventType": eventType, "items": items]
+                    )
                 }
             }
         }

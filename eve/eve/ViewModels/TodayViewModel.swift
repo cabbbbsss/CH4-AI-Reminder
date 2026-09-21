@@ -11,6 +11,7 @@ import SwiftData
 /// Composition root for the Today screen: owns the managers,
 /// starts them in the right order, and exposes their state to the view.
 /// The view renders; this decides.
+@MainActor
 @Observable
 final class TodayViewModel {
 

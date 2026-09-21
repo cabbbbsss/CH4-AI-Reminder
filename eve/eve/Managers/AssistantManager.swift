@@ -11,6 +11,7 @@ import SwiftData
 /// Orchestrates one full assistant cycle:
 /// build ReminderContext → ask the Foundation Model → apply the decision
 /// (notification, insight changes).
+@MainActor
 @Observable
 final class AssistantManager {
 
