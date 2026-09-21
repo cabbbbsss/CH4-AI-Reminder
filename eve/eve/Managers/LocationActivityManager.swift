@@ -43,9 +43,9 @@ final class LocationActivityManager {
 
     init(
         context: ModelContext,
-        locationService: LocationService = LocationService()
+        locationService: LocationService? = nil
     ) {
-        self.locationService = locationService
+        self.locationService = locationService ?? LocationService()
         self.historyLogger = HistoryLogger(context: context)
         self.scheduler = ReminderScheduler(context: context)
     }

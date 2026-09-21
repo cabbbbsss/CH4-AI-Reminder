@@ -15,7 +15,6 @@ final class LearningScheduler {
     init(context: ModelContext) {
         self.context = context
         self.contextBuilder = ReminderContextBuilder(context: context)
-        bindNotificationFeedback()
     }
     
     /// Evaluates events that are approaching to deduce any learning items.
@@ -23,10 +22,10 @@ final class LearningScheduler {
         let events = (try? context.fetch(FetchDescriptor<CalendarEvent>())) ?? []
         let now = Date.now
         
-        // Find events starting in exactly 1-4 hours
+        // Find events starting within the next 1.5 hours
         let upcoming = events.filter {
             let hoursUntil = $0.startDate.timeIntervalSince(now) / 3600
-            return hoursUntil > 0.5 && hoursUntil < 4.0
+            return hoursUntil > 0.0 && hoursUntil <= 1.5
         }
         
         // Find existing preferences to avoid spamming the user repeatedly for the same event type.
@@ -84,7 +83,7 @@ final class LearningScheduler {
         }
     }
     
-    private func bindNotificationFeedback() {
+    func bindNotificationFeedback() {
         notifications.onLearningFeedback = { [weak self] action, eventType, items in
             guard let self else { return }
             Task { @MainActor in
@@ -138,25 +137,35 @@ final class LearningScheduler {
         let events = (try? context.fetch(descriptor)) ?? []
         
         let now = Date.now
-        guard let nextEvent = events.first(where: { $0.startDate > now }) else {
-            // Fallback if no upcoming events exist
+        
+        var targetEvent: CalendarEvent?
+        var targetPrompt: ReminderContextBuilder.PreparationPrompt?
+        
+        for event in events where event.startDate > now {
+            if let prompt = contextBuilder.buildPreparationContext(
+                eventTitle: event.title,
+                eventDate: event.startDate,
+                eventNotes: event.notes,
+                eventLocation: event.location,
+                eventAttendees: event.attendees,
+                eventMeetingURL: event.meetingURL
+            ) {
+                targetEvent = event
+                targetPrompt = prompt
+                break
+            }
+        }
+        
+        guard let nextEvent = targetEvent, let prompt = targetPrompt else {
+            // Fallback if no upcoming preparable events exist
             try? await notifications.scheduleLearningConfirmation(
                 id: UUID().uuidString,
                 eventType: "Demo Event",
-                items: ["demo item 1", "demo item 2"],
+                items: ["water bottle", "gym towel"],
                 at: .now.addingTimeInterval(5)
             )
             return
         }
-        
-        guard let prompt = contextBuilder.buildPreparationContext(
-            eventTitle: nextEvent.title,
-            eventDate: nextEvent.startDate,
-            eventNotes: nextEvent.notes,
-            eventLocation: nextEvent.location,
-            eventAttendees: nextEvent.attendees,
-            eventMeetingURL: nextEvent.meetingURL
-        ) else { return }
         
         let service = FoundationModelService()
         do {

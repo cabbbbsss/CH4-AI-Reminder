@@ -103,7 +103,7 @@ struct SettingsView: View {
                 SettingsSection(header: "Notification Diagnostics") {
                     SettingsCard {
                         Button {
-                            Task { try? await notificationService.scheduleTestNotification() }
+                            Task { @MainActor in try? await notificationService.scheduleTestNotification() }
                         } label: {
                             SettingsRow(icon: "bell.badge.fill", label: "Send test notification (5s)", showChevron: false)
                         }
@@ -112,7 +112,7 @@ struct SettingsView: View {
                         SettingsDivider()
 
                         Button {
-                            Task { 
+                            Task { @MainActor in
                                 let scheduler = LearningScheduler(context: modelContext)
                                 await scheduler.testEvaluateNextEvent() 
                             }

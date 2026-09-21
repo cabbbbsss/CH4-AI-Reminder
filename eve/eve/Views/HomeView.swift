@@ -134,6 +134,7 @@ struct HomeView: View {
             self.scheduler = scheduler
 
             let lScheduler = LearningScheduler(context: modelContext)
+            lScheduler.bindNotificationFeedback()
             self.learningScheduler = lScheduler
 
             // These two don't depend on each other — one builds the day's
@@ -142,13 +143,19 @@ struct HomeView: View {
             // user waits for their sum, so they run together.
             //
             // The second is silent: opening Home never fires a notification.
-            async let generated: Void = manager.ensureReminders(for: .now)
-            async let read: Void = vm.assistant.generateInitialInsights(
-                currentPlace: vm.location.currentPlace
-            )
-            async let evaluated: Void = lScheduler.evaluateUpcomingEvents()
-            _ = await (generated, read, evaluated)
-
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { @MainActor in
+                    await manager.ensureReminders(for: .now)
+                }
+                group.addTask { @MainActor in
+                    await vm.assistant.generateInitialInsights(
+                        currentPlace: vm.location.currentPlace
+                    )
+                }
+                group.addTask { @MainActor in
+                    await lScheduler.evaluateUpcomingEvents()
+                }
+            }
             // Rebuild the pending notifications from the store — without this a
             // reinstall or a reboot leaves every existing reminder silent.
             //
@@ -203,10 +210,16 @@ struct HomeView: View {
         }
         .alert("\(learningAlertEventType) coming up!", isPresented: $showLearningAlert) {
             Button("Yes") {
-                NotificationService.shared.onLearningFeedback?("yes", learningAlertEventType, learningAlertItems)
+                Task { @MainActor in
+                    NotificationService.shared.onLearningFeedback?("yes", learningAlertEventType, learningAlertItems)
+                    showLearningAlert = false
+                }
             }
             Button("No thanks", role: .cancel) {
-                NotificationService.shared.onLearningFeedback?("no", learningAlertEventType, learningAlertItems)
+                Task { @MainActor in
+                    NotificationService.shared.onLearningFeedback?("no", learningAlertEventType, learningAlertItems)
+                    showLearningAlert = false
+                }
             }
             Button("Customize...") {
                 customizeEventType = learningAlertEventType
