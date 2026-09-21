@@ -112,7 +112,10 @@ struct SettingsView: View {
                         SettingsDivider()
 
                         Button {
-                            Task { try? await notificationService.scheduleTestLearningNotification() }
+                            Task { 
+                                let scheduler = LearningScheduler(context: modelContext)
+                                await scheduler.testEvaluateNextEvent() 
+                            }
                         } label: {
                             SettingsRow(icon: "brain.head.profile", label: "Send learning notification (5s)", showChevron: false)
                         }

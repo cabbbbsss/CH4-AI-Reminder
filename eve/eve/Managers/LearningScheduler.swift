@@ -133,4 +133,47 @@ final class LearningScheduler {
             try? context.save()
         }
     }
+    
+    /// Bypasses the time-window and preference checks to run an immediate AI deduction on the
+    /// very next upcoming event, strictly for testing UI and deep links from Settings.
+    func testEvaluateNextEvent() async {
+        let descriptor = FetchDescriptor<CalendarEvent>(sortBy: [SortDescriptor(\.startDate)])
+        let events = (try? context.fetch(descriptor)) ?? []
+        
+        let now = Date.now
+        guard let nextEvent = events.first(where: { $0.startDate > now }) else {
+            // Fallback if no upcoming events exist
+            try? await notifications.scheduleLearningConfirmation(
+                id: UUID().uuidString,
+                eventType: "Demo Event",
+                items: ["demo item 1", "demo item 2"],
+                at: .now.addingTimeInterval(5)
+            )
+            return
+        }
+        
+        guard let prompt = contextBuilder.buildPreparationContext(
+            eventTitle: nextEvent.title,
+            eventDate: nextEvent.startDate,
+            eventNotes: nextEvent.notes,
+            eventLocation: nextEvent.location,
+            eventAttendees: nextEvent.attendees,
+            eventMeetingURL: nextEvent.meetingURL
+        ) else { return }
+        
+        let service = FoundationModelService()
+        do {
+            let items = try await service.deduceContextualItems(forPromptText: prompt.promptText)
+            let testItems = items.isEmpty ? ["test item 1", "test item 2"] : items
+            
+            try? await notifications.scheduleLearningConfirmation(
+                id: nextEvent.occurrenceID,
+                eventType: nextEvent.title,
+                items: testItems,
+                at: .now.addingTimeInterval(5)
+            )
+        } catch {
+            print("Test deduce failed: \(error)")
+        }
+    }
 }

@@ -207,21 +207,6 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         ))
     }
 
-    func scheduleTestLearningNotification() async throws {
-        let content = UNMutableNotificationContent()
-        content.title = "Gym coming up!"
-        content.body = "Should I remind you to bring your whey, towel later?"
-        content.sound = .default
-        content.categoryIdentifier = Self.learningCategory
-        content.userInfo = ["eventType": "Gym", "items": ["whey", "towel"]]
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
-        try await center.add(UNNotificationRequest(
-            identifier: "eve.learning.test",
-            content: content,
-            trigger: trigger
-        ))
-    }
-
     func scheduleLocationReminder(
         id: String,
         title: String,
