@@ -9,25 +9,6 @@ struct HistoryView: View {
     // Which rows are expanded. Items with detail start expanded (see isExpanded).
     @State private var collapsedIDs: Set<PersistentIdentifier> = []
 
-    @State private var isSearching = false
-    @State private var searchText = ""
-    @FocusState private var searchFocused: Bool
-
-    /// The timeline as it's actually drawn.
-    ///
-    /// Every index-based helper below reads from this rather than `items` —
-    /// day headers and repeated-time suppression are computed by comparing a
-    /// row with the one above it, so filtering the source without filtering
-    /// what they look at would put headers on the wrong rows.
-    private var visibleItems: [HistoryItem] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return items }
-        return items.filter {
-            $0.title.localizedCaseInsensitiveContains(query)
-                || $0.detail.localizedCaseInsensitiveContains(query)
-        }
-    }
-
     var body: some View {
         ZStack {
             LinearGradient(
@@ -66,23 +47,17 @@ struct HistoryView: View {
                 .padding(.top, 24)
                 .padding(.bottom, 48)
 
-                if isSearching {
-                    searchField
-                }
-
                 // Timeline
-                if visibleItems.isEmpty {
+                if items.isEmpty {
                     Spacer()
                     VStack(spacing: 8) {
-                        Image(systemName: items.isEmpty ? "clock" : "magnifyingglass")
+                        Image(systemName: "clock")
                             .font(.system(size: 40))
                             .foregroundColor(Color(.textPrimary).opacity(0.4))
-                        Text(items.isEmpty ? "Nothing yet" : "No matches")
+                        Text("Nothing yet")
                             .font(.system(size: 17, weight: .bold))
                             .foregroundColor(Color(.textPrimary))
-                        Text(items.isEmpty
-                             ? "Every sync, question, visit and insight will appear here as a timeline."
-                             : "Nothing in your history mentions “\(searchText)”.")
+                        Text("Every sync, question, visit and insight will appear here as a timeline.")
                             .font(.system(size: 13))
                             .foregroundColor(Color(.textPrimary).opacity(0.6))
                             .multilineTextAlignment(.center)
@@ -92,7 +67,7 @@ struct HistoryView: View {
                 } else {
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 0) {
-                            ForEach(Array(visibleItems.enumerated()), id: \.element.persistentModelID) { index, item in
+                            ForEach(Array(items.enumerated()), id: \.element.persistentModelID) { index, item in
                                 HistoryTimelineRow(
                                     dateLabel: dateLabel(at: index),
                                     timeLabel: timeLabel(at: index),
@@ -111,68 +86,17 @@ struct HistoryView: View {
         }
         .navigationTitle("History")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isSearching.toggle()
-                    }
-                    // Closing also clears, so a hidden filter can never leave
-                    // the timeline looking mysteriously short.
-                    if isSearching {
-                        searchFocused = true
-                    } else {
-                        searchText = ""
-                    }
-                } label: {
-                    Image(systemName: isSearching ? "xmark" : "magnifyingglass")
-                }
-                .accessibilityLabel(isSearching ? "Close search" : "Search history")
-            }
-        }
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(Color(.textPrimary).opacity(0.5))
-
-            TextField("Search history", text: $searchText)
-                .font(.system(size: 15))
-                .foregroundColor(Color(.textPrimary))
-                .focused($searchFocused)
-                .autocorrectionDisabled()
-                .submitLabel(.search)
-
-            if !searchText.isEmpty {
-                Button {
-                    searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(Color(.textPrimary).opacity(0.5))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
-            }
-        }
-        .padding(.horizontal, 14)
-        .frame(height: 40)
-        .background(Color(.bgTertiary))
-        .cornerRadius(12)
-        .padding(.horizontal, 24)
-        .padding(.bottom, 24)
-        .transition(.move(edge: .top).combined(with: .opacity))
     }
 
     // MARK: - Mapping HistoryItem → designed row
 
     /// Shows a day header only on the first item of each calendar day.
     private func dateLabel(at index: Int) -> String? {
-        let item = visibleItems[index]
+        let item = items[index]
         let day = Calendar.current.startOfDay(for: item.timestamp)
 
         if index > 0 {
-            let previousDay = Calendar.current.startOfDay(for: visibleItems[index - 1].timestamp)
+            let previousDay = Calendar.current.startOfDay(for: items[index - 1].timestamp)
             if day == previousDay { return nil }
         }
 
@@ -184,11 +108,11 @@ struct HistoryView: View {
     /// "8:00 AM" rendered as two lines, matching the design. Hidden when it
     /// would repeat the previous row's label (same day, same minute).
     private func timeLabel(at index: Int) -> String? {
-        let item = visibleItems[index]
+        let item = items[index]
         let label = formattedTime(item.timestamp)
 
         if index > 0 {
-            let previous = visibleItems[index - 1]
+            let previous = items[index - 1]
             if Calendar.current.isDate(previous.timestamp, inSameDayAs: item.timestamp),
                formattedTime(previous.timestamp) == label {
                 return nil
