@@ -53,8 +53,10 @@ struct LocationView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        // Editing is the add picker with the place filled in, so renaming and
+        // moving a pin look and work the same way as making one.
         .sheet(item: $editingLocation) { location in
-            LocationEditSheet(location: location)
+            AddLocationSheet(editingLocation: location)
         }
         .sheet(isPresented: $addingLocation) {
             AddLocationSheet(nextSortOrder: savedLocations.count)

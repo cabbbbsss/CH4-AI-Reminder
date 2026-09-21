@@ -187,7 +187,7 @@ struct AddLocationSheet: View {
                         } label: {
                             Image(systemName: "checkmark")
                         }
-                        .disabled(selectedCoordinate == nil || placeName.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(!canSave)
                     }
                 }
                 .onAppear { searchFocused = true }
@@ -212,6 +212,14 @@ struct AddLocationSheet: View {
             let status = await permissionManager.requestLocationIfUndetermined()
             locationAccessDenied = status == .denied || status == .restricted
         }
+    }
+
+    /// Adding needs a pin — a place with no coordinates can't trigger
+    /// anything. Editing only needs a name: seeded places like Home start
+    /// without a pin, and renaming one shouldn't demand a map pick first.
+    private var canSave: Bool {
+        let hasName = !placeName.trimmingCharacters(in: .whitespaces).isEmpty
+        return hasName && (selectedCoordinate != nil || editingLocation != nil)
     }
 
     // MARK: - Subviews
@@ -387,7 +395,7 @@ struct AddLocationSheet: View {
 
     private func save() {
 
-        guard let coordinate = selectedCoordinate else { return }
+        guard canSave else { return }
 
         let name = placeName.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -400,11 +408,14 @@ struct AddLocationSheet: View {
         if let editingLocation {
             editingLocation.name = name.isEmpty ? (selectedName ?? searchText) : name
             editingLocation.address = selectedAddress
-            editingLocation.latitude = coordinate.latitude
-            editingLocation.longitude = coordinate.longitude
+            // A place edited without picking a new pin keeps the one it had.
+            if let coordinate = selectedCoordinate {
+                editingLocation.latitude = coordinate.latitude
+                editingLocation.longitude = coordinate.longitude
+            }
             if let categoryIcon { editingLocation.iconName = categoryIcon }
             location = editingLocation
-        } else {
+        } else if let coordinate = selectedCoordinate {
             location = SavedLocation(
                 name: name.isEmpty ? (selectedName ?? searchText) : name,
                 address: selectedAddress,
@@ -414,6 +425,8 @@ struct AddLocationSheet: View {
                 sortOrder: nextSortOrder
             )
             modelContext.insert(location)
+        } else {
+            return
         }
         try? modelContext.save()
 
