@@ -674,32 +674,12 @@ private struct LocationReminderRow: View {
                         .foregroundStyle(Color.eveOnSurfaceFaint)
                         .lineLimit(1)
                 }
-
-                TriggerTag(trigger: entry.trigger)
             }
 
             Spacer(minLength: 0)
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
-    }
-}
-
-/// Says which half of the visit a reminder belongs to. Small and quiet — it
-/// labels the row rather than competing with its text.
-private struct TriggerTag: View {
-    var trigger: LocationTrigger
-
-    var body: some View {
-        HStack(spacing: Theme.Spacing.xxs) {
-            Image(systemName: trigger.symbol)
-            Text(trigger.title)
-        }
-        .font(.eveOverline)
-        .foregroundStyle(Color.accentColor)
-        .padding(.horizontal, Theme.Spacing.xs)
-        .padding(.vertical, 3)
-        .background(Capsule().fill(Color.accentColor.opacity(0.12)))
     }
 }
 
