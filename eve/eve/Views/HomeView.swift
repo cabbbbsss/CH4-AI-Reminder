@@ -194,13 +194,13 @@ struct HomeView: View {
         .sheet(isPresented: $isCustomizingContext) {
             ContextualCustomizeView(eventType: customizeEventType)
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenContextualCustomize"))) { notification in
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenContextualCustomize")).receive(on: RunLoop.main)) { notification in
             if let eventType = notification.userInfo?["eventType"] as? String {
                 customizeEventType = eventType
                 isCustomizingContext = true
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenContextualAlert"))) { notification in
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenContextualAlert")).receive(on: RunLoop.main)) { notification in
             if let eventType = notification.userInfo?["eventType"] as? String,
                let items = notification.userInfo?["items"] as? [String] {
                 learningAlertEventType = eventType

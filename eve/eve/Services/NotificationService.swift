@@ -260,35 +260,48 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// in the foreground — fatal for a reminder app.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification
-    ) async -> UNNotificationPresentationOptions {
-        [.banner, .sound]
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
     }
 
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse
-    ) async {
-        let category = response.notification.request.content.categoryIdentifier
-        
-        if await category == Self.adaptiveCategory {
-            guard let occurrenceID = response.notification.request.content.userInfo["occurrenceID"] as? String else { return }
-            let feedback: NotificationFeedback?
-            switch response.actionIdentifier {
-            case "done": feedback = .done
-            case "tooEarly": feedback = .tooEarly
-            case "tooLate": feedback = .tooLate
-            default: feedback = nil
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        Task { @MainActor in
+            let category = response.notification.request.content.categoryIdentifier
+            
+            if category == Self.adaptiveCategory {
+                guard let occurrenceID = response.notification.request.content.userInfo["occurrenceID"] as? String else {
+                    completionHandler()
+                    return
+                }
+                let feedback: NotificationFeedback?
+                switch response.actionIdentifier {
+                case "done": feedback = .done
+                case "tooEarly": feedback = .tooEarly
+                case "tooLate": feedback = .tooLate
+                default: feedback = nil
+                }
+                if let feedback = feedback {
+                    self.onFeedback?(occurrenceID, feedback)
+                }
+                
+            } else if category == Self.learningCategory {
+                guard let eventType = response.notification.request.content.userInfo["eventType"] as? String,
+                      let items = response.notification.request.content.userInfo["items"] as? [String] else {
+                    completionHandler()
+                    return
+                }
+                
+                let action = response.actionIdentifier
+                self.onLearningFeedback?(action, eventType, items)
             }
-            guard let feedback else { return }
-            await MainActor.run { self.onFeedback?(occurrenceID, feedback) }
             
-        } else if await category == Self.learningCategory {
-            guard let eventType = response.notification.request.content.userInfo["eventType"] as? String,
-                  let items = response.notification.request.content.userInfo["items"] as? [String] else { return }
-            
-            let action = response.actionIdentifier
-            await MainActor.run { self.onLearningFeedback?(action, eventType, items) }
+            completionHandler()
         }
     }
 
