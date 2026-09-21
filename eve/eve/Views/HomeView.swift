@@ -27,7 +27,15 @@ struct HomeView: View {
     /// from it instead of local storage.
     @AppStorage("isPlusUser") private var isPlusUser = false
 
-    @State private var isAddingItem = false
+    /// A reminder being started from an add row's ⓘ: the title typed so
+    /// far and the moment the row stands for, handed to the Details sheet.
+    @State private var newReminderDraft: NewReminderDraft?
+
+    private struct NewReminderDraft: Identifiable {
+        let id = UUID()
+        var title: String
+        var date: Date
+    }
 
     /// The reminder whose Details sheet is open.
     @State private var editingReminder: CalendarReminder?
@@ -42,6 +50,14 @@ struct HomeView: View {
     /// to reach a `@FocusState` that lives inside whichever row happens to
     /// own it. Keyed by id so `.focused(_:equals:)` still routes to one row.
     @FocusState private var focusedReminderID: UUID?
+
+    /// Focus keys for the add rows, one per part of the day plus one for the
+    /// empty list. Static so they survive re-renders — a fresh id each time
+    /// would drop focus mid-word.
+    private static let addRowIDs: [DayPart: UUID] = Dictionary(
+        uniqueKeysWithValues: DayPart.allCases.map { ($0, UUID()) }
+    )
+    private static let emptyAddRowID = UUID()
 
     /// The reminders due today, in the order they'll come up.
     ///
@@ -164,8 +180,8 @@ struct HomeView: View {
         // gaps between them.
         .contentShape(Rectangle())
         .onTapGesture { focusedReminderID = nil }
-        .sheet(isPresented: $isAddingItem) {
-            ReminderDetailsView(defaultDate: .now)
+        .sheet(item: $newReminderDraft) { draft in
+            ReminderDetailsView(defaultDate: draft.date, defaultTitle: draft.title)
         }
         .sheet(item: $editingReminder) { reminder in
             ReminderDetailsView(reminder: reminder)
@@ -311,7 +327,7 @@ struct HomeView: View {
                         .foregroundStyle(Color.eveOnSurfaceMuted)
                         .padding(.top, Theme.Spacing.m)
 
-                    addRow
+                    addRow(id: Self.emptyAddRowID, in: nil)
 
                 } else {
 
@@ -360,7 +376,7 @@ struct HomeView: View {
                 )
             }
 
-            addRow
+            addRow(id: Self.addRowIDs[part]!, in: part)
 
             // Inside the section rather than between them, so the rule picks up
             // this stack's tighter spacing and sits just under the add circle —
@@ -371,47 +387,18 @@ struct HomeView: View {
         }
     }
 
-    /// The "add something here" affordance: an empty, dotted checkbox sitting
-    /// where the next reminder's own checkbox would be, labelled so it reads
-    /// as an invitation rather than an unexplained circle.
-    ///
-    /// Opens the same sheet the ⓘ button does, which writes a reminder — so
-    /// whatever is added lands straight back in this list.
-    private var addRow: some View {
-        Button {
-            isAddingItem = true
-        } label: {
-            HStack(spacing: Theme.Spacing.s) {
-                // Dotted, not dashed: a round cap with a near-zero dash length
-                // draws dots rather than the stubby ticks a plain dash gives.
-                Circle()
-                    .strokeBorder(
-                        Color.eveOnSurfaceFaint.opacity(0.7),
-                        style: StrokeStyle(
-                            lineWidth: 1.5,
-                            lineCap: .round,
-                            dash: [0.5, 3]
-                        )
-                    )
-                    .frame(width: 18, height: 18)
-                    // Lines the circle up with the checkboxes above it.
-                    .frame(width: 22, height: 22)
-
-                // Styled like a placeholder, because that is what it is — the
-                // title the next reminder would have.
-                Text("Add a reminder…")
-                    .font(.eveBody)
-                    .foregroundStyle(Color.eveOnSurfaceFaint)
-
-                Spacer(minLength: 0)
+    /// The "add something here" row: a dotted checkbox where the next
+    /// reminder's own would be, and a field to type its title into. Return
+    /// adds it to this part of the day; ⓘ takes the draft to Details.
+    private func addRow(id: UUID, in part: DayPart?) -> some View {
+        NewReminderRow(
+            focusID: id,
+            focused: $focusedReminderID,
+            onCommit: { addReminder(titled: $0, in: part) },
+            onOpenDetails: { title in
+                newReminderDraft = NewReminderDraft(title: title, date: dateForNewReminder(in: part))
             }
-            // The whole width is the target, which is both easier to hit than
-            // an 18pt circle and why the row no longer needs padding tricks to
-            // reach a usable size without growing taller than the rule below.
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Add a reminder")
+        )
     }
 
     /// Rules off one part of the day from the next. Sits below that section's
@@ -427,6 +414,25 @@ struct HomeView: View {
     }
 
     // MARK: - Actions
+
+    /// Creates a reminder from a title typed into a section's add row, timed
+    /// so it lands in that section rather than sorting off into another.
+    private func addReminder(titled title: String, in part: DayPart?) {
+        let manager = reminderManager ?? CalendarReminderManager(context: modelContext)
+        let reminder = manager.addManual(title: title, at: dateForNewReminder(in: part))
+
+        let scheduler = scheduler ?? ReminderScheduler(context: modelContext)
+        Task { await scheduler.sync(reminder) }
+    }
+
+    /// Now, if now falls in the part the row belongs to; otherwise the start
+    /// of that part — an evening row shouldn't produce a mid-morning reminder.
+    private func dateForNewReminder(in part: DayPart?) -> Date {
+        guard let part, !part.contains(.now) else { return .now }
+        return Calendar.current.date(
+            bySettingHour: part.startHour, minute: 0, second: 0, of: .now
+        ) ?? .now
+    }
 
     /// Ticking a row off runs through the scheduler, not just the model: a
     /// completed reminder's notification has to be cancelled, and a repeating
@@ -482,6 +488,17 @@ private enum DayPart: String, CaseIterable, Identifiable {
 
     func contains(_ date: Date) -> Bool {
         hours.contains(Calendar.current.component(.hour, from: date))
+    }
+
+    /// Where a reminder added to this part lands when now isn't in it.
+    /// Morning is 9, not midnight — "morning" to a person starts after they
+    /// are up, and 0.00 would sort it above everything else in the day.
+    var startHour: Int {
+        switch self {
+        case .morning: return 9
+        case .afternoon: return hours.lowerBound
+        case .evening: return hours.lowerBound
+        }
     }
 }
 
