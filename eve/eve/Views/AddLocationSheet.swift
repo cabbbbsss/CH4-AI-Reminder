@@ -93,7 +93,9 @@ struct AddLocationSheet: View {
     /// model classifies from the names/address instead — see `save()`.
     @State private var selectedCategory: MKPointOfInterestCategory?
 
-    @State private var cameraPosition: MapCameraPosition = .automatic
+    /// Opens on the user's own position so the map means something before
+    /// a pin exists; `apply` moves it onto the pin once there is one.
+    @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var isResolving = false
     @State private var locationAccessDenied = false
 
@@ -132,52 +134,31 @@ struct AddLocationSheet: View {
                         .buttonStyle(.plain)
                     }
                     
-                    // Either the results or the map, never both stacked: with
-                    // a fixed-height map under a list, the keyboard left less
+                    // The map is there from the first frame, centred on the
+                    // user, and the results slide over it while the search
+                    // field has focus. It's never stacked under a list: with
+                    // a fixed-height map below one, the keyboard left less
                     // room than the two needed and the whole column slid up
-                    // under the navigation bar, name field first. The map
-                    // takes whatever height is left and lets the keyboard
+                    // under the navigation bar, name field first. Instead the
+                    // map takes whatever height is left and lets the keyboard
                     // cover it, so the fields above stay put while typing.
-                    if let coordinate = selectedCoordinate, !searchFocused {
+                    ZStack {
                         Map(position: $cameraPosition) {
-                            Marker(placeName.isEmpty ? (selectedName ?? "Selected place") : placeName, coordinate: coordinate)
-                                .tint(Color.red)
+                            UserAnnotation()
+                            if let coordinate = selectedCoordinate {
+                                Marker(placeName.isEmpty ? (selectedName ?? "Selected place") : placeName, coordinate: coordinate)
+                                    .tint(Color.red)
+                            }
                         }
-                        .frame(maxHeight: .infinity)
                         .ignoresSafeArea(.keyboard, edges: .bottom)
-                        .transition(.move(edge: .bottom))
-                    } else {
-                        List {
-                            Button {
-                                Task { await useCurrentLocation() }
-                            } label: {
-                                row(
-                                    icon: "location.fill",
-                                    iconColor: Color(.textQuarternary),
-                                    title: "Current Location",
-                                    subtitle: "Use where you are now",
-                                    selected: false
-                                )
-                            }
-                            .buttonStyle(.plain)
 
-                            ForEach(Array(completer.results.enumerated()), id: \.offset) { _, completion in
-                                Button {
-                                    select(completion)
-                                } label: {
-                                    row(
-                                        icon: "mappin.circle.fill",
-                                        iconColor: Color.red,
-                                        title: completion.title,
-                                        subtitle: completion.subtitle,
-                                        selected: completion.title == selectedTitle
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                            }
+                        if searchFocused {
+                            resultsList
+                                .transition(.opacity)
                         }
-                        .listStyle(.plain)
                     }
+                    .frame(maxHeight: .infinity)
+                    .animation(.easeOut(duration: 0.15), value: searchFocused)
                 }
                 .navigationTitle("Location")
                 .navigationBarTitleDisplayMode(.inline)
@@ -199,9 +180,11 @@ struct AddLocationSheet: View {
                     }
                 }
                 .onAppear {
-                    // Adding starts with a search; editing starts with the
-                    // name, which is usually what the pencil was tapped for.
-                    if editingLocation == nil { searchFocused = true } else { nameFocused = true }
+                    // Editing starts in the name, which is usually what the
+                    // pencil was tapped for. Adding starts on the map —
+                    // focusing search here would cover it with the keyboard
+                    // and an empty list before the user has seen it.
+                    if editingLocation != nil { nameFocused = true }
                 }
             }
         }
@@ -235,6 +218,43 @@ struct AddLocationSheet: View {
     }
 
     // MARK: - Subviews
+
+    /// Where you are, then whatever the search turned up. Shown over the map
+    /// only while the search field has focus, so picking a row (which drops
+    /// focus) reveals the pin underneath.
+    private var resultsList: some View {
+        List {
+            Button {
+                Task { await useCurrentLocation() }
+            } label: {
+                row(
+                    icon: "location.fill",
+                    iconColor: Color(.textQuarternary),
+                    title: "Current Location",
+                    subtitle: "Use where you are now",
+                    selected: false
+                )
+            }
+            .buttonStyle(.plain)
+
+            ForEach(Array(completer.results.enumerated()), id: \.offset) { _, completion in
+                Button {
+                    select(completion)
+                } label: {
+                    row(
+                        icon: "mappin.circle.fill",
+                        iconColor: Color.red,
+                        title: completion.title,
+                        subtitle: completion.subtitle,
+                        selected: completion.title == selectedTitle
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .listStyle(.plain)
+        .background(Color(.bgPrimary))
+    }
 
     private var nameField: some View {
         HStack(spacing: 10) {
