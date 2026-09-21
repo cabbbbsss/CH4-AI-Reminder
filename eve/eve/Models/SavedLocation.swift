@@ -8,10 +8,10 @@
 import Foundation
 import SwiftData
 
-/// A place the user has saved on the Locations screen — either a seeded
-/// default (Home/Office) or one they added themselves. Reminders shown
-/// under it (LocationReminder) are AI-routed from real calendar/reminder
-/// data plus anything the user adds manually.
+/// A place the user has saved on the Locations screen. Every one of these is
+/// added by the user — the screen starts empty and nothing is seeded for them.
+/// Reminders shown under it (LocationReminder) are AI-routed from real
+/// calendar/reminder data plus anything the user adds manually.
 @Model
 final class SavedLocation {
 

@@ -36,6 +36,12 @@ struct ReminderDetailsView: View {
 
     /// Presents the map picker, which creates a geotagged `SavedLocation`.
     @State private var isPickingOnMap = false
+
+    /// The map picker saves a place, so it sits behind the same free-account
+    /// limit the Locations screen enforces on its + button.
+    @Bindable private var subscriptions = SubscriptionService.shared
+
+    @State private var isShowingPaywall = false
     @State private var attachedOccurrenceID: String?
     @State private var repeatRule: RepeatRule = .never
     @State private var earlyReminder: EarlyReminder = .none
@@ -151,6 +157,14 @@ struct ReminderDetailsView: View {
             .sheet(isPresented: $isPickingOnMap) {
                 AddLocationSheet(nextSortOrder: places.count)
             }
+            .evePaywall(isPresented: $isShowingPaywall) {
+                // Resume the picker the lock interrupted, a frame after the
+                // paywall has finished dismissing.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(450))
+                    isPickingOnMap = true
+                }
+            }
             // The picker saves its own `SavedLocation` and dismisses, so the
             // new place arrives here as a change to the query rather than as a
             // return value. Selecting the newest one is what the user meant by
@@ -264,9 +278,18 @@ struct ReminderDetailsView: View {
             // and saves it — so the list above is somewhere to pick from
             // rather than the only way in.
             Button {
-                isPickingOnMap = true
+                if subscriptions.canAddLocation(currentCount: places.count) {
+                    isPickingOnMap = true
+                } else {
+                    isShowingPaywall = true
+                }
             } label: {
-                Label("Choose on Map", systemImage: "mappin.and.ellipse")
+                Label(
+                    "Choose on Map",
+                    systemImage: subscriptions.canAddLocation(currentCount: places.count)
+                        ? "mappin.and.ellipse"
+                        : "lock.fill"
+                )
             }
 
             if let place = selectedPlace {

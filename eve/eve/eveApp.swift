@@ -8,6 +8,9 @@ struct eveApp: App {
     // honors them before the user ever opens the Notification settings screen.
     NotificationPreferences.registerDefaults()
     _ = NotificationService.shared
+    // RevenueCat must be configured before anything touches `Purchases.shared`,
+    // including RevenueCatUI when a paywall is presented.
+    SubscriptionService.configure()
   }
 
   var sharedModelContainer: ModelContainer = {
@@ -37,6 +40,7 @@ struct eveApp: App {
   var body: some Scene {
     WindowGroup {
       ContentView()
+        .task { SubscriptionService.shared.start() }
     }
     .modelContainer(sharedModelContainer)
   }
