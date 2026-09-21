@@ -77,6 +77,7 @@ struct LocationView: View {
                 selectedLocationID = savedLocations.first?.id
             }
             await seedDefaultsIfNeeded()
+            await LocationReminderNotificationCoordinator.shared.reconcile(context: modelContext)
         }
         .onChange(of: savedLocations.map(\.id)) { _, ids in
             // Keep the filter pointed at a place that still exists — e.g. after
@@ -294,7 +295,13 @@ struct LocationView: View {
             ForEach(group.reminders) { reminder in
                 LocationReminderRow(
                     reminder: reminder,
-                    onToggle: { routingManager?.toggleCompletion(reminder) },
+                    onToggle: {
+                        routingManager?.toggleCompletion(reminder)
+                        Task {
+                            await LocationReminderNotificationCoordinator.shared
+                                .reconcile(context: modelContext)
+                        }
+                    },
                     onTap: { editingReminder = reminder }
                 )
                 .contextMenu {
@@ -459,6 +466,7 @@ struct LocationView: View {
     private func delete(_ location: SavedLocation) {
 
         for reminder in reminders(for: location) {
+            LocationReminderNotificationCoordinator.shared.cancel(reminder)
             modelContext.delete(reminder)
         }
 
@@ -476,6 +484,7 @@ struct LocationView: View {
     }
 
     private func deleteReminder(_ reminder: LocationReminder) {
+        LocationReminderNotificationCoordinator.shared.cancel(reminder)
         routingManager?.remove(reminder)
     }
 

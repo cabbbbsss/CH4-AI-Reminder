@@ -142,6 +142,7 @@ struct ReminderEditSheet: View {
                 if let reminder {
                     Section {
                         Button("Remove Reminder", role: .destructive) {
+                            LocationReminderNotificationCoordinator.shared.cancel(reminder)
                             router?.remove(reminder)
                             dismiss()
                         }
@@ -196,6 +197,12 @@ struct ReminderEditSheet: View {
 
             modelContext.insert(created)
             try? modelContext.save()
+            if let selectedLocation = allLocations.first(where: { $0.id == locationID }) {
+                Task {
+                    await LocationReminderNotificationCoordinator.shared
+                        .scheduleAfterManualSave(created, at: selectedLocation)
+                }
+            }
             return
         }
 
@@ -223,6 +230,9 @@ struct ReminderEditSheet: View {
         }
 
         try? modelContext.save()
+        Task {
+            await LocationReminderNotificationCoordinator.shared.reconcile(context: modelContext)
+        }
 
     }
 
@@ -268,11 +278,19 @@ struct AddReminderSheet: View {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        modelContext.insert(
-            LocationReminder(locationID: location.id, text: trimmed, itemKey: nil, isSystemManaged: false)
+        let reminder = LocationReminder(
+            locationID: location.id,
+            text: trimmed,
+            itemKey: nil,
+            isSystemManaged: false
         )
+        modelContext.insert(reminder)
 
         try? modelContext.save()
+        Task {
+            await LocationReminderNotificationCoordinator.shared
+                .scheduleAfterManualSave(reminder, at: location)
+        }
 
     }
 

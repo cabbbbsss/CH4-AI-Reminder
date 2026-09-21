@@ -414,7 +414,8 @@ struct HomeView: View {
                     focused: $focusedReminderID,
                     onToggleCompleted: { toggleCompleted(reminder) },
                     onCommitTitle: { commitTitle($0, on: reminder) },
-                    onOpenDetails: { editingReminder = reminder }
+                    onOpenDetails: { editingReminder = reminder },
+                    onDelete: { deleteReminder(reminder) }
                 )
             }
 
@@ -512,6 +513,13 @@ struct HomeView: View {
         let scheduler = scheduler ?? ReminderScheduler(context: modelContext)
         Task { await scheduler.sync(reminder) }
     }
+
+    private func deleteReminder(_ reminder: CalendarReminder) {
+        let scheduler = scheduler ?? ReminderScheduler(context: modelContext)
+        scheduler.cancel(reminder)
+        modelContext.delete(reminder)
+        try? modelContext.save()
+    }
 }
 
 // MARK: - Day parts
@@ -555,6 +563,7 @@ private struct RoutineRow: View {
     var onToggleCompleted: () -> Void
     var onCommitTitle: (String) -> Void
     var onOpenDetails: () -> Void
+    var onDelete: () -> Void
 
     /// The title is edited in place, so the row needs its own copy to type
     /// into — binding a `TextField` straight at the model would write on every
@@ -632,6 +641,17 @@ private struct RoutineRow: View {
             .animation(.easeInOut(duration: 0.15), value: isEditingTitle)
         }
         .onAppear { draftTitle = reminder.text }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(action: onDelete) {
+                Label("Delete", systemImage: "trash")
+            }
+            .tint(.red)
+
+            Button(action: onOpenDetails) {
+                Label("Details", systemImage: "info.circle")
+            }
+            .tint(.gray)
+        }
         // Keeps the field in step when the reminder changes underneath it —
         // an edit saved from the Details sheet, or a sync rewriting the row.
         .onChange(of: reminder.text) { _, newValue in

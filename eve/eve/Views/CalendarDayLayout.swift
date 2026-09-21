@@ -18,13 +18,20 @@ struct CalendarDayPlacement: Identifiable {
 }
 
 enum CalendarDayLayout {
-    static func placements(for intervals: [CalendarDayInterval]) -> [CalendarDayPlacement] {
+    /// Groups intervals into clusters of mutual — including transitive —
+    /// time overlap: if A overlaps B and B overlaps C, all three land in
+    /// one cluster even though A and C might not directly overlap. Each
+    /// cluster is sorted by start time. Exposed separately from
+    /// `placements` so callers that want to know *which* intervals collide,
+    /// without needing a column assignment, can reuse the same grouping —
+    /// e.g. collapsing every reminder due at once into a single stack.
+    static func clusters(for intervals: [CalendarDayInterval]) -> [[CalendarDayInterval]] {
         let sorted = intervals.sorted {
             if $0.startMinute == $1.startMinute { return $0.endMinute < $1.endMinute }
             return $0.startMinute < $1.startMinute
         }
 
-        var result: [CalendarDayPlacement] = []
+        var result: [[CalendarDayInterval]] = []
         var cursor = 0
 
         while cursor < sorted.count {
@@ -32,14 +39,22 @@ enum CalendarDayLayout {
             var clusterEnd = sorted[cursor].endMinute
             cursor += 1
 
-            // A cluster contains every interval connected by an overlap,
-            // including transitive overlaps such as A-B and B-C.
             while cursor < sorted.count, sorted[cursor].startMinute < clusterEnd {
                 cluster.append(sorted[cursor])
                 clusterEnd = max(clusterEnd, sorted[cursor].endMinute)
                 cursor += 1
             }
 
+            result.append(cluster)
+        }
+
+        return result
+    }
+
+    static func placements(for intervals: [CalendarDayInterval]) -> [CalendarDayPlacement] {
+        var result: [CalendarDayPlacement] = []
+
+        for cluster in clusters(for: intervals) {
             var columnEnds: [Int] = []
             var columns: [(CalendarDayInterval, Int)] = []
 
