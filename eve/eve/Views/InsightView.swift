@@ -17,7 +17,10 @@ struct InsightView: View {
   private var insights: [AIInsight]
 
   @State private var editingInsight: AIInsight?
-  @State private var expandedInsightID: PersistentIdentifier?
+
+  /// The insight a swipe-to-delete is waiting on. Deleting a belief is
+  /// irreversible, so the row asks before it goes.
+  @State private var pendingDelete: AIInsight?
 
   var body: some View {
     ZStack {
@@ -35,14 +38,18 @@ struct InsightView: View {
     .sheet(item: $editingInsight) { insight in
       InsightEditSheet(insight: insight)
     }
-  }
-
-  /// Expand one insight at a time to reveal its reasoning.
-  private func toggle(_ insight: AIInsight) {
-    withAnimation(.easeInOut(duration: 0.2)) {
-      expandedInsightID = expandedInsightID == insight.persistentModelID
-        ? nil
-        : insight.persistentModelID
+    // An alert rather than a confirmation dialog: on a list row the dialog
+    // anchors as a popover off the row, and this should sit centred.
+    .alert(
+      "Are you sure you want to delete?",
+      isPresented: Binding(
+        get: { pendingDelete != nil },
+        set: { if !$0 { pendingDelete = nil } }
+      ),
+      presenting: pendingDelete
+    ) { insight in
+      Button("Delete Insight", role: .destructive) { delete(insight) }
+      Button("Cancel", role: .cancel) { }
     }
   }
 
@@ -89,22 +96,44 @@ struct InsightView: View {
       if insights.isEmpty {
         emptyState
       } else {
-        ScrollView {
-          LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-            ForEach(insights) { insight in
-              InsightRow(
-                insight: insight,
-                isExpanded: expandedInsightID == insight.persistentModelID,
-                onTap: { toggle(insight) },
-                onEdit: { editingInsight = insight },
-                onDelete: { delete(insight) }
-              )
-            }
+        // A List rather than a ScrollView, because swipe actions only
+        // exist on List rows. Its own chrome is stripped so it reads as
+        // lines on the card, not a table inside it.
+        List {
+          ForEach(insights) { insight in
+            InsightRow(insight: insight)
+              .listRowBackground(Color.clear)
+              .listRowSeparator(.hidden)
+              .listRowInsets(EdgeInsets(
+                top: Theme.Spacing.s, leading: Theme.Spacing.l,
+                bottom: Theme.Spacing.s, trailing: Theme.Spacing.l
+              ))
+              // Swiping the row towards the leading edge uncovers these.
+              // Edit and delete are the only two things you can do to a
+              // belief, so they need no chevron, no disclosure, nothing on
+              // the row at rest.
+              .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                Button(role: .destructive) {
+                  pendingDelete = insight
+                } label: {
+                  Label("Delete", systemImage: "trash")
+                }
+                // The destructive role alone inherits the accent here, so
+                // the red is said outright.
+                .tint(.red)
+                Button {
+                  editingInsight = insight
+                } label: {
+                  Label("Edit", systemImage: "pencil")
+                }
+                .tint(Color.accentColor)
+              }
           }
-          .padding(.horizontal, Theme.Spacing.l)
-          .padding(.vertical, Theme.Spacing.l)
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
         .scrollIndicators(.hidden)
+        .padding(.top, Theme.Spacing.s)
       }
 
       viewHistoryButton
@@ -153,175 +182,134 @@ struct InsightView: View {
   }
 }
 
-/// One belief: a tappable line that reveals Eve's reasoning — and edit/delete
-/// — when expanded.
+/// One belief. Just the line — what can be done to it lives behind a swipe.
 struct InsightRow: View {
   let insight: AIInsight
-  var isExpanded: Bool
-  var onTap: () -> Void
-  var onEdit: () -> Void
-  var onDelete: () -> Void
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
+    HStack(alignment: .top, spacing: Theme.Spacing.s) {
+      Image(systemName: "checkmark.circle.fill")
+        .font(.title3)
+        .foregroundStyle(Color.accentColor)
 
-      // ── Header (tap to expand) ─────────────────────────────
-      Button(action: onTap) {
-        HStack(alignment: .top, spacing: Theme.Spacing.s) {
-          Image(systemName: "checkmark.circle.fill")
-            .font(.title3)
-            .foregroundStyle(Color.accentColor)
-
-          Text(insight.value)
-            .font(.eveBody)
-            .foregroundStyle(Color.eveOnSurface)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .multilineTextAlignment(.leading)
-
-          // The only thing telling the user a row opens. Without it the
-          // reasoning and the edit/delete actions are invisible.
-          Image(systemName: "chevron.right")
-            .font(.eveDetail.weight(.semibold))
-            .foregroundStyle(Color.eveOnSurfaceMuted)
-            .rotationEffect(.degrees(isExpanded ? 90 : 0))
-            .padding(.top, 4)
-        }
-        .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-
-      // ── Expanded reasoning + actions ───────────────────────
-      if isExpanded {
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-
-          VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-            Text("Why Eve believes this")
-              .font(.eveCaption)
-              .foregroundStyle(Color.eveOnSurfaceMuted)
-
-            Text(insight.sourceSummary)
-              .font(.eveDetail)
-              .foregroundStyle(Color.eveOnSurface)
-              .fixedSize(horizontal: false, vertical: true)
-              .frame(maxWidth: .infinity, alignment: .leading)
-          }
-
-          HStack(spacing: Theme.Spacing.l) {
-            Button(action: onEdit) {
-              Label("Edit", systemImage: "pencil")
-                .font(.eveCaption)
-                .foregroundStyle(Color.accentColor)
-            }
-            Button(role: .destructive, action: onDelete) {
-              Label("Delete", systemImage: "trash")
-                .font(.eveCaption)
-                .foregroundStyle(.red)
-            }
-            Spacer(minLength: 0)
-          }
-          .buttonStyle(.plain)
-        }
-        // Lines the reasoning up under the belief's text, past the tick.
-        .padding(.leading, 34)
-        .padding(.top, Theme.Spacing.s)
-        .transition(.opacity.combined(with: .move(edge: .top)))
-      }
+      Text(insight.value)
+        .font(.eveBody)
+        .foregroundStyle(Color.eveOnSurface)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .multilineTextAlignment(.leading)
     }
   }
 }
 
-/// Editing a belief makes it ground truth: it becomes user-confirmed
-/// and Eve will never overwrite it.
+/// Correcting a belief: Eve's version stays on screen, read-only, above a
+/// field for what she should have known. Saving makes the user's version
+/// ground truth — user-confirmed, never overwritten.
 private struct InsightEditSheet: View {
   @Environment(\.modelContext) private var modelContext
   @Environment(\.dismiss) private var dismiss
 
   let insight: AIInsight
 
-  @State private var value = ""
+  /// The correction. Starts empty rather than prefilled: the point of the
+  /// sheet is what Eve *should* know, and a prefilled copy of what she
+  /// currently believes invites a one-word tweak of the wrong sentence.
+  @State private var correction = ""
+  @FocusState private var isEditing: Bool
+
+  @State private var isConfirmingDelete = false
+
+  private var canSave: Bool {
+    !correction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
 
   var body: some View {
-    ZStack {
-      Color(.bgPrimary)
-        .ignoresSafeArea()
+    NavigationStack {
+      ZStack {
+        AuroraBackground()
 
-      NavigationStack {
-        Form {
-          // ── What Eve believes ──────────────────────────────
-          Section {
-            LabeledContent("Title", value: insight.title)
-              .foregroundColor(Color(.textPrimary))
-
-            LabeledContent("Answer") {
-              TextField("Enter answer", text: $value)
-                .multilineTextAlignment(.trailing)
-                .foregroundColor(Color(.textTertiary))
+        ScrollView {
+          VStack(spacing: Theme.Spacing.m) {
+            card(title: "Eve's Insight") {
+              Text(insight.value)
+                .font(.eveBody)
+                .foregroundStyle(Color.eveOnSurface)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .foregroundColor(Color(.textPrimary))
-          } header: {
-            Text("What Eve believes")
-              .foregroundColor(Color(.textTertiary))
-          }
-          .listRowBackground(Color(.bgSecondary))
 
-          // ── Why Eve believes this (read-only AI reasoning) ─
-          Section {
-            HStack(alignment: .top, spacing: 12) {
-              Image(systemName: "brain.head.profile")
-                .font(.system(size: 20))
-                .foregroundColor(Color(.textTertiary))
-                .padding(.top, 2)
-
-              VStack(alignment: .leading, spacing: 4) {
-                Text("Eve's reasoning")
-                  .font(.system(size: 12, weight: .semibold))
-                  .foregroundColor(Color(.textTertiary))
-                  .textCase(nil)
-
-                Text(insight.sourceSummary)
-                  .font(.system(size: 14))
-                  .foregroundColor(Color(.textPrimary))
-                  .fixedSize(horizontal: false, vertical: true)
-              }
+            card(title: "What Eve should know") {
+              TextField("Tell Eve what she needs to know", text: $correction, axis: .vertical)
+                .font(.eveBody)
+                .foregroundStyle(Color.eveOnSurface)
+                .lineLimit(1...5)
+                .focused($isEditing)
             }
-            .padding(.vertical, 4)
-          } header: {
-            Text("Why Eve believes this")
-              .foregroundColor(Color(.textTertiary))
-          }
-          .listRowBackground(Color(.bgSecondary))
 
-          // ── Delete ─────────────────────────────────────────
-          Section {
-            Button("Delete this insight", role: .destructive) {
-              try? InsightManager(context: modelContext).delete(insight)
-              dismiss()
+            Button {
+              isConfirmingDelete = true
+            } label: {
+              Text("Delete insight")
+                .font(.eveBody)
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Theme.Spacing.m)
+                .background(Color.eveSurface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
             }
+            .buttonStyle(.plain)
           }
-          .listRowBackground(Color(.bgSecondary))
+          .padding(.horizontal, Theme.Spacing.m)
+          .padding(.top, Theme.Spacing.xs)
         }
-        .scrollContentBackground(.hidden)
-        .navigationTitle("Edit Insight")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-          ToolbarItem(placement: .cancellationAction) {
-            Button("Cancel") { dismiss() }
-              .foregroundColor(Color(.textPrimary))
-          }
-          ToolbarItem(placement: .confirmationAction) {
-            Button("Save") {
-              try? InsightManager(context: modelContext)
-                .recordUserEdit(insight, newValue: value)
-              dismiss()
-            }
-            .disabled(value.isEmpty)
-            .foregroundColor(.accentColor)
-          }
-        }
-        .onAppear { value = insight.value }
+        .scrollDismissesKeyboard(.interactively)
       }
+      .navigationTitle("Edit Insight")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button { dismiss() } label: { Image(systemName: "xmark") }
+            .accessibilityLabel("Cancel")
+        }
+        ToolbarItem(placement: .confirmationAction) {
+          Button {
+            try? InsightManager(context: modelContext)
+              .recordUserEdit(insight, newValue: correction.trimmingCharacters(in: .whitespacesAndNewlines))
+            dismiss()
+          } label: {
+            Image(systemName: "checkmark")
+          }
+          .buttonStyle(.glassProminent)
+          .disabled(!canSave)
+          .accessibilityLabel("Save")
+        }
+      }
+      .alert(
+        "Are you sure you want to delete?",
+        isPresented: $isConfirmingDelete
+      ) {
+        Button("Delete Insight", role: .destructive) {
+          try? InsightManager(context: modelContext).delete(insight)
+          dismiss()
+        }
+        Button("Cancel", role: .cancel) { }
+      }
+      .onAppear { isEditing = true }
     }
+  }
+
+  /// A titled card: the brain glyph and a muted heading, then whatever
+  /// the card holds. Both cards on the sheet share it so they line up.
+  private func card<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+      Label(title, systemImage: "brain")
+        .font(.eveCardTitle)
+        .foregroundStyle(Color.eveOnSurfaceMuted)
+
+      content()
+    }
+    .padding(Theme.Spacing.m)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Color.eveSurface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
   }
 }
 
