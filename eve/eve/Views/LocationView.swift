@@ -120,6 +120,25 @@ struct LocationView: View {
     // MARK: - Location filter
 
     private var locationFilter: some View {
+        HStack(spacing: Theme.Spacing.xs) {
+            chipsRow
+                // Chips run out under the filter rather than stopping short
+                // of it, so the row reads as one strip with a fixed control
+                // at its end.
+                .mask(
+                    HStack(spacing: 0) {
+                        Rectangle()
+                        LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: Theme.Spacing.xl)
+                    }
+                )
+
+            triggerFilter
+                .padding(.trailing, Theme.Spacing.gutter)
+        }
+    }
+
+    private var chipsRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Theme.Spacing.xs) {
                 // Add a new place — sits to the left of the location chips.
@@ -161,7 +180,9 @@ struct LocationView: View {
                     }
                 }
             }
-            .padding(.horizontal, Theme.Spacing.gutter)
+            .padding(.leading, Theme.Spacing.gutter)
+            // Lets the last chip scroll clear of the fade.
+            .padding(.trailing, Theme.Spacing.xl)
             .padding(.vertical, Theme.Spacing.xs)
         }
     }
@@ -223,8 +244,6 @@ struct LocationView: View {
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: Theme.Spacing.l) {
 
-                filterBar
-
                 if groups.isEmpty {
                     emptyRemindersState(for: location)
                 } else {
@@ -244,28 +263,29 @@ struct LocationView: View {
 
     /// Arriving / Leaving, as toggles rather than a single choice — the two
     /// halves of a visit aren't mutually exclusive, and a picker would force
-    /// the user to hide one of them to see the other.
-    private var filterBar: some View {
-        HStack {
-            Spacer()
-            Menu {
-                ForEach(LocationTrigger.allCases) { trigger in
-                    Button {
-                        toggle(trigger)
-                    } label: {
-                        Label(
-                            trigger.title,
-                            systemImage: visibleTriggers.contains(trigger) ? "checkmark" : ""
-                        )
-                    }
+    /// the user to hide one of them to see the other. Sits at the end of the
+    /// chips row: it narrows the same list the chips choose.
+    private var triggerFilter: some View {
+        Menu {
+            ForEach(LocationTrigger.allCases) { trigger in
+                Button {
+                    toggle(trigger)
+                } label: {
+                    Label(
+                        trigger.title,
+                        systemImage: visibleTriggers.contains(trigger) ? "checkmark" : ""
+                    )
                 }
-            } label: {
-                Image(systemName: "line.3.horizontal.decrease")
-                    .font(.title3)
-                    .foregroundStyle(Color.accentColor)
             }
-            .accessibilityLabel("Filter by arriving or leaving")
+        } label: {
+            Image(systemName: "line.3.horizontal.decrease")
+                .font(.title3)
+                .foregroundStyle(Color.eveOnSurfaceMuted)
+                // A generous target without widening the row's chrome.
+                .frame(width: Theme.Spacing.xxl, height: Theme.Spacing.xxl)
+                .contentShape(Rectangle())
         }
+        .accessibilityLabel("Filter by arriving or leaving")
     }
 
     @ViewBuilder
@@ -654,32 +674,12 @@ private struct LocationReminderRow: View {
                         .foregroundStyle(Color.eveOnSurfaceFaint)
                         .lineLimit(1)
                 }
-
-                TriggerTag(trigger: entry.trigger)
             }
 
             Spacer(minLength: 0)
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
-    }
-}
-
-/// Says which half of the visit a reminder belongs to. Small and quiet — it
-/// labels the row rather than competing with its text.
-private struct TriggerTag: View {
-    var trigger: LocationTrigger
-
-    var body: some View {
-        HStack(spacing: Theme.Spacing.xxs) {
-            Image(systemName: trigger.symbol)
-            Text(trigger.title)
-        }
-        .font(.eveOverline)
-        .foregroundStyle(Color.accentColor)
-        .padding(.horizontal, Theme.Spacing.xs)
-        .padding(.vertical, 3)
-        .background(Capsule().fill(Color.accentColor.opacity(0.12)))
     }
 }
 
