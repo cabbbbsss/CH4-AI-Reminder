@@ -25,6 +25,10 @@ struct ReminderDetailsView: View {
     /// add row opens this, so the sheet arrives with Places already on.
     var defaultPlace: SavedLocation?
 
+    /// What the user had typed into an add row before tapping ⓘ. Carried in
+    /// so reaching for details doesn't cost them the title.
+    var defaultTitle: String = ""
+
     @Query(sort: \SavedLocation.sortOrder) private var places: [SavedLocation]
     @Query(sort: \CalendarEvent.startDate) private var events: [CalendarEvent]
 
@@ -425,9 +429,15 @@ struct ReminderDetailsView: View {
     private func load() {
         // Snapshotting on the way out of this function, so both paths record
         // exactly what the user was shown.
-        defer { original = draft }
+        defer {
+            original = draft
+            // A title carried in from an add row is unsaved work, not the
+            // starting state: ✕ should ask before throwing it away.
+            if reminder == nil, !defaultTitle.isEmpty { original?.title = "" }
+        }
 
         guard let reminder else {
+            title = defaultTitle
             // Callers that only know the day — the Location tab's date
             // headings, the calendar's selected day — hand over midnight.
             // A reminder at 0.00 is never what was meant, so take the time

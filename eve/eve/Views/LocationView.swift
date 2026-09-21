@@ -24,15 +24,20 @@ struct LocationView: View {
     @State private var editingReminder: LocationReminder?
     @State private var editingPinnedReminder: CalendarReminder?
 
-    /// The day whose add row was tapped. Presenting on this — rather than a
-    /// bare bool — carries which heading the new reminder belongs under.
+    /// A reminder being started from an add row's ⓘ: the day whose heading
+    /// it sits under and the title typed so far, handed to the Details sheet.
     @State private var addingReminder: NewReminderTarget?
 
-    /// A day, made identifiable so it can drive `.sheet(item:)`.
     private struct NewReminderTarget: Identifiable {
         let id = UUID()
         var day: Date
+        var title: String
     }
+
+    /// Which day's add row is being typed into. Keyed by the day heading it
+    /// sits under; `.distantPast` stands for the row in the empty state.
+    /// Held at screen level so a tap on the background can end the edit.
+    @FocusState private var focusedAddRow: Date?
 
     @State private var toast: String?
 
@@ -74,7 +79,11 @@ struct LocationView: View {
         // The same Details sheet Home and Calendar open, already switched to
         // this place — so adding a reminder is one screen everywhere.
         .sheet(item: $addingReminder) { target in
-            ReminderDetailsView(defaultDate: target.day, defaultPlace: activeLocation)
+            ReminderDetailsView(
+                defaultDate: target.day,
+                defaultPlace: activeLocation,
+                defaultTitle: target.title
+            )
         }
         .task {
             if routingManager == nil {
@@ -99,6 +108,9 @@ struct LocationView: View {
     private var screen: some View {
         ZStack {
             AuroraBackground()
+                // A tap on the background ends whatever add row is being
+                // typed into, keeping what was typed.
+                .onTapGesture { focusedAddRow = nil }
 
             if savedLocations.isEmpty {
                 emptyLocationsState
@@ -306,7 +318,7 @@ struct LocationView: View {
                 .foregroundStyle(Color.eveOnSurfaceMuted)
         }
 
-        addReminderRow(for: location, on: Calendar.current.startOfDay(for: .now))
+        addReminderRow(for: location, on: Calendar.current.startOfDay(for: .now), focusKey: .distantPast)
     }
 
     /// One day's worth of reminders: a heading, its rows, the inline add row,
@@ -333,7 +345,7 @@ struct LocationView: View {
                 }
             }
 
-            addReminderRow(for: location, on: group.day)
+            addReminderRow(for: location, on: group.day, focusKey: group.day)
 
             Rectangle()
                 .fill(Color.eveOnSurfaceFaint.opacity(0.4))
@@ -342,32 +354,17 @@ struct LocationView: View {
         }
     }
 
-    /// Opens the same editor a tap on an existing reminder does, seeded with
-    /// the day it was tapped under — the same move as the routine list's add
-    /// row, so adding a reminder works identically on both screens.
-    private func addReminderRow(for location: SavedLocation, on day: Date) -> some View {
-        Button {
-            addingReminder = NewReminderTarget(day: day)
-        } label: {
-            HStack(spacing: Theme.Spacing.s) {
-                Circle()
-                    .strokeBorder(
-                        Color.eveOnSurfaceFaint.opacity(0.7),
-                        style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [0.5, 3])
-                    )
-                    .frame(width: 18, height: 18)
-                    .frame(width: 22, height: 22)
-
-                Text("Add a reminder…")
-                    .font(.eveCardTitle)
-                    .foregroundStyle(Color.eveOnSurfaceFaint)
-
-                Spacer(minLength: 0)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Add a reminder")
+    /// Type a title, press return, and the reminder is pinned to this place
+    /// under the day it was typed beneath — the same row Home has. ⓘ takes
+    /// the draft to Details for a time, a trigger or anything else.
+    private func addReminderRow(for location: SavedLocation, on day: Date, focusKey: Date) -> some View {
+        NewReminderRow(
+            focusID: focusKey,
+            focused: $focusedAddRow,
+            font: .eveCardTitle,
+            onCommit: { addReminder(titled: $0, to: location, on: day) },
+            onOpenDetails: { addingReminder = NewReminderTarget(day: day, title: $0) }
+        )
     }
 
     // MARK: - Empty state
@@ -517,6 +514,23 @@ struct LocationView: View {
 
         showToast("\(name) removed")
 
+    }
+
+    /// A reminder typed into a day's add row: pinned to the place, on that
+    /// day at the current time of day (the heading only knows the date, and
+    /// 0.00 is never what was meant), delivered on arrival by default.
+    private func addReminder(titled title: String, to location: SavedLocation, on day: Date) {
+        let calendar = Calendar.current
+        let now = calendar.dateComponents([.hour, .minute], from: .now)
+        let date = calendar.date(
+            bySettingHour: now.hour ?? 9, minute: now.minute ?? 0, second: 0, of: day
+        ) ?? day
+
+        let reminder = CalendarReminderManager(context: modelContext)
+            .addManual(title: title, at: date, locationID: location.id)
+
+        let scheduler = ReminderScheduler(context: modelContext)
+        Task { await scheduler.sync(reminder) }
     }
 
     private func edit(_ entry: PlaceEntry) {
