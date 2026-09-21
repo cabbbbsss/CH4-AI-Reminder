@@ -207,6 +207,21 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         ))
     }
 
+    func scheduleTestLearningNotification() async throws {
+        let content = UNMutableNotificationContent()
+        content.title = "Gym coming up!"
+        content.body = "Should I remind you to bring your whey, towel later?"
+        content.sound = .default
+        content.categoryIdentifier = Self.learningCategory
+        content.userInfo = ["eventType": "Gym", "items": ["whey", "towel"]]
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
+        try await center.add(UNNotificationRequest(
+            identifier: "eve.learning.test",
+            content: content,
+            trigger: trigger
+        ))
+    }
+
     func scheduleLocationReminder(
         id: String,
         title: String,
@@ -271,7 +286,7 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     ) async {
         let category = response.notification.request.content.categoryIdentifier
         
-        if category == Self.adaptiveCategory {
+        if await category == Self.adaptiveCategory {
             guard let occurrenceID = response.notification.request.content.userInfo["occurrenceID"] as? String else { return }
             let feedback: NotificationFeedback?
             switch response.actionIdentifier {
@@ -283,7 +298,7 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             guard let feedback else { return }
             await MainActor.run { self.onFeedback?(occurrenceID, feedback) }
             
-        } else if category == Self.learningCategory {
+        } else if await category == Self.learningCategory {
             guard let eventType = response.notification.request.content.userInfo["eventType"] as? String,
                   let items = response.notification.request.content.userInfo["items"] as? [String] else { return }
             

@@ -108,6 +108,15 @@ struct SettingsView: View {
                             SettingsRow(icon: "bell.badge.fill", label: "Send test notification (5s)", showChevron: false)
                         }
                         .buttonStyle(.plain)
+
+                        SettingsDivider()
+
+                        Button {
+                            Task { try? await notificationService.scheduleTestLearningNotification() }
+                        } label: {
+                            SettingsRow(icon: "brain.head.profile", label: "Send learning notification (5s)", showChevron: false)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }

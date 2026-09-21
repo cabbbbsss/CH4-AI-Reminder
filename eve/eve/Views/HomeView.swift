@@ -41,6 +41,10 @@ struct HomeView: View {
     @State private var isCustomizingContext = false
     @State private var customizeEventType: String = ""
 
+    @State private var showLearningAlert = false
+    @State private var learningAlertEventType: String = ""
+    @State private var learningAlertItems: [String] = []
+
     /// Which row's title is being edited, by reminder id.
     ///
     /// Held here rather than inside `RoutineRow` because dismissing the
@@ -188,6 +192,28 @@ struct HomeView: View {
                 customizeEventType = eventType
                 isCustomizingContext = true
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenContextualAlert"))) { notification in
+            if let eventType = notification.userInfo?["eventType"] as? String,
+               let items = notification.userInfo?["items"] as? [String] {
+                learningAlertEventType = eventType
+                learningAlertItems = items
+                showLearningAlert = true
+            }
+        }
+        .alert("\(learningAlertEventType) coming up!", isPresented: $showLearningAlert) {
+            Button("Yes") {
+                NotificationService.shared.onLearningFeedback?("yes", learningAlertEventType, learningAlertItems)
+            }
+            Button("No thanks", role: .cancel) {
+                NotificationService.shared.onLearningFeedback?("no", learningAlertEventType, learningAlertItems)
+            }
+            Button("Customize...") {
+                customizeEventType = learningAlertEventType
+                isCustomizingContext = true
+            }
+        } message: {
+            Text("Should I remind you to bring your \(learningAlertItems.joined(separator: ", ")) later?")
         }
         // --- Automatic re-reads -------------------------------------------
         // The bubble is no longer tappable, so it has to keep itself current.

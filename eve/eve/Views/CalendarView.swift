@@ -339,7 +339,7 @@ private struct DayTimeline: View {
             ForEach(0..<24, id: \.self) { hour in hourRule(hour: hour, contentWidth: contentWidth).id("hour-\(hour)") }
             ForEach(canvasItems) { item in
                 if let placement = placementByID[item.id] {
-                    let columnWidth = (contentWidth - CGFloat(placement.columnCount - 1) * 3) / CGFloat(placement.columnCount)
+                    let columnWidth = max(0, (contentWidth - CGFloat(placement.columnCount - 1) * 3) / CGFloat(max(1, placement.columnCount)))
                     dayItem(item)
                         .frame(width: columnWidth, height: blockHeight(for: item))
                         .offset(x: timeGutter + CGFloat(placement.column) * (columnWidth + 3), y: yPosition(for: item.startMinute))
@@ -375,7 +375,7 @@ private struct DayTimeline: View {
             Text(currentTime.formatted(date: .omitted, time: .shortened)).font(.caption2.weight(.bold)).foregroundStyle(palette.accent)
                 .frame(width: timeGutter - 4, alignment: .trailing).padding(.trailing, 4)
             Circle().fill(palette.accent).frame(width: 8, height: 8)
-            Rectangle().fill(palette.accent).frame(width: width - 4, height: 1.5)
+            Rectangle().fill(palette.accent).frame(width: max(0, width - 4), height: 1.5)
         }.offset(y: yPosition(for: minute) - 4).accessibilityHidden(true)
     }
 

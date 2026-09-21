@@ -160,7 +160,7 @@ final class FoundationModelService: ReasoningEngine {
 
     /// Deterministic. For choosing one value from a fixed set, where the same
     /// input returning the same answer matters more than variety.
-    private static let deterministic = GenerationOptions(sampling: .greedy)
+    private static let deterministic = GenerationOptions(samplingMode: .greedy)
 
     /// Low variance, for output that must stay specific and traceable — the
     /// prep lists and the belief extraction, where a wider spread shows up as

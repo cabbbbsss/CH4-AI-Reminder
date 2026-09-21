@@ -10,8 +10,8 @@ protocol RouteEstimating {
 struct MapKitRouteEstimator: RouteEstimating {
     func travelTime(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D, mode: TravelMode) async throws -> TimeInterval {
         let request = MKDirections.Request()
-        request.source = MKMapItem(placemark: MKPlacemark(coordinate: from))
-        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: to))
+        request.source = MKMapItem(location: CLLocation(latitude: from.latitude, longitude: from.longitude), address: nil)
+        request.destination = MKMapItem(location: CLLocation(latitude: to.latitude, longitude: to.longitude), address: nil)
         switch mode {
         case .driving: request.transportType = .automobile
         case .walking: request.transportType = .walking
@@ -43,14 +43,14 @@ final class AdaptiveNotificationCoordinator {
 
     init(
         context: ModelContext,
-        notifications: NotificationService = .shared,
-        routes: any RouteEstimating = MapKitRouteEstimator()
+        notifications: NotificationService? = nil,
+        routes: (any RouteEstimating)? = nil
     ) {
         self.context = context
-        self.notifications = notifications
-        self.routes = routes
+        self.notifications = notifications ?? .shared
+        self.routes = routes ?? MapKitRouteEstimator()
         contextBuilder = ReminderContextBuilder(context: context)
-        notifications.onFeedback = { [weak self] occurrenceID, feedback in
+        self.notifications.onFeedback = { [weak self] occurrenceID, feedback in
             self?.record(feedback: feedback, for: occurrenceID)
         }
     }
@@ -270,8 +270,9 @@ final class AdaptiveNotificationCoordinator {
             return (CLLocationCoordinate2D(latitude: latitude, longitude: longitude), "place:\(place.id.uuidString)")
         }
         guard let text = event.location, !text.isEmpty,
-              let placemark = try? await CLGeocoder().geocodeAddressString(text).first,
-              let coordinate = placemark.location?.coordinate else { return nil }
+              let request = MKGeocodingRequest(addressString: text),
+              let mapItem = try? await request.mapItems.first else { return nil }
+        let coordinate = mapItem.location.coordinate
         return (coordinate, "text:\(text.lowercased())")
     }
 

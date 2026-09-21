@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import UserNotifications
 
 /// Evaluates upcoming calendar events and deduces proactive contextual learning items
 /// (e.g. deduce "gloves" for a "Gym" event).
@@ -94,6 +95,14 @@ final class LearningScheduler {
                     await MainActor.run {
                         NotificationCenter.default.post(
                             name: NSNotification.Name("OpenContextualCustomize"),
+                            object: nil,
+                            userInfo: ["eventType": eventType, "items": items]
+                        )
+                    }
+                } else if action == UNNotificationDefaultActionIdentifier {
+                    await MainActor.run {
+                        NotificationCenter.default.post(
+                            name: NSNotification.Name("OpenContextualAlert"),
                             object: nil,
                             userInfo: ["eventType": eventType, "items": items]
                         )
