@@ -197,6 +197,25 @@ final class CalendarReminderManager {
         try? context.save()
     }
 
+    /// A reminder typed straight into a list — a title and a moment, nothing
+    /// else yet. Owned by the user from the start so a calendar reload never
+    /// regenerates over it. The caller schedules it.
+    @discardableResult
+    func addManual(title: String, at date: Date, locationID: UUID? = nil) -> CalendarReminder {
+        let reminder = CalendarReminder(
+            occurrenceID: "manual-\(UUID().uuidString)",
+            eventTitle: "",
+            eventDate: date,
+            text: title,
+            isSystemManaged: false
+        )
+        reminder.scheduledDate = date
+        reminder.locationID = locationID
+        context.insert(reminder)
+        try? context.save()
+        return reminder
+    }
+
     func toggleCompletion(for reminder: CalendarReminder) {
         reminder.isCompleted.toggle()
         try? context.save()

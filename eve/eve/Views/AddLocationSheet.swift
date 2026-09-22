@@ -75,6 +75,7 @@ struct AddLocationSheet: View {
 
     @State private var searchText = ""
     @FocusState private var searchFocused: Bool
+    @FocusState private var nameFocused: Bool
 
     /// The name the place will be saved under — always visible at the top so
     /// the user names the place themselves. Picking a search result only
@@ -92,7 +93,9 @@ struct AddLocationSheet: View {
     /// model classifies from the names/address instead — see `save()`.
     @State private var selectedCategory: MKPointOfInterestCategory?
 
-    @State private var cameraPosition: MapCameraPosition = .automatic
+    /// Opens on the user's own position so the map means something before
+    /// a pin exists; `apply` moves it onto the pin once there is one.
+    @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var isResolving = false
     @State private var locationAccessDenied = false
 
@@ -131,45 +134,31 @@ struct AddLocationSheet: View {
                         .buttonStyle(.plain)
                     }
                     
-                    List {
-                        Button {
-                            Task { await useCurrentLocation() }
-                        } label: {
-                            row(
-                                icon: "location.fill",
-                                iconColor: Color(.textQuarternary),
-                                title: "Current Location",
-                                subtitle: "Use where you are now",
-                                selected: false
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        
-                        ForEach(Array(completer.results.enumerated()), id: \.offset) { _, completion in
-                            Button {
-                                select(completion)
-                            } label: {
-                                row(
-                                    icon: "mappin.circle.fill",
-                                    iconColor: Color.red,
-                                    title: completion.title,
-                                    subtitle: completion.subtitle,
-                                    selected: completion.title == selectedTitle
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .listStyle(.plain)
-                    
-                    if let coordinate = selectedCoordinate {
+                    // The map is there from the first frame, centred on the
+                    // user, and the results slide over it while the search
+                    // field has focus. It's never stacked under a list: with
+                    // a fixed-height map below one, the keyboard left less
+                    // room than the two needed and the whole column slid up
+                    // under the navigation bar, name field first. Instead the
+                    // map takes whatever height is left and lets the keyboard
+                    // cover it, so the fields above stay put while typing.
+                    ZStack {
                         Map(position: $cameraPosition) {
-                            Marker(placeName.isEmpty ? (selectedName ?? "Selected place") : placeName, coordinate: coordinate)
-                                .tint(Color.red)
+                            UserAnnotation()
+                            if let coordinate = selectedCoordinate {
+                                Marker(placeName.isEmpty ? (selectedName ?? "Selected place") : placeName, coordinate: coordinate)
+                                    .tint(Color.red)
+                            }
                         }
-                        .frame(height: 535)
-                        .transition(.move(edge: .bottom))
+                        .ignoresSafeArea(.keyboard, edges: .bottom)
+
+                        if searchFocused {
+                            resultsList
+                                .transition(.opacity)
+                        }
                     }
+                    .frame(maxHeight: .infinity)
+                    .animation(.easeOut(duration: 0.15), value: searchFocused)
                 }
                 .navigationTitle("Location")
                 .navigationBarTitleDisplayMode(.inline)
@@ -187,10 +176,16 @@ struct AddLocationSheet: View {
                         } label: {
                             Image(systemName: "checkmark")
                         }
-                        .disabled(selectedCoordinate == nil || placeName.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(!canSave)
                     }
                 }
-                .onAppear { searchFocused = true }
+                .onAppear {
+                    // Editing starts in the name, which is usually what the
+                    // pencil was tapped for. Adding starts on the map —
+                    // focusing search here would cover it with the keyboard
+                    // and an empty list before the user has seen it.
+                    if editingLocation != nil { nameFocused = true }
+                }
             }
         }
         .onAppear {
@@ -214,13 +209,59 @@ struct AddLocationSheet: View {
         }
     }
 
+    /// Adding needs a pin — a place with no coordinates can't trigger
+    /// anything. Editing only needs a name: seeded places like Home start
+    /// without a pin, and renaming one shouldn't demand a map pick first.
+    private var canSave: Bool {
+        let hasName = !placeName.trimmingCharacters(in: .whitespaces).isEmpty
+        return hasName && (selectedCoordinate != nil || editingLocation != nil)
+    }
+
     // MARK: - Subviews
+
+    /// Where you are, then whatever the search turned up. Shown over the map
+    /// only while the search field has focus, so picking a row (which drops
+    /// focus) reveals the pin underneath.
+    private var resultsList: some View {
+        List {
+            Button {
+                Task { await useCurrentLocation() }
+            } label: {
+                row(
+                    icon: "location.fill",
+                    iconColor: Color(.textQuarternary),
+                    title: "Current Location",
+                    subtitle: "Use where you are now",
+                    selected: false
+                )
+            }
+            .buttonStyle(.plain)
+
+            ForEach(Array(completer.results.enumerated()), id: \.offset) { _, completion in
+                Button {
+                    select(completion)
+                } label: {
+                    row(
+                        icon: "mappin.circle.fill",
+                        iconColor: Color.red,
+                        title: completion.title,
+                        subtitle: completion.subtitle,
+                        selected: completion.title == selectedTitle
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .listStyle(.plain)
+        .background(Color(.bgPrimary))
+    }
 
     private var nameField: some View {
         HStack(spacing: 10) {
             Image(systemName: "tag.fill")
                 .foregroundColor(Color(.textQuarternary))
             TextField("Place name", text: $placeName)
+                .focused($nameFocused)
                 .autocorrectionDisabled()
         }
         .padding(.horizontal, 14)
@@ -358,12 +399,20 @@ struct AddLocationSheet: View {
 
         guard let location = try? await locationService.currentLocation() else { return }
 
-        let name = await locationService.placeName(for: location) ?? "Current Location"
+        // One reverse geocode for both halves. `placeName` alone folds the
+        // address into the name when the spot has no name of its own, which
+        // left nothing to store as the address — so a place added from here
+        // showed up on the Location tab with no address under it.
+        let details = await locationService.placeDetails(for: location)
 
         selectedTitle = nil
         selectedCategory = nil
         searchFocused = false
-        apply(name: name, address: nil, coordinate: location.coordinate)
+        apply(
+            name: details.name ?? details.address ?? "Current Location",
+            address: details.address,
+            coordinate: location.coordinate
+        )
     }
 
     private func apply(name: String, address: String?, coordinate: CLLocationCoordinate2D) {
@@ -387,7 +436,7 @@ struct AddLocationSheet: View {
 
     private func save() {
 
-        guard let coordinate = selectedCoordinate else { return }
+        guard canSave else { return }
 
         let name = placeName.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -400,11 +449,14 @@ struct AddLocationSheet: View {
         if let editingLocation {
             editingLocation.name = name.isEmpty ? (selectedName ?? searchText) : name
             editingLocation.address = selectedAddress
-            editingLocation.latitude = coordinate.latitude
-            editingLocation.longitude = coordinate.longitude
+            // A place edited without picking a new pin keeps the one it had.
+            if let coordinate = selectedCoordinate {
+                editingLocation.latitude = coordinate.latitude
+                editingLocation.longitude = coordinate.longitude
+            }
             if let categoryIcon { editingLocation.iconName = categoryIcon }
             location = editingLocation
-        } else {
+        } else if let coordinate = selectedCoordinate {
             location = SavedLocation(
                 name: name.isEmpty ? (selectedName ?? searchText) : name,
                 address: selectedAddress,
@@ -414,6 +466,8 @@ struct AddLocationSheet: View {
                 sortOrder: nextSortOrder
             )
             modelContext.insert(location)
+        } else {
+            return
         }
         try? modelContext.save()
 
