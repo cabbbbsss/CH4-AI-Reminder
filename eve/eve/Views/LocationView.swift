@@ -134,15 +134,15 @@ struct LocationView: View {
                 // Past the free allowance it wears a lock and opens the
                 // paywall instead, so the limit is visible before it is hit
                 // rather than announced by an error afterwards.
+                // Same view structure and modifiers as Calendar's header "+".
                 Button(action: beginAddingLocation) {
                     Image(systemName: "plus")
-                        .font(.eveCardTitle)
-                        .frame(width: Theme.Spacing.l, height: Theme.Spacing.l)
+                        .font(.title3)
+                        .foregroundStyle(Color.eveOnSurface)
+                        .padding(Theme.Spacing.xs)
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
-                .controlSize(.large)
-                .tint(canAddLocation ? Color.eveOnSurface : Color.eveOnSurfaceMuted)
                 // Badged on the button rather than its label: the circular
                 // border shape clips the label, and the lock is meant to
                 // break that edge.

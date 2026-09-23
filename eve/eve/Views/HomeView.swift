@@ -272,16 +272,16 @@ struct HomeView: View {
                 plusBadge
             }
 
-            #if DEBUG
-            NavigationLink(destination: PromptTesterView()) {
-                Image(systemName: "ladybug.fill")
-                    .font(.title3)
-                    .foregroundStyle(Color.eveOnSurface)
-                    .padding(Theme.Spacing.xs)
-            }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            #endif
+//            #if DEBUG
+//            NavigationLink(destination: PromptTesterView()) {
+//                Image(systemName: "ladybug.fill")
+//                    .font(.title3)
+//                    .foregroundStyle(Color.eveOnSurface)
+//                    .padding(Theme.Spacing.xs)
+//            }
+//            .buttonStyle(.glass)
+//            .buttonBorderShape(.circle)
+//            #endif
 
             NavigationLink(destination: SettingsView()) {
                 Image(systemName: "gearshape.fill")

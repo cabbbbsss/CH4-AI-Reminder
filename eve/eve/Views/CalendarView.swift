@@ -550,7 +550,7 @@ private struct EventBlock: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Capsule().fill(palette.accent.opacity(0.8)).frame(width: 3).padding(.vertical, isCompact ? 2 : 4)
+            Capsule().fill(palette.accent.opacity(0.5)).frame(width: 3).padding(.vertical, isCompact ? 2 : 4)
             VStack(alignment: .leading, spacing: 2) {
                 Text(event.title).font(titleFont).lineLimit(showsTime ? 2 : 1)
                 if showsTime {
@@ -690,8 +690,8 @@ private struct CalendarPalette {
     var eventText: Color { primaryText }
     /// Events sit behind reminders on the timeline, so both the fill and the
     /// text step back rather than competing with the reminder pills.
-    var eventFillOpacity: Double { colorScheme == .dark ? 0.5 : 0.45 }
-    var eventTextOpacity: Double { 0.7 }
+    var eventFillOpacity: Double { colorScheme == .dark ? 0.3 : 0.28 }
+    var eventTextOpacity: Double { 0.55 }
     var toolbarTint: Color { accent.opacity(0.2) }
 }
 

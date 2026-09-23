@@ -103,28 +103,28 @@ struct SettingsView: View {
 //                    }
 //                }
 
-                SettingsSection(header: "Notification Diagnostics") {
-                    SettingsCard {
-                        Button {
-                            Task { @MainActor in try? await notificationService.scheduleTestNotification() }
-                        } label: {
-                            SettingsRow(icon: "bell.badge.fill", label: "Send test notification (5s)", showChevron: false)
-                        }
-                        .buttonStyle(.plain)
-
-                        SettingsDivider()
-
-                        Button {
-                            Task { @MainActor in
-                                let scheduler = LearningScheduler(context: modelContext)
-                                await scheduler.testEvaluateNextEvent() 
-                            }
-                        } label: {
-                            SettingsRow(icon: "brain.head.profile", label: "Send learning notification (5s)", showChevron: false)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+//                SettingsSection(header: "Notification Diagnostics") {
+//                    SettingsCard {
+//                        Button {
+//                            Task { @MainActor in try? await notificationService.scheduleTestNotification() }
+//                        } label: {
+//                            SettingsRow(icon: "bell.badge.fill", label: "Send test notification (5s)", showChevron: false)
+//                        }
+//                        .buttonStyle(.plain)
+//
+//                        SettingsDivider()
+//
+//                        Button {
+//                            Task { @MainActor in
+//                                let scheduler = LearningScheduler(context: modelContext)
+//                                await scheduler.testEvaluateNextEvent()
+//                            }
+//                        } label: {
+//                            SettingsRow(icon: "brain.head.profile", label: "Send learning notification (5s)", showChevron: false)
+//                        }
+//                        .buttonStyle(.plain)
+//                    }
+//                }
             }
             .padding(.top, 16)
             .padding(.bottom, 40)
