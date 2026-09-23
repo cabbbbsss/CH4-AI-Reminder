@@ -446,33 +446,6 @@ struct SettingsToggleRow: View {
     }
 }
 
-/// A selectable row with a leading checkmark when chosen.
-struct SettingsChoiceRow: View {
-    var label: String
-    var isSelected: Bool
-    var onTap: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 12) {
-                Text(label)
-                    .font(.system(size: 15))
-                    .foregroundColor(Color(.textPrimary))
-                Spacer()
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(Color.accentColor)
-                }
-            }
-            .padding(.horizontal, 18)
-            .frame(height: 52)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
 // MARK: - Swipe-back enabler
 
 /// Re-enables the interactive swipe-to-go-back gesture while a settings screen

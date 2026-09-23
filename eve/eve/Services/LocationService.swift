@@ -92,6 +92,20 @@ final class LocationService: NSObject, CLLocationManagerDelegate, @unchecked Sen
 
     }
 
+    /// Both halves of a reverse geocode, for rows that show an address under
+    /// a name. `placeName` collapses them into one string, which is right for
+    /// a chip and wrong for a two-line row.
+    func placeDetails(for location: CLLocation) async -> (name: String?, address: String?) {
+
+        guard let request = MKReverseGeocodingRequest(location: location) else { return (nil, nil) }
+        request.preferredLocale = Locale(identifier: "en_US")
+        let item = (try? await request.mapItems)?.first
+        let address = item?.addressRepresentations?.fullAddress(includingRegion: true, singleLine: true)
+            ?? item?.address?.fullAddress
+        return (item?.name, address)
+
+    }
+
     // MARK: - CLLocationManagerDelegate
     //
     // Core Location calls these on the thread the manager was created on

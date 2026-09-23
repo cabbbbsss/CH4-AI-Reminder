@@ -137,7 +137,7 @@ struct CalendarView: View {
             )
         }
         .sheet(item: $selectedEvent) { CalendarEventDetailSheet(event: $0) }
-        .sheet(isPresented: $isAddingReminder) { CalendarReminderAddSheet(date: selectedDate) }
+        .sheet(isPresented: $isAddingReminder) { ReminderDetailsView(defaultDate: selectedDate) }
         .onChange(of: selectedDate) { _, date in displayedWeekStart = Calendar.weekStart(containing: date) }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { currentTime = $0 }
         .task {
