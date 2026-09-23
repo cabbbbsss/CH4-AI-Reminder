@@ -40,6 +40,8 @@ struct ReminderContext {
 
     let answeredQuestions: [String]
 
+    let contextualPreferences: [String]
+
     /// Content words drawn from everything this context puts in front of the
     /// model, so its output can be held to the same material.
     ///
@@ -58,7 +60,7 @@ struct ReminderContext {
             terms.formUnion(OutputGrounding.contentTerms(of: UntrustedText.strip(text)))
         }
 
-        let allStringLists = upcomingEvents + insights + recentHistory + answeredQuestions + (guests ?? [])
+        let allStringLists = upcomingEvents + insights + recentHistory + answeredQuestions + contextualPreferences + (guests ?? [])
         for line in allStringLists {
             terms.formUnion(OutputGrounding.contentTerms(of: UntrustedText.strip(line)))
         }
@@ -107,6 +109,8 @@ struct ReminderContext {
         \(section("Recent activity history", recentHistory))
 
         \(section("Questions the user has answered", answeredQuestions))
+
+        \(section("Confirmed preferred contextual items for certain events", contextualPreferences))
         """
 
     }

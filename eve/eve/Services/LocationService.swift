@@ -58,6 +58,12 @@ final class LocationService: NSObject, CLLocationManagerDelegate, @unchecked Sen
 
             changeContinuation = continuation
 
+            // Significant-change updates may wake or relaunch Eve after it
+            // leaves the foreground, but only when the user explicitly chose
+            // Always location access and the target declares location mode.
+            manager.allowsBackgroundLocationUpdates =
+                manager.authorizationStatus == .authorizedAlways
+
             manager.startMonitoringSignificantLocationChanges()
 
             continuation.onTermination = { [weak self] _ in
@@ -72,6 +78,7 @@ final class LocationService: NSObject, CLLocationManagerDelegate, @unchecked Sen
 
     private func stopMonitoring() {
         manager.stopMonitoringSignificantLocationChanges()
+        manager.allowsBackgroundLocationUpdates = false
         changeContinuation = nil
     }
 

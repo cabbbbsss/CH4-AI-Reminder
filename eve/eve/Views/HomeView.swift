@@ -43,6 +43,16 @@ struct HomeView: View {
     /// Keeps notifications in step with edits and grows repeating series.
     @State private var scheduler: ReminderScheduler?
 
+    /// Continuously evaluates upcoming events for proactive learning.
+    @State private var learningScheduler: LearningScheduler?
+
+    @State private var isCustomizingContext = false
+    @State private var customizeEventType: String = ""
+
+    @State private var showLearningAlert = false
+    @State private var learningAlertEventType: String = ""
+    @State private var learningAlertItems: [String] = []
+
     /// Which row's title is being edited, by reminder id.
     ///
     /// Held here rather than inside `RoutineRow` because dismissing the
@@ -139,18 +149,29 @@ struct HomeView: View {
             let scheduler = ReminderScheduler(context: modelContext)
             self.scheduler = scheduler
 
+            let lScheduler = LearningScheduler(context: modelContext)
+            lScheduler.bindNotificationFeedback()
+            self.learningScheduler = lScheduler
+
             // These two don't depend on each other — one builds the day's
             // routine from the calendar, the other asks the model what matters
             // right now. Both can take seconds on device, and in sequence the
             // user waits for their sum, so they run together.
             //
             // The second is silent: opening Home never fires a notification.
-            async let generated: Void = manager.ensureReminders(for: .now)
-            async let read: Void = vm.assistant.generateInitialInsights(
-                currentPlace: vm.location.currentPlace
-            )
-            _ = await (generated, read)
-
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { @MainActor in
+                    await manager.ensureReminders(for: .now)
+                }
+                group.addTask { @MainActor in
+                    await vm.assistant.generateInitialInsights(
+                        currentPlace: vm.location.currentPlace
+                    )
+                }
+                group.addTask { @MainActor in
+                    await lScheduler.evaluateUpcomingEvents()
+                }
+            }
             // Rebuild the pending notifications from the store — without this a
             // reinstall or a reboot leaves every existing reminder silent.
             //
@@ -185,6 +206,43 @@ struct HomeView: View {
         }
         .sheet(item: $editingReminder) { reminder in
             ReminderDetailsView(reminder: reminder)
+        }
+        .sheet(isPresented: $isCustomizingContext) {
+            ContextualCustomizeView(eventType: customizeEventType)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenContextualCustomize")).receive(on: RunLoop.main)) { notification in
+            if let eventType = notification.userInfo?["eventType"] as? String {
+                customizeEventType = eventType
+                isCustomizingContext = true
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenContextualAlert")).receive(on: RunLoop.main)) { notification in
+            if let eventType = notification.userInfo?["eventType"] as? String,
+               let items = notification.userInfo?["items"] as? [String] {
+                learningAlertEventType = eventType
+                learningAlertItems = items
+                showLearningAlert = true
+            }
+        }
+        .alert("\(learningAlertEventType) coming up!", isPresented: $showLearningAlert) {
+            Button("Yes") {
+                Task { @MainActor in
+                    NotificationService.shared.onLearningFeedback?("yes", learningAlertEventType, learningAlertItems)
+                    showLearningAlert = false
+                }
+            }
+            Button("No thanks", role: .cancel) {
+                Task { @MainActor in
+                    NotificationService.shared.onLearningFeedback?("no", learningAlertEventType, learningAlertItems)
+                    showLearningAlert = false
+                }
+            }
+            Button("Customize...") {
+                customizeEventType = learningAlertEventType
+                isCustomizingContext = true
+            }
+        } message: {
+            Text("Should I remind you to bring your \(learningAlertItems.joined(separator: ", ")) later?")
         }
         // --- Automatic re-reads -------------------------------------------
         // The bubble is no longer tappable, so it has to keep itself current.
@@ -230,16 +288,16 @@ struct HomeView: View {
                 plusBadge
             }
 
-            #if DEBUG
-            NavigationLink(destination: PromptTesterView()) {
-                Image(systemName: "ladybug.fill")
-                    .font(.title3)
-                    .foregroundStyle(Color.eveOnSurface)
-                    .padding(Theme.Spacing.xs)
-            }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            #endif
+//            #if DEBUG
+//            NavigationLink(destination: PromptTesterView()) {
+//                Image(systemName: "ladybug.fill")
+//                    .font(.title3)
+//                    .foregroundStyle(Color.eveOnSurface)
+//                    .padding(Theme.Spacing.xs)
+//            }
+//            .buttonStyle(.glass)
+//            .buttonBorderShape(.circle)
+//            #endif
 
             NavigationLink(destination: SettingsView()) {
                 Image(systemName: "gearshape.fill")
@@ -372,7 +430,8 @@ struct HomeView: View {
                     focused: $focusedReminderID,
                     onToggleCompleted: { toggleCompleted(reminder) },
                     onCommitTitle: { commitTitle($0, on: reminder) },
-                    onOpenDetails: { editingReminder = reminder }
+                    onOpenDetails: { editingReminder = reminder },
+                    onDelete: { deleteReminder(reminder) }
                 )
             }
 
@@ -460,6 +519,13 @@ struct HomeView: View {
         let scheduler = scheduler ?? ReminderScheduler(context: modelContext)
         Task { await scheduler.sync(reminder) }
     }
+
+    private func deleteReminder(_ reminder: CalendarReminder) {
+        let scheduler = scheduler ?? ReminderScheduler(context: modelContext)
+        scheduler.cancel(reminder)
+        modelContext.delete(reminder)
+        try? modelContext.save()
+    }
 }
 
 // MARK: - Day parts
@@ -514,6 +580,7 @@ private struct RoutineRow: View {
     var onToggleCompleted: () -> Void
     var onCommitTitle: (String) -> Void
     var onOpenDetails: () -> Void
+    var onDelete: () -> Void
 
     /// The title is edited in place, so the row needs its own copy to type
     /// into — binding a `TextField` straight at the model would write on every
@@ -591,6 +658,17 @@ private struct RoutineRow: View {
             .animation(.easeInOut(duration: 0.15), value: isEditingTitle)
         }
         .onAppear { draftTitle = reminder.text }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(action: onDelete) {
+                Label("Delete", systemImage: "trash")
+            }
+            .tint(.red)
+
+            Button(action: onOpenDetails) {
+                Label("Details", systemImage: "info.circle")
+            }
+            .tint(.gray)
+        }
         // Keeps the field in step when the reminder changes underneath it —
         // an edit saved from the Details sheet, or a sync rewriting the row.
         .onChange(of: reminder.text) { _, newValue in

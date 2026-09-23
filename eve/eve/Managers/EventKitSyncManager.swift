@@ -20,6 +20,7 @@ import SwiftData
 /// data is no longer part of the product.
 /// - Diffs incoming data against the local mirror so History can record
 ///   what actually changed instead of blind re-imports.
+@MainActor
 @Observable
 final class EventKitSyncManager {
 
@@ -227,9 +228,5 @@ final class EventKitSyncManager {
 
     }
 
-    deinit {
-        observationTask?.cancel()
-        pendingSync?.cancel()
-    }
 
 }

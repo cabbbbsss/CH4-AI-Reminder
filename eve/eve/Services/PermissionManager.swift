@@ -13,6 +13,10 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
   static let shared = PermissionManager()
 
   var isLocationGranted: Bool = false
+  /// Place reminders fire through OS region monitoring, which only wakes EVE
+  /// when the user granted Always. "While Using" registers the geofence but
+  /// never delivers it once EVE leaves the foreground.
+  var isAlwaysLocationGranted: Bool = false
   var isCalendarGranted: Bool = false
   var isNotificationsGranted: Bool = false
   var isAIEnabled: Bool = false
@@ -21,6 +25,7 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
   private let locationManager = CLLocationManager()
   private let eventStore = EKEventStore()
   private var locationContinuation: CheckedContinuation<CLAuthorizationStatus, Never>?
+  private let hasRequestedAlwaysKey = "hasRequestedAlwaysLocation"
 
   override init() {
     super.init()
@@ -40,6 +45,7 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
   /// the user made in the Settings app is reflected immediately.
   func refreshStatuses() {
     isLocationGranted = locationManager.authorizationStatus == .authorizedAlways || locationManager.authorizationStatus == .authorizedWhenInUse
+    isAlwaysLocationGranted = locationManager.authorizationStatus == .authorizedAlways
     isCalendarGranted = EKEventStore.authorizationStatus(for: .event) == .fullAccess
 
     UNUserNotificationCenter.current().getNotificationSettings { settings in
@@ -77,8 +83,29 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
   /// Elevates a previously granted foreground location permission only after
   /// the user explicitly enables adaptive background timing.
   func requestAdaptiveBackgroundLocation() async {
-    let status = await requestLocationIfUndetermined()
+    await ensureAlwaysLocationForPlaceReminders()
+  }
+
+  /// Walks the user up to Always, which is what a place reminder needs to be
+  /// delivered while EVE is closed.
+  ///
+  /// iOS only ever shows the Always upgrade prompt once, and it may defer it
+  /// silently instead of presenting it — so this never suspends waiting for an
+  /// answer. It asks on the first place reminder; on every later one, if the
+  /// grant is still foreground-only, the only remaining route is Settings.
+  func ensureAlwaysLocationForPlaceReminders() async {
+    var status = locationManager.authorizationStatus
+    if status == .notDetermined {
+      status = await requestLocationIfUndetermined()
+    }
     guard status == .authorizedWhenInUse else { return }
+
+    guard !UserDefaults.standard.bool(forKey: hasRequestedAlwaysKey) else {
+      PermissionRecoveryCoordinator.shared.presentBackgroundLocationRecovery()
+      return
+    }
+
+    UserDefaults.standard.set(true, forKey: hasRequestedAlwaysKey)
     locationManager.requestAlwaysAuthorization()
   }
 
@@ -152,6 +179,7 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
   nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
     MainActor.assumeIsolated {
       isLocationGranted = manager.authorizationStatus == .authorizedAlways || manager.authorizationStatus == .authorizedWhenInUse
+      isAlwaysLocationGranted = manager.authorizationStatus == .authorizedAlways
       if manager.authorizationStatus != .notDetermined {
         locationContinuation?.resume(returning: manager.authorizationStatus)
         locationContinuation = nil

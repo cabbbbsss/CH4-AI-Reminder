@@ -115,6 +115,17 @@ struct InsightExtraction {
 
 }
 
+@Generable
+struct ContextualDeduction {
+
+    @Guide(description: "Inference scratchpad to reason about the event and common sense associations")
+    let thoughtProcess: String
+
+    @Guide(description: "2-4 commonly associated items or tasks the user might need for this event. Example: ['gloves', 'whey', 'AirPods'] for a Gym event. Empty if nothing specific applies.")
+    let items: [String]
+
+}
+
 /// The only gateway to Apple's on-device model.
 /// Input: ReminderContext. Output: ReminderDecision. Nothing else.
 ///
@@ -149,7 +160,7 @@ final class FoundationModelService: ReasoningEngine {
 
     /// Deterministic. For choosing one value from a fixed set, where the same
     /// input returning the same answer matters more than variety.
-    private static let deterministic = GenerationOptions(sampling: .greedy)
+    private static let deterministic = GenerationOptions(samplingMode: .greedy)
 
     /// Low variance, for output that must stay specific and traceable — the
     /// prep lists and the belief extraction, where a wider spread shows up as
@@ -184,7 +195,8 @@ final class FoundationModelService: ReasoningEngine {
     - Body MUST be exactly ONE sentence, max 18 words.
     - Start immediately with the action. NEVER use "You've mentioned...", "Since...", or explain reasoning.
     - NEVER restate a belief back as though it were new.
-    - If an event location or room number is provided in the context, you MUST include it in the body.
+    - Include the event location in the body ONLY if an explicit 'Event location' is provided. Do NOT extract or guess locations from the event description.
+    - NEVER invent or hallucinate locations, room numbers, or preparation items that are not explicitly stated.
     - If multiple relevant insights or pending reminders exist for an event, you MUST combine them into a single sentence.
     - Ask a follow-up question ONLY to meaningfully improve understanding.
     - Address user by name occasionally, only if known.
@@ -369,6 +381,35 @@ final class FoundationModelService: ReasoningEngine {
         let response = try await session.respond(
             to: promptText,
             generating: EventPreparation.self,
+            options: Self.factual
+        )
+
+        return response.content.items
+
+    }
+
+    let contextualDeductionInstructions = """
+    Analyze the upcoming event and deduce commonly associated items or micro-tasks the user might need.
+
+    - Use common sense inference based on the event's activity (e.g., "Gym" -> gloves, whey, AirPods).
+    - Limit to 2-4 items.
+    - Keep items short (1-3 words).
+    - NEVER hallucinate completely irrelevant items. If the event is generic (e.g., "Meeting"), return an empty list unless context strongly implies specific needs.
+    - Do not repeat items already explicitly mentioned in the event description.
+
+    \(UntrustedText.instructionRule)
+    """
+
+    /// Deduces items a user might need for an upcoming event, used for pre-event proactive learning prompts.
+    func deduceContextualItems(forPromptText promptText: String) async throws -> [String] {
+
+        try requireAvailableModel()
+
+        let session = LanguageModelSession(instructions: contextualDeductionInstructions)
+
+        let response = try await session.respond(
+            to: promptText,
+            generating: ContextualDeduction.self,
             options: Self.factual
         )
 

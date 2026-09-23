@@ -12,6 +12,7 @@ import SwiftData
 /// Turns raw location changes into meaningful activity:
 /// keeps track of the user's current place and records visits
 /// in History so insights can be built from them later.
+@MainActor
 @Observable
 final class LocationActivityManager {
 
@@ -42,9 +43,9 @@ final class LocationActivityManager {
 
     init(
         context: ModelContext,
-        locationService: LocationService = LocationService()
+        locationService: LocationService? = nil
     ) {
-        self.locationService = locationService
+        self.locationService = locationService ?? LocationService()
         self.historyLogger = HistoryLogger(context: context)
         self.scheduler = ReminderScheduler(context: context)
     }
@@ -137,8 +138,5 @@ final class LocationActivityManager {
 
     }
 
-    deinit {
-        monitoringTask?.cancel()
-    }
 
 }

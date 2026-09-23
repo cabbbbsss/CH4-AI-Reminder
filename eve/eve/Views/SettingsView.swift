@@ -59,6 +59,9 @@ struct SettingsView: View {
                     }
                 }
                 
+                // EVE Plus
+                ProSettingsSection()
+
                 // Allow EVE to Access
                 SettingsSection(header: "Allow EVE to Access") {
                     SettingsCard {
@@ -100,22 +103,115 @@ struct SettingsView: View {
 //                    }
 //                }
 
-                SettingsSection(header: "Notification Diagnostics") {
-                    SettingsCard {
-                        Button {
-                            Task { try? await notificationService.scheduleTestNotification() }
-                        } label: {
-                            SettingsRow(icon: "bell.badge.fill", label: "Send test notification (5s)", showChevron: false)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+//                SettingsSection(header: "Notification Diagnostics") {
+//                    SettingsCard {
+//                        Button {
+//                            Task { @MainActor in try? await notificationService.scheduleTestNotification() }
+//                        } label: {
+//                            SettingsRow(icon: "bell.badge.fill", label: "Send test notification (5s)", showChevron: false)
+//                        }
+//                        .buttonStyle(.plain)
+//
+//                        SettingsDivider()
+//
+//                        Button {
+//                            Task { @MainActor in
+//                                let scheduler = LearningScheduler(context: modelContext)
+//                                await scheduler.testEvaluateNextEvent()
+//                            }
+//                        } label: {
+//                            SettingsRow(icon: "brain.head.profile", label: "Send learning notification (5s)", showChevron: false)
+//                        }
+//                        .buttonStyle(.plain)
+//                    }
+//                }
             }
             .padding(.top, 16)
             .padding(.bottom, 40)
         }
         .task {
             profile = UserProfile.current(in: modelContext)
+        }
+    }
+}
+
+// MARK: - EVE Plus
+
+/// Subscription status, the paywall, and the Customer Center.
+///
+/// Everything here reads `SubscriptionService`, never `Purchases` directly, so
+/// the entitlement has exactly one definition in the app. The two sheets are
+/// rendered by RevenueCat from the dashboard, which is why they don't use the
+/// EVE colour assets the rest of this screen does.
+struct ProSettingsSection: View {
+    @Bindable private var subscriptions = SubscriptionService.shared
+
+    @State private var isShowingPaywall = false
+    @State private var isShowingCustomerCenter = false
+    @State private var isRestoring = false
+
+    /// `lastErrorMessage` doubles as the alert trigger — set it to present,
+    /// clear it on dismiss.
+    private var errorAlert: Binding<Bool> {
+        Binding(
+            get: { subscriptions.lastErrorMessage != nil },
+            set: { if !$0 { subscriptions.lastErrorMessage = nil } }
+        )
+    }
+
+    var body: some View {
+        SettingsSection(header: SubscriptionService.displayName) {
+            SettingsCard {
+                SettingsValueRow(label: "Membership", value: .constant(subscriptions.statusDescription))
+
+                SettingsDivider()
+
+                if subscriptions.isPro {
+                    // Customer Center covers cancel, refund, plan change and
+                    // the churn survey, so there is no reason to punt the user
+                    // out to the Settings app.
+                    Button {
+                        isShowingCustomerCenter = true
+                    } label: {
+                        SettingsRow(icon: "person.crop.circle.badge.checkmark", label: "Manage Subscription")
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Button {
+                        isShowingPaywall = true
+                    } label: {
+                        SettingsRow(icon: "sparkles", label: "Upgrade to \(SubscriptionService.displayName)")
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                SettingsDivider()
+
+                // App Review requires a restore path for subscriptions, and it
+                // is what fixes a reinstall or a new device.
+                Button {
+                    Task {
+                        isRestoring = true
+                        await subscriptions.restorePurchases()
+                        isRestoring = false
+                    }
+                } label: {
+                    SettingsRow(
+                        icon: "arrow.clockwise",
+                        label: isRestoring ? "Restoring…" : "Restore Purchases",
+                        showChevron: false
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(isRestoring)
+            }
+        }
+        .evePaywall(isPresented: $isShowingPaywall)
+        .eveCustomerCenter(isPresented: $isShowingCustomerCenter)
+        .alert(SubscriptionService.displayName, isPresented: errorAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(subscriptions.lastErrorMessage ?? "")
         }
     }
 }

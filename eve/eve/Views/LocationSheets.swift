@@ -75,6 +75,7 @@ struct ReminderEditSheet: View {
                 if let reminder {
                     Section {
                         Button("Remove Reminder", role: .destructive) {
+                            LocationReminderNotificationCoordinator.shared.cancel(reminder)
                             router?.remove(reminder)
                             dismiss()
                         }
@@ -129,6 +130,12 @@ struct ReminderEditSheet: View {
 
             modelContext.insert(created)
             try? modelContext.save()
+            if let selectedLocation = allLocations.first(where: { $0.id == locationID }) {
+                Task {
+                    await LocationReminderNotificationCoordinator.shared
+                        .scheduleAfterManualSave(created, at: selectedLocation)
+                }
+            }
             return
         }
 
@@ -156,6 +163,67 @@ struct ReminderEditSheet: View {
         }
 
         try? modelContext.save()
+        Task {
+            await LocationReminderNotificationCoordinator.shared.reconcile(context: modelContext)
+        }
+
+    }
+
+}
+
+/// Adds a freeform reminder directly to a place — not sourced from the
+/// Reminders app, so refresh leaves it alone (itemKey nil, user-owned).
+struct AddReminderSheet: View {
+
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+
+    var location: SavedLocation
+
+    @State private var text: String = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("New reminder for \(location.name)") {
+                    TextField("What should Eve remind you here?", text: $text)
+                }
+            }
+            .navigationTitle("Add Reminder")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        add()
+                        dismiss()
+                    }
+                    .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func add() {
+
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let reminder = LocationReminder(
+            locationID: location.id,
+            text: trimmed,
+            itemKey: nil,
+            isSystemManaged: false
+        )
+        modelContext.insert(reminder)
+
+        try? modelContext.save()
+        Task {
+            await LocationReminderNotificationCoordinator.shared
+                .scheduleAfterManualSave(reminder, at: location)
+        }
 
     }
 

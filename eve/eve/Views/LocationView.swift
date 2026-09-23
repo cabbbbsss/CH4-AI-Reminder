@@ -12,8 +12,13 @@ struct LocationView: View {
     /// on Home too; here they sit under the place they're pinned to.
     @Query private var calendarReminders: [CalendarReminder]
 
+    /// Free accounts get one saved place; the second one is behind the paywall.
+    @Bindable private var subscriptions = SubscriptionService.shared
+
     @State private var routingManager: LocationRoutingManager?
     @State private var isSeeding = false
+
+    @State private var isShowingPaywall = false
 
     /// The place whose reminders are currently shown. `nil` falls back to the
     /// first saved place (see `activeLocation`) so Home is selected by default.
@@ -66,6 +71,15 @@ struct LocationView: View {
         .sheet(isPresented: $addingLocation) {
             AddLocationSheet(nextSortOrder: savedLocations.count)
         }
+        .evePaywall(isPresented: $isShowingPaywall) {
+            // Pick up what the lock interrupted. The paywall is still
+            // dismissing on this frame, so hand the add sheet the next one —
+            // presented now it would be swallowed by the sheet on its way out.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(450))
+                addingLocation = true
+            }
+        }
         .sheet(item: $editingReminder) { reminder in
             ReminderEditSheet(
                 reminder: reminder,
@@ -92,7 +106,8 @@ struct LocationView: View {
             if selectedLocationID == nil {
                 selectedLocationID = savedLocations.first?.id
             }
-            await seedDefaultsIfNeeded()
+            await seedRemindersIfNeeded()
+            await LocationReminderNotificationCoordinator.shared.reconcile(context: modelContext)
         }
         .onChange(of: savedLocations.map(\.id)) { _, ids in
             // Keep the filter pointed at a place that still exists — e.g. after
@@ -154,18 +169,30 @@ struct LocationView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Theme.Spacing.xs) {
                 // Add a new place — sits to the left of the location chips.
-                Button {
-                    addingLocation = true
-                } label: {
+                // Past the free allowance it wears a lock and opens the
+                // paywall instead, so the limit is visible before it is hit
+                // rather than announced by an error afterwards.
+                // Same view structure and modifiers as Calendar's header "+".
+                Button(action: beginAddingLocation) {
                     Image(systemName: "plus")
-                        .font(.eveCardTitle)
-                        .frame(width: Theme.Spacing.l, height: Theme.Spacing.l)
+                        .font(.title3)
+                        .foregroundStyle(Color.eveOnSurface)
+                        .padding(Theme.Spacing.xs)
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
-                .controlSize(.large)
-                .tint(Color.eveOnSurface)
-                .accessibilityLabel("Add location")
+                // Badged on the button rather than its label: the circular
+                // border shape clips the label, and the lock is meant to
+                // break that edge.
+                .overlay(alignment: .bottomTrailing) {
+                    if !canAddLocation {
+                        LockBadge()
+                            .offset(x: 3, y: 3)
+                    }
+                }
+                .accessibilityLabel(canAddLocation
+                                    ? "Add location"
+                                    : "Add location, requires \(SubscriptionService.displayName)")
 
                 ForEach(savedLocations) { location in
                     LocationChip(
@@ -383,9 +410,7 @@ struct LocationView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, Theme.Spacing.xxl)
 
-            Button {
-                addingLocation = true
-            } label: {
+            Button(action: beginAddingLocation) {
                 Label("Add Location", systemImage: "plus")
                     .font(.eveButton)
                     // Grows with the label instead of a fixed 200×40 box, so
@@ -401,6 +426,12 @@ struct LocationView: View {
     }
 
     // MARK: - Data
+
+    /// Whether the + opens the add sheet or the paywall. Reads the cached
+    /// entitlement, so it is correct offline and safe in a view body.
+    private var canAddLocation: Bool {
+        subscriptions.canAddLocation(currentCount: savedLocations.count)
+    }
 
     /// The place currently shown — the selected one, or the first saved place
     /// as a default so the screen never shows an empty filter when places exist.
@@ -459,27 +490,31 @@ struct LocationView: View {
 
     // MARK: - Actions
 
-    /// Seeds Home/Office on first launch, then auto-generates reminders
-    /// only for places that have never been seeded before. Re-entering this
-    /// screen must NOT re-ask the model for places it already learned —
-    /// each call is a fresh, non-deterministic generation, so that would
-    /// silently reshuffle wording every time the user opens Locations.
+    /// One door for every "add a place" affordance on this screen, so the
+    /// limit can't be walked around by using the empty state instead of the +.
+    private func beginAddingLocation() {
+        if canAddLocation {
+            addingLocation = true
+        } else {
+            isShowingPaywall = true
+        }
+    }
+
+    /// Auto-generates reminders for places that have never been seeded before.
+    ///
+    /// The screen deliberately starts with no places at all. It used to insert
+    /// Home and Office on first launch; with a free account limited to one
+    /// place, seeding would spend the user's only slot on a guess — and which
+    /// place it goes to is exactly the choice they should make.
+    ///
+    /// Re-entering this screen must NOT re-ask the model for places it already
+    /// learned — each call is a fresh, non-deterministic generation, so that
+    /// would silently reshuffle wording every time the user opens Locations.
     /// Picking up new calendar activity is what the manual refresh button
     /// (always unconditional — see `refresh()`) is for.
-    private func seedDefaultsIfNeeded() async {
+    private func seedRemindersIfNeeded() async {
 
-        var needsSeed = false
-
-        if savedLocations.isEmpty {
-            modelContext.insert(SavedLocation(name: "Home", iconName: "house.fill", isDefault: true, sortOrder: 0))
-            modelContext.insert(SavedLocation(name: "Office", iconName: "building.2.fill", isDefault: true, sortOrder: 1))
-            try? modelContext.save()
-            needsSeed = true
-        } else if savedLocations.contains(where: { !$0.hasBeenSeeded }) {
-            needsSeed = true
-        }
-
-        guard needsSeed else { return }
+        guard savedLocations.contains(where: { !$0.hasBeenSeeded }) else { return }
 
         await refresh()
 
@@ -495,6 +530,7 @@ struct LocationView: View {
     private func delete(_ location: SavedLocation) {
 
         for reminder in reminders(for: location) {
+            LocationReminderNotificationCoordinator.shared.cancel(reminder)
             modelContext.delete(reminder)
         }
 
@@ -546,6 +582,10 @@ struct LocationView: View {
         switch entry {
         case .routed(let reminder):
             routingManager?.toggleCompletion(reminder)
+            Task {
+                await LocationReminderNotificationCoordinator.shared
+                    .reconcile(context: modelContext)
+            }
         case .pinned(let reminder):
             let scheduler = ReminderScheduler(context: modelContext)
             Task { await scheduler.setCompleted(reminder, !reminder.isCompleted) }
@@ -555,6 +595,7 @@ struct LocationView: View {
     private func delete(_ entry: PlaceEntry) {
         switch entry {
         case .routed(let reminder):
+            LocationReminderNotificationCoordinator.shared.cancel(reminder)
             routingManager?.remove(reminder)
         case .pinned(let reminder):
             // Deleting from here removes the reminder itself, not just the
@@ -571,6 +612,22 @@ struct LocationView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             withAnimation { toast = nil }
         }
+    }
+}
+
+// MARK: - Lock badge
+
+/// The padlock that marks a locked affordance. Filled with the surface colour
+/// so it reads as sitting on top of the control it badges rather than inside it.
+private struct LockBadge: View {
+    var body: some View {
+        Image(systemName: "lock.fill")
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(Color.eveOnSurface)
+            .padding(4)
+            .background(Circle().fill(Color.eveSurface))
+            .overlay(Circle().stroke(Color.eveOnSurface.opacity(0.08), lineWidth: 1))
+            .accessibilityHidden(true)
     }
 }
 

@@ -43,7 +43,8 @@ struct MockScenario: Decodable {
             upcomingEvents: upcomingEvents,
             insights: insights,
             recentHistory: recentHistory,
-            answeredQuestions: answeredQuestions
+            answeredQuestions: answeredQuestions,
+            contextualPreferences: []
         )
     }
 }

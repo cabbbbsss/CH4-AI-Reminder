@@ -51,6 +51,11 @@ struct ReminderDetailsView: View {
     /// Pushes the Location screen.
     @State private var isPickingPlace = false
 
+    /// Saving a reminder can mint a new `SavedLocation`, so it sits behind
+    /// the same free-account limit the Location tab's + button enforces.
+    @Bindable private var subscriptions = SubscriptionService.shared
+    @State private var isShowingPaywall = false
+
     @State private var isShowingDatePicker = false
     @State private var isShowingTimePicker = false
 
@@ -150,8 +155,12 @@ struct ReminderDetailsView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
-                        save()
-                        dismiss()
+                        if isOverPlaceLimit {
+                            isShowingPaywall = true
+                        } else {
+                            save()
+                            dismiss()
+                        }
                     } label: {
                         Image(systemName: "checkmark")
                     }
@@ -162,6 +171,15 @@ struct ReminderDetailsView: View {
             }
             .navigationDestination(isPresented: $isPickingPlace) {
                 ReminderLocationPicker(place: $place, trigger: $locationTrigger)
+            }
+            .evePaywall(isPresented: $isShowingPaywall) {
+                // Finish the save the lock interrupted, a frame after the
+                // paywall has finished dismissing.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(450))
+                    save()
+                    dismiss()
+                }
             }
             .onAppear(perform: load)
             // Blocks the swipe while there is unsaved work. On its own this
@@ -486,10 +504,9 @@ struct ReminderDetailsView: View {
         }
     }
 
-    /// The `SavedLocation` a pick stands for: the one it came from, one
-    /// already saved at the same spot, or a new row. Picking the office
-    /// twice shouldn't give the Location tab two offices.
-    private func savedLocation(for place: ReminderPlace) -> SavedLocation {
+    /// The saved place a pick already matches: the one it came from, or one
+    /// saved at the same spot. Nil means saving would add a new place.
+    private func existingSavedLocation(for place: ReminderPlace) -> SavedLocation? {
 
         if let existing = places.first(where: { $0.id == place.savedID }) {
             return existing
@@ -498,12 +515,26 @@ struct ReminderDetailsView: View {
         // ~30 m — close enough to be the same building, far enough that two
         // shops on one street stay distinct.
         let tolerance = 0.0003
-        if let latitude = place.latitude, let longitude = place.longitude,
-           let nearby = places.first(where: {
-               guard let lat = $0.latitude, let lon = $0.longitude else { return false }
-               return abs(lat - latitude) < tolerance && abs(lon - longitude) < tolerance
-           }) {
-            return nearby
+        guard let latitude = place.latitude, let longitude = place.longitude else { return nil }
+        return places.first(where: {
+            guard let lat = $0.latitude, let lon = $0.longitude else { return false }
+            return abs(lat - latitude) < tolerance && abs(lon - longitude) < tolerance
+        })
+    }
+
+    /// True when saving would add a place past the free allowance.
+    private var isOverPlaceLimit: Bool {
+        guard hasLocation, let place, existingSavedLocation(for: place) == nil else { return false }
+        return !subscriptions.canAddLocation(currentCount: places.count)
+    }
+
+    /// The `SavedLocation` a pick stands for: the one it came from, one
+    /// already saved at the same spot, or a new row. Picking the office
+    /// twice shouldn't give the Location tab two offices.
+    private func savedLocation(for place: ReminderPlace) -> SavedLocation {
+
+        if let existing = existingSavedLocation(for: place) {
+            return existing
         }
 
         let saved = SavedLocation(

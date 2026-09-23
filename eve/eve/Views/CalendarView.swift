@@ -9,8 +9,19 @@ private struct CalendarReminderGroup: Identifiable {
     var id: String { "\(occurrenceID)-\(reminderDate.timeIntervalSince1970)" }
 }
 
+/// Every reminder due at (overlapping) the same moment, regardless of which
+/// event — or none — they came from. Rendered as one collapsed pill (the
+/// earliest reminder's text, plus a "N more" tag) instead of letting each
+/// one fight for its own sliver of column, the way the native Calendar app
+/// collapses simultaneous reminders into a single chip you tap into.
+private struct ReminderStack: Identifiable {
+    let id: String
+    /// Sorted earliest-first; `reminders[0]` is the one shown on the pill.
+    let reminders: [CalendarReminder]
+}
+
 private struct DayCanvasItem: Identifiable {
-    enum Kind { case event(CalendarEvent), reminder(CalendarReminderGroup) }
+    enum Kind { case event(CalendarEvent), reminder(ReminderStack) }
     let id: String
     let startMinute: Int
     let endMinute: Int
@@ -78,13 +89,20 @@ struct CalendarView: View {
     @State private var isShowingDatePicker = false
     @State private var isGenerating = false
     @State private var editingReminder: CalendarReminder?
+    @State private var reminderStackToShow: ReminderStack?
     @State private var selectedEvent: CalendarEvent?
     @State private var isAddingReminder = false
     @State private var currentTime: Date = .now
     @State private var reminderManager: CalendarReminderManager?
     @State private var syncManager: EventKitSyncManager?
+    @AppStorage("calendarHourScale") private var hourScale: Double = 1.0
 
     private var palette: CalendarPalette { CalendarPalette(colorScheme: colorScheme) }
+    /// Shared across the pager's three day instances so pinch-to-zoom (see
+    /// `DayTimeline`) survives a swipe between days, and across launches.
+    private var hourScaleBinding: Binding<CGFloat> {
+        Binding(get: { CGFloat(hourScale) }, set: { hourScale = Double($0) })
+    }
     private var isToday: Bool { Calendar.current.isDateInToday(selectedDate) }
 
     var body: some View {
@@ -111,6 +129,13 @@ struct CalendarView: View {
             }.presentationDetents([.medium, .large])
         }
         .sheet(item: $editingReminder) { CalendarReminderEditSheet(reminder: $0, manager: reminderManager) }
+        .sheet(item: $reminderStackToShow) { stack in
+            CalendarReminderStackSheet(
+                stack: stack,
+                onSelect: { reminderStackToShow = nil; editingReminder = $0 },
+                onToggle: { reminderManager?.toggleCompletion(for: $0) }
+            )
+        }
         .sheet(item: $selectedEvent) { CalendarEventDetailSheet(event: $0) }
         .sheet(isPresented: $isAddingReminder) { ReminderDetailsView(defaultDate: selectedDate) }
         .onChange(of: selectedDate) { _, date in displayedWeekStart = Calendar.weekStart(containing: date) }
@@ -218,10 +243,11 @@ struct CalendarView: View {
                 let date = date(byAddingDays: offset, to: selectedDate)
                 return DayTimeline(
                     date: date, events: events, reminders: reminders, currentTime: currentTime,
-                    palette: palette,
+                    palette: palette, hourScale: hourScaleBinding,
                     onEventTap: { selectedEvent = $0 },
                     onReminderTap: { editingReminder = $0 },
-                    onToggleReminder: { reminderManager?.toggleCompletion(for: $0) }
+                    onToggleReminder: { reminderManager?.toggleCompletion(for: $0) },
+                    onShowMoreReminders: { reminderStackToShow = $0 }
                 )
             },
             onCommit: { direction in
@@ -267,12 +293,35 @@ private struct DayTimeline: View {
     let reminders: [CalendarReminder]
     let currentTime: Date
     let palette: CalendarPalette
+    @Binding var hourScale: CGFloat
     let onEventTap: (CalendarEvent) -> Void
     let onReminderTap: (CalendarReminder) -> Void
     let onToggleReminder: (CalendarReminder) -> Void
+    let onShowMoreReminders: (ReminderStack) -> Void
     @State private var didInitialScroll = false
+    @GestureState private var pinchMagnification: CGFloat = 1
 
-    private var hourHeight: CGFloat { dynamicTypeSize.isAccessibilitySize ? 72 : 56 }
+    /// Pinch-to-zoom, like the native Calendar app's day view: two fingers on
+    /// the timeline stretch or compress the hour rows. `hourScale` is the
+    /// committed zoom level (persisted); `pinchMagnification` is the live,
+    /// uncommitted delta from an in-flight gesture.
+    private static let minHourHeight: CGFloat = 40
+    private static let maxHourHeight: CGFloat = 170
+    private var baseHourHeight: CGFloat { dynamicTypeSize.isAccessibilitySize ? 72 : 56 }
+    private var hourHeight: CGFloat {
+        let raw = baseHourHeight * hourScale * pinchMagnification
+        return min(max(raw, Self.minHourHeight), Self.maxHourHeight)
+    }
+    private var pinchGesture: some Gesture {
+        MagnificationGesture()
+            .updating($pinchMagnification) { value, state, _ in state = value }
+            .onEnded { value in
+                let combined = hourScale * value
+                let minScale = Self.minHourHeight / baseHourHeight
+                let maxScale = Self.maxHourHeight / baseHourHeight
+                hourScale = min(max(combined, minScale), maxScale)
+            }
+    }
     private let timeGutter: CGFloat = 58
     private var dayStart: Date { Calendar.current.startOfDay(for: date) }
     private var dayEnd: Date { Calendar.current.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart.addingTimeInterval(86_400) }
@@ -288,15 +337,39 @@ private struct DayTimeline: View {
             }.sorted { $0.reminderDate < $1.reminderDate }
     }
 
+    /// Collapses reminder groups whose time overlaps — regardless of which
+    /// event, or none, they came from — into one stack each, so several
+    /// reminders due at once render as a single pill instead of each
+    /// claiming its own sliver of the timeline.
+    private var reminderStacks: [ReminderStack] {
+        let groups = reminderGroups
+        guard !groups.isEmpty else { return [] }
+        let groupIntervals = groups.map { group -> CalendarDayInterval in
+            let start = minuteOffset(for: group.reminderDate)
+            let end = min(1_440, start + max(30, group.reminders.count * 30))
+            return CalendarDayInterval(id: group.id, startMinute: start, endMinute: end)
+        }
+        let groupByID = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0) })
+        return CalendarDayLayout.clusters(for: groupIntervals).compactMap { cluster in
+            let clusterGroups = cluster.compactMap { groupByID[$0.id] }
+            guard !clusterGroups.isEmpty else { return nil }
+            let reminders = clusterGroups.flatMap(\.reminders).sorted {
+                $0.reminderDate == $1.reminderDate ? $0.createdAt < $1.createdAt : $0.reminderDate < $1.reminderDate
+            }
+            return ReminderStack(id: cluster.map(\.id).sorted().joined(separator: "|"), reminders: reminders)
+        }
+    }
+
     private var canvasItems: [DayCanvasItem] {
         let eventItems = timedEvents.map { event -> DayCanvasItem in
             let start = minuteOffset(for: max(event.startDate, dayStart))
             let end = max(minuteOffset(for: min(event.endDate, dayEnd)), start + 24)
             return DayCanvasItem(id: "event-\(event.occurrenceID)", startMinute: start, endMinute: end, kind: .event(event))
         }
-        let reminderItems = reminderGroups.map { group -> DayCanvasItem in
-            let start = minuteOffset(for: group.reminderDate)
-            return DayCanvasItem(id: "reminder-\(group.id)", startMinute: start, endMinute: min(1_440, start + max(30, group.reminders.count * 30)), kind: .reminder(group))
+        let reminderItems = reminderStacks.compactMap { stack -> DayCanvasItem? in
+            guard let primary = stack.reminders.first else { return nil }
+            let start = minuteOffset(for: primary.reminderDate)
+            return DayCanvasItem(id: "reminder-\(stack.id)", startMinute: start, endMinute: min(1_440, start + 30), kind: .reminder(stack))
         }
         return eventItems + reminderItems
     }
@@ -310,6 +383,8 @@ private struct DayTimeline: View {
                         .frame(height: hourHeight * 24)
                 }
                 .scrollIndicators(.hidden).background(palette.canvas)
+                .simultaneousGesture(pinchGesture)
+                .animation(.interactiveSpring(), value: hourScale)
                 .task(id: date) {
                     didInitialScroll = false
                     await scrollInitially(using: proxy)
@@ -323,33 +398,90 @@ private struct DayTimeline: View {
             Text("ALL-DAY").font(.caption2.weight(.semibold)).foregroundStyle(palette.secondaryText)
             ForEach(allDayEvents) { event in
                 Button { onEventTap(event) } label: {
-                    Text(event.title).font(.caption.weight(.semibold)).foregroundStyle(palette.eventText).lineLimit(1)
+                    Text(event.title).font(.caption.weight(.semibold))
+                        .foregroundStyle(palette.eventText.opacity(palette.eventTextOpacity)).lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 9).padding(.vertical, 7)
-                        .background(palette.eventFill).clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .background(palette.eventFill.opacity(palette.eventFillOpacity))
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                 }.buttonStyle(.plain)
             }
         }
     }
 
+    /// Events lay out in their own columns, exactly like before.
+    /// Reminders never contend with events for a column: a reminder whose
+    /// time falls *during* a live event overlays that event's slot (like
+    /// the native Calendar app drawing a due reminder inside whatever
+    /// meeting is happening then, regardless of whether they're related);
+    /// one with no event underneath lays out against other such reminders
+    /// only, so simultaneous stray reminders still avoid each other.
+    /// (Apple doesn't publish the real day-view algorithm — Calendar.app is
+    /// closed-source and Apple's own forums note the exact stacking rules
+    /// aren't documented — this is reverse-engineered from how the native
+    /// app actually renders overlapping items.)
     @ViewBuilder private func dayCanvas(width: CGFloat) -> some View {
-        let placements = CalendarDayLayout.placements(for: canvasItems.map { CalendarDayInterval(id: $0.id, startMinute: $0.startMinute, endMinute: $0.endMinute) })
-        let placementByID = Dictionary(uniqueKeysWithValues: placements.map { ($0.id, $0) })
+        let eventIntervals = canvasItems.compactMap { item -> CalendarDayInterval? in
+            guard case .event = item.kind else { return nil }
+            return CalendarDayInterval(id: item.id, startMinute: item.startMinute, endMinute: item.endMinute)
+        }
+        let reminderIntervals = canvasItems.compactMap { item -> CalendarDayInterval? in
+            guard case .reminder = item.kind else { return nil }
+            return CalendarDayInterval(id: item.id, startMinute: item.startMinute, endMinute: item.endMinute)
+        }
+        let eventPlacements = CalendarDayLayout.placements(for: eventIntervals)
+        let reminderPlacements = CalendarDayLayout.placements(for: reminderIntervals)
+        let reminderPlacementByID = Dictionary(uniqueKeysWithValues: reminderPlacements.map { ($0.id, $0) })
         let contentWidth = max(width - timeGutter - 10, 1)
         ZStack(alignment: .topLeading) {
             ForEach(0..<24, id: \.self) { hour in hourRule(hour: hour, contentWidth: contentWidth).id("hour-\(hour)") }
             ForEach(canvasItems) { item in
-                if let placement = placementByID[item.id] {
-                    let columnWidth = (contentWidth - CGFloat(placement.columnCount - 1) * 3) / CGFloat(placement.columnCount)
-                    dayItem(item)
-                        .frame(width: columnWidth, height: blockHeight(for: item))
-                        .offset(x: timeGutter + CGFloat(placement.column) * (columnWidth + 3), y: yPosition(for: item.startMinute))
-                }
+                let box = layoutBox(
+                    for: item, eventPlacements: eventPlacements, reminderPlacements: reminderPlacementByID,
+                    contentWidth: contentWidth
+                )
+                dayItem(item, height: blockHeight(for: item))
+                    .frame(width: box.width, height: blockHeight(for: item))
+                    .offset(x: box.x, y: yPosition(for: item.startMinute))
             }
             if Calendar.current.isDateInToday(date) {
                 let minute = minuteOffset(for: currentTime)
                 if (0...1_440).contains(minute) { nowLine(minute: minute, width: contentWidth) }
             }
         }.background(palette.canvas)
+    }
+
+    private struct DayItemBox { let x: CGFloat; let width: CGFloat }
+
+    private func intervalsOverlap(_ item: DayCanvasItem, _ interval: CalendarDayInterval) -> Bool {
+        item.startMinute < interval.endMinute && item.endMinute > interval.startMinute
+    }
+
+    /// The horizontal slot an item draws in.
+    private func layoutBox(
+        for item: DayCanvasItem, eventPlacements: [CalendarDayPlacement],
+        reminderPlacements: [String: CalendarDayPlacement], contentWidth: CGFloat
+    ) -> DayItemBox {
+        func box(for placement: CalendarDayPlacement) -> DayItemBox {
+            let columnWidth = (contentWidth - CGFloat(placement.columnCount - 1) * 3) / CGFloat(placement.columnCount)
+            return DayItemBox(x: timeGutter + CGFloat(placement.column) * (columnWidth + 3), width: columnWidth)
+        }
+        let eventPlacementByID = Dictionary(uniqueKeysWithValues: eventPlacements.map { ($0.id, $0) })
+        switch item.kind {
+        case .event:
+            guard let placement = eventPlacementByID[item.id] else { return DayItemBox(x: timeGutter, width: contentWidth) }
+            return box(for: placement)
+        case .reminder:
+            // Prefer the leftmost event actually happening during this
+            // reminder's slot; only a reminder with nothing live underneath
+            // falls back to sharing space with other stray reminders.
+            if let liveEvent = eventPlacements
+                .filter({ intervalsOverlap(item, $0.interval) })
+                .min(by: { $0.column < $1.column }) {
+                return box(for: liveEvent)
+            }
+            guard let placement = reminderPlacements[item.id] else { return DayItemBox(x: timeGutter, width: contentWidth) }
+            return box(for: placement)
+        }
     }
 
     private func hourRule(hour: Int, contentWidth: CGFloat) -> some View {
@@ -360,13 +492,16 @@ private struct DayTimeline: View {
         }.offset(y: CGFloat(hour) * hourHeight)
     }
 
-    @ViewBuilder private func dayItem(_ item: DayCanvasItem) -> some View {
+    @ViewBuilder private func dayItem(_ item: DayCanvasItem, height: CGFloat) -> some View {
         switch item.kind {
         case .event(let event):
-            EventBlock(event: event, palette: palette).onTapGesture { onEventTap(event) }
+            EventBlock(event: event, palette: palette, height: height).onTapGesture { onEventTap(event) }
                 .accessibilityElement(children: .combine).accessibilityAddTraits(.isButton)
         case .reminder(let group):
-            ReminderBlock(group: group, palette: palette, onTap: onReminderTap, onToggle: onToggleReminder)
+            ReminderStackBlock(
+                stack: group, palette: palette, height: height,
+                onTap: onReminderTap, onToggle: onToggleReminder, onShowMore: onShowMoreReminders
+            )
         }
     }
 
@@ -375,12 +510,15 @@ private struct DayTimeline: View {
             Text(currentTime.formatted(date: .omitted, time: .shortened)).font(.caption2.weight(.bold)).foregroundStyle(palette.accent)
                 .frame(width: timeGutter - 4, alignment: .trailing).padding(.trailing, 4)
             Circle().fill(palette.accent).frame(width: 8, height: 8)
-            Rectangle().fill(palette.accent).frame(width: width - 4, height: 1.5)
+            Rectangle().fill(palette.accent).frame(width: max(0, width - 4), height: 1.5)
         }.offset(y: yPosition(for: minute) - 4).accessibilityHidden(true)
     }
 
     private func yPosition(for minutes: Int) -> CGFloat { CGFloat(minutes) / 60 * hourHeight }
-    private func blockHeight(for item: DayCanvasItem) -> CGFloat { max(32, CGFloat(item.endMinute - item.startMinute) / 60 * hourHeight - 2) }
+    private func blockHeight(for item: DayCanvasItem) -> CGFloat {
+        let span = CGFloat(item.endMinute - item.startMinute) / 60 * hourHeight - 2
+        return max(min(30, hourHeight * 0.4), span)
+    }
     private func minuteOffset(for date: Date) -> Int { max(0, min(1_440, Int(date.timeIntervalSince(dayStart) / 60))) }
     private func hourDate(_ hour: Int) -> Date { Calendar.current.date(byAdding: .hour, value: hour, to: dayStart) ?? dayStart }
 
@@ -399,46 +537,124 @@ private struct DayTimeline: View {
 private struct EventBlock: View {
     let event: CalendarEvent
     let palette: CalendarPalette
+    /// The slot this block was given. A short event — either because it is
+    /// brief or because the timeline is pinched closed — drops its time row
+    /// and tightens its type rather than spilling out of its box, the way
+    /// the native Calendar app thins out short events as you zoom out.
+    let height: CGFloat
+
+    private var showsTime: Bool { height >= 44 }
+    private var isCompact: Bool { height < 28 }
+    private var titleFont: Font { isCompact ? .caption2.weight(.semibold) : .caption.weight(.bold) }
+    private var verticalPadding: CGFloat { isCompact ? 2 : 6 }
+
     var body: some View {
         HStack(spacing: 0) {
-            Capsule().fill(palette.accent).frame(width: 3).padding(.vertical, 4)
+            Capsule().fill(palette.accent.opacity(0.5)).frame(width: 3).padding(.vertical, isCompact ? 2 : 4)
             VStack(alignment: .leading, spacing: 2) {
-                Text(event.title).font(.caption.weight(.bold)).lineLimit(2)
-                Text("\(event.startDate.formatted(date: .omitted, time: .shortened)) – \(event.endDate.formatted(date: .omitted, time: .shortened))").font(.caption2).lineLimit(1)
-                if let location = event.location, !location.isEmpty { Text(location).font(.caption2).lineLimit(1) }
-            }.foregroundStyle(palette.eventText).padding(.horizontal, 7).padding(.vertical, 6)
+                Text(event.title).font(titleFont).lineLimit(showsTime ? 2 : 1)
+                if showsTime {
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock")
+                        Text("\(event.startDate.formatted(date: .omitted, time: .shortened)) – \(event.endDate.formatted(date: .omitted, time: .shortened))")
+                    }.font(.caption2).lineLimit(1)
+                }
+            }
+            .foregroundStyle(palette.eventText.opacity(palette.eventTextOpacity))
+            .padding(.horizontal, 7).padding(.vertical, verticalPadding)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(palette.eventFill).clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .background(palette.eventFill.opacity(palette.eventFillOpacity))
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 }
 
-private struct ReminderBlock: View {
-    let group: CalendarReminderGroup
+private struct ReminderStackBlock: View {
+    let stack: ReminderStack
     let palette: CalendarPalette
+    /// Same idea as `EventBlock`: the trailing time drops out and the type
+    /// tightens once the pinched-closed timeline leaves no room for it.
+    let height: CGFloat
     let onTap: (CalendarReminder) -> Void
     let onToggle: (CalendarReminder) -> Void
+    let onShowMore: (ReminderStack) -> Void
+
+    private var primary: CalendarReminder { stack.reminders[0] }
+    private var moreCount: Int { stack.reminders.count - 1 }
+    private var isCompact: Bool { height < 30 }
+    private var showsTime: Bool { !isCompact }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            ForEach(group.reminders) { reminder in
-                HStack(spacing: 7) {
-                    Button { onToggle(reminder) } label: {
-                        Image(systemName: reminder.isCompleted ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(reminder.isCompleted ? palette.secondaryText : palette.accent).font(.body)
-                    }.buttonStyle(.plain).accessibilityLabel(reminder.isCompleted ? "Mark reminder incomplete" : "Complete reminder")
-                    Button { onTap(reminder) } label: {
-                        Text(reminder.text).font(.caption.weight(.semibold)).strikethrough(reminder.isCompleted)
-                            .foregroundStyle(reminder.isCompleted ? palette.secondaryText : palette.primaryText).lineLimit(2)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }.buttonStyle(.plain).accessibilityLabel("Edit reminder: \(reminder.text)")
-                }.opacity(reminder.isCompleted ? 0.55 : 1)
+        HStack(spacing: 8) {
+            Button { onToggle(primary) } label: {
+                Image(systemName: primary.isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(isCompact ? .caption : .body).foregroundStyle(Color(.textSecondary))
+            }.buttonStyle(.plain).accessibilityLabel(primary.isCompleted ? "Mark reminder incomplete" : "Complete reminder")
+
+            // A stack of one behaves exactly like a single reminder pill
+            // always did: tap opens it directly. A stack of several
+            // collapses into "<first> · N more" and opens the list instead,
+            // the way the native Calendar app collapses simultaneous
+            // reminders into one chip you tap into.
+            Button { moreCount > 0 ? onShowMore(stack) : onTap(primary) } label: {
+                HStack(spacing: 6) {
+                    Text(primary.text).font(isCompact ? .caption2.weight(.semibold) : .caption.weight(.semibold))
+                        .strikethrough(primary.isCompleted)
+                        .foregroundStyle(Color(.textSecondary)).lineLimit(1)
+                    if moreCount > 0 {
+                        Text("\(moreCount) more").font(.caption2).foregroundStyle(Color(.textSecondary).opacity(0.7)).lineLimit(1)
+                        Spacer(minLength: 0)
+                    } else {
+                        Spacer(minLength: 0)
+                        if showsTime {
+                            HStack(spacing: 3) {
+                                Image(systemName: "clock")
+                                Text(primary.reminderDate.formatted(date: .omitted, time: .shortened))
+                            }.font(.caption2).foregroundStyle(Color(.textSecondary).opacity(0.8)).lineLimit(1)
+                        }
+                    }
+                }.frame(maxWidth: .infinity, alignment: .leading)
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(moreCount > 0 ? "\(primary.text) and \(moreCount) more reminder\(moreCount == 1 ? "" : "s")" : "Edit reminder: \(primary.text)")
         }
-        .padding(.horizontal, 7).padding(.vertical, 6).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(palette.reminderFill)
-        .overlay { RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(palette.reminderStroke, lineWidth: 1) }
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .padding(.horizontal, 9).padding(.vertical, isCompact ? 3 : 7)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(Color(.textPrimary))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .opacity(primary.isCompleted ? 0.55 : 1)
+    }
+}
+
+private struct CalendarReminderStackSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let stack: ReminderStack
+    let onSelect: (CalendarReminder) -> Void
+    let onToggle: (CalendarReminder) -> Void
+    var body: some View {
+        NavigationStack {
+            List(stack.reminders) { reminder in
+                Button { onSelect(reminder) } label: {
+                    HStack(spacing: 10) {
+                        Button { onToggle(reminder) } label: {
+                            Image(systemName: reminder.isCompleted ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(reminder.isCompleted ? .secondary : Color.accentColor)
+                        }.buttonStyle(.plain)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(reminder.text).strikethrough(reminder.isCompleted).foregroundStyle(.primary)
+                            Text(reminder.reminderDate.formatted(date: .omitted, time: .shortened))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                }.buttonStyle(.plain)
+            }
+            .navigationTitle(stack.reminders.first?.reminderDate.formatted(date: .abbreviated, time: .omitted) ?? "Reminders")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+        .presentationDetents([.medium])
     }
 }
 
@@ -472,8 +688,10 @@ private struct CalendarPalette {
     var gridLine: Color { colorScheme == .dark ? Color.white.opacity(0.18) : Color(red: 0.44, green: 0.62, blue: 0.80).opacity(0.42) }
     var eventFill: Color { colorScheme == .dark ? Color(red: 0.12, green: 0.31, blue: 0.50) : Color(red: 0.76, green: 0.85, blue: 0.94) }
     var eventText: Color { primaryText }
-    var reminderFill: Color { colorScheme == .dark ? Color(red: 0.09, green: 0.21, blue: 0.33) : Color.white.opacity(0.62) }
-    var reminderStroke: Color { accent.opacity(colorScheme == .dark ? 0.65 : 0.45) }
+    /// Events sit behind reminders on the timeline, so both the fill and the
+    /// text step back rather than competing with the reminder pills.
+    var eventFillOpacity: Double { colorScheme == .dark ? 0.3 : 0.28 }
+    var eventTextOpacity: Double { 0.55 }
     var toolbarTint: Color { accent.opacity(0.2) }
 }
 

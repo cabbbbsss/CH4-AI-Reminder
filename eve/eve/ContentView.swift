@@ -50,6 +50,9 @@ struct ContentView: View {
     .onChange(of: scenePhase) { _, phase in
       if phase == .active {
         permissionManager.refreshStatuses()
+        // A subscription can be cancelled or renewed in the App Store while
+        // EVE is backgrounded, so re-read the entitlement on the way back in.
+        Task { await SubscriptionService.shared.refresh() }
       }
     }
     .alert(item: $permissionRecovery.activeRecovery) { recovery in

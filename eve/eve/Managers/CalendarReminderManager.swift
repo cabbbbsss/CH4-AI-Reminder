@@ -17,6 +17,7 @@ import SwiftData
 /// reminder at all (system or user-edited), it's left alone until every
 /// reminder for it is removed. Mirrors LocationRoutingManager's
 /// wipe-and-regen pattern.
+@MainActor
 final class CalendarReminderManager {
 
     private let context: ModelContext
