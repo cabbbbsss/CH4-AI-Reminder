@@ -40,14 +40,6 @@ struct PermissionView: View {
                 .padding(.trailing, Theme.Spacing.gutter)
                 .padding(.bottom, Theme.Spacing.l)
         }
-        .overlay(alignment: .bottomLeading) {
-            #if DEBUG
-            // Returns to the splash, which then replays its walk back to here.
-            OnboardingBackButton(destination: 0, currentStep: $currentStep)
-                .padding(.leading, Theme.Spacing.gutter)
-                .padding(.bottom, Theme.Spacing.l)
-            #endif
-        }
         .task {
             withAnimation(.spring(response: 0.9, dampingFraction: 0.8)) {
                 hasAppeared = true

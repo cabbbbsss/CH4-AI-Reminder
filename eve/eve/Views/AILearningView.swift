@@ -64,15 +64,6 @@ struct AILearningView: View {
           .padding(.bottom, Theme.Spacing.l)
       }
     }
-    .overlay(alignment: .bottomLeading) {
-      #if DEBUG
-      // Always available, unlike Continue — the point is to be able to leave
-      // this screen while the pass is still running.
-      OnboardingBackButton(destination: 1, currentStep: $currentStep)
-        .padding(.leading, Theme.Spacing.gutter)
-        .padding(.bottom, Theme.Spacing.l)
-      #endif
-    }
     // No forced `.preferredColorScheme(.dark)`. Welcome and Permission follow
     // the system, so pinning only these two screens to dark made onboarding
     // flip appearance halfway through for anyone in light mode — and it
