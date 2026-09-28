@@ -6,7 +6,11 @@
     "meetingLink": "https://zoom.us/j/123456789",
     "eventDescription": "Quarterly financial review with the board of directors.",
     "eventLocation": "Conference Room A",
-    "guests": ["Sarah (CFO)", "David (CEO)", "Emma (Secretary)"],
+    "guests": [
+      "Sarah (CFO)",
+      "David (CEO)",
+      "Emma (Secretary)"
+    ],
     "upcomingEvents": [
       "Quarterly Review at 4:00 PM",
       "Flight to Tokyo at 8:00 PM (Terminal 3)"
@@ -15,14 +19,21 @@
       "You prefer printed notes for board meetings.",
       "You always arrive at the airport 2 hours early."
     ],
-    "recentHistory": ["Arrived at Office"],
-    "answeredQuestions": ["Q: Do you commute by train? A: No"],
+    "recentHistory": [
+      "Arrived at Office"
+    ],
+    "answeredQuestions": [
+      "Q: Do you commute by train? A: No"
+    ],
     "expectedDecision": {
       "shouldNotify": true,
       "category": "actionable",
       "title": "Upcoming Board Meeting",
       "body": "Print and review the Q3 financial reports for the meeting in Conference Room A."
-    }
+    },
+    "completedPrep": [
+      "Print the quarterly deck"
+    ]
   },
   "Student Morning": {
     "currentPlace": "Dorm",
@@ -38,8 +49,13 @@
     "insights": [
       "You study better with noise-canceling headphones."
     ],
-    "recentHistory": ["Dismissed alarm", "Opened notes app"],
-    "answeredQuestions": ["Q: Do you take morning classes? A: Yes"],
+    "recentHistory": [
+      "Dismissed alarm",
+      "Opened notes app"
+    ],
+    "answeredQuestions": [
+      "Q: Do you take morning classes? A: Yes"
+    ],
     "expectedDecision": {
       "shouldNotify": true,
       "category": "actionable",
@@ -54,7 +70,10 @@
     "meetingLink": null,
     "eventDescription": "15-mile loop trail. Difficulty: Hard.",
     "eventLocation": "North Trailhead",
-    "guests": ["Chris", "Taylor"],
+    "guests": [
+      "Chris",
+      "Taylor"
+    ],
     "upcomingEvents": [
       "Lunch at Summit at 12:30 PM",
       "Drive back home at 5:00 PM"
@@ -63,13 +82,86 @@
       "You often forget your sunglasses on morning hikes.",
       "You prefer to carry at least 2 liters of water."
     ],
-    "recentHistory": ["Charged smartwatch"],
-    "answeredQuestions": ["Q: Do you exercise on weekends? A: Yes"],
+    "recentHistory": [
+      "Charged smartwatch"
+    ],
+    "answeredQuestions": [
+      "Q: Do you exercise on weekends? A: Yes"
+    ],
     "expectedDecision": {
       "shouldNotify": true,
       "category": "insight",
       "title": "Mountain Trail Hike",
       "body": "Check tire pressure, and pack trail mix, sunglasses, and 2 liters of water."
     }
+  },
+  "Music Student": {
+    "currentPlace": "Home",
+    "userName": "Nadia",
+    "nextUrgentItem": "Piano Practice at 5:00 PM",
+    "meetingLink": null,
+    "eventDescription": "Rehearse the recital pieces.",
+    "eventLocation": "Practice Room B",
+    "guests": null,
+    "upcomingEvents": [
+      "Piano Practice at 5:00 PM",
+      "Dinner with family at 7:30 PM"
+    ],
+    "insights": [
+      "You always warm up with scales before piano practice.",
+      "You take your vitamins with breakfast."
+    ],
+    "recentHistory": [
+      "Opened sheet music app"
+    ],
+    "answeredQuestions": [
+      "Q: Do you practice on weekdays? A: Yes"
+    ]
+  },
+  "Dental Patient": {
+    "currentPlace": "Home",
+    "userName": "Rio",
+    "nextUrgentItem": "Dental Checkup at 11:00 AM",
+    "meetingLink": null,
+    "eventDescription": "Six-month cleaning. Remember the insurance card.",
+    "eventLocation": "Bright Smile Clinic",
+    "guests": null,
+    "upcomingEvents": [
+      "Dental Checkup at 11:00 AM",
+      "Pick up dry cleaning at 3:00 PM"
+    ],
+    "insights": [
+      "You prefer aisle seats on long flights.",
+      "You water the plants every Sunday evening."
+    ],
+    "recentHistory": [
+      "Confirmed appointment by SMS"
+    ],
+    "answeredQuestions": [
+      "Q: Do you have dental insurance? A: Yes"
+    ]
+  },
+  "Morning Swimmer": {
+    "currentPlace": "Home",
+    "userName": "Dita",
+    "nextUrgentItem": "Morning Swim at 6:30 AM",
+    "meetingLink": null,
+    "eventDescription": "Lane session at the community pool.",
+    "eventLocation": "Riverside Aquatic Centre",
+    "guests": null,
+    "upcomingEvents": [
+      "Morning Swim at 6:30 AM",
+      "Team standup at 9:00 AM"
+    ],
+    "insights": [
+      "You always forget your goggles when you swim before work.",
+      "You keep your passport in the desk drawer."
+    ],
+    "recentHistory": [
+      "Packed gym bag"
+    ],
+    "answeredQuestions": [
+      "Q: Do you swim before work? A: Yes"
+    ]
   }
 }

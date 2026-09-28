@@ -29,7 +29,10 @@ final class CalendarReminderManager {
 
     init(context: ModelContext) {
         self.context = context
-        self.contextBuilder = ReminderContextBuilder(context: context)
+        self.contextBuilder = ReminderContextBuilder(
+            context: context,
+            personalizedRetrieval: SubscriptionService.shared.isPro
+        )
     }
 
     /// One event's prep generation, reduced to plain values so it can cross
@@ -47,6 +50,9 @@ final class CalendarReminderManager {
         /// Title-only terms, so an item that just restates the event name
         /// ("Bring breakfast" for "Breakfast") can be discarded.
         let subjectTerms: Set<String>
+
+        /// See `PreparationPrompt.retrievalMissed`.
+        let retrievalMissed: Bool
     }
 
     /// Generates reminders for any event on `date` that doesn't have one
@@ -86,7 +92,8 @@ final class CalendarReminderManager {
                     eventDate: event.startDate,
                     promptText: prompt.promptText,
                     groundingTerms: prompt.groundingTerms,
-                    subjectTerms: prompt.subjectTerms
+                    subjectTerms: prompt.subjectTerms,
+                    retrievalMissed: prompt.retrievalMissed
                 )
 
             }
@@ -168,7 +175,7 @@ final class CalendarReminderManager {
         // Eve's own suggestions.
         let grounded = OutputGrounding.filterLogging(
             items,
-            groundedIn: job.groundingTerms,
+            groundedIn: job.retrievalMissed ? [] : job.groundingTerms,
             notRestating: job.subjectTerms,
             label: "prep/\(job.eventTitle)"
         )

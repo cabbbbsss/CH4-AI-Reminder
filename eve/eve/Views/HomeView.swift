@@ -288,16 +288,19 @@ struct HomeView: View {
                 plusBadge
             }
 
-//            #if DEBUG
-//            NavigationLink(destination: PromptTesterView()) {
-//                Image(systemName: "ladybug.fill")
-//                    .font(.title3)
-//                    .foregroundStyle(Color.eveOnSurface)
-//                    .padding(Theme.Spacing.xs)
-//            }
-//            .buttonStyle(.glass)
-//            .buttonBorderShape(.circle)
-//            #endif
+            // Re-enabled to reach the free-vs-Plus prep comparison. The
+            // `#if DEBUG` was always here — commenting it out as well was for
+            // a demo build, and release builds never saw it either way.
+            #if DEBUG
+            NavigationLink(destination: PromptTesterView()) {
+                Image(systemName: "ladybug.fill")
+                    .font(.title3)
+                    .foregroundStyle(Color.eveOnSurface)
+                    .padding(Theme.Spacing.xs)
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            #endif
 
             NavigationLink(destination: SettingsView()) {
                 Image(systemName: "gearshape.fill")
