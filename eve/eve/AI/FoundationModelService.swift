@@ -226,7 +226,8 @@ final class FoundationModelService {
     private let preparationInstructions = """
     Extract 2-4 concrete preparation items for the provided event.
 
-    - Source items ONLY from the event details, matching beliefs/reminders, "What this person has actually done before events like this", or "General knowledge" (if applicable).
+    - Source items ONLY from the event details, matching beliefs/reminders, items the person confirmed, "What this person has actually done before events like this", or "General knowledge" (if applicable).
+    - A confirmed item is the person's own answer. Include it when listed.
     - Prefer user-provided event details over "General knowledge".
     - A repeated past action outranks "General knowledge" when both apply. State it as preparation, NEVER as an observation about the user's habits.
     - EVERY item MUST name a specific thing to bring, prepare, or check.
@@ -411,6 +412,70 @@ final class FoundationModelService {
     \(UntrustedText.instructionRule)
     """
 
+    /// The constraints `contextualDeductionInstructions` already asks for,
+    /// enforced.
+    ///
+    /// A `@Guide` description steers generation; it does not bound it. Guided
+    /// decoding enforces the *type* — `[String]` — so "2-4 items" and "1-3
+    /// words" are requests the model is free to miss. `suggestTiming` already
+    /// clamps its minutes in Swift for exactly this reason; this call had no
+    /// equivalent, and it needs one more than most: the strings are
+    /// interpolated straight into a notification body
+    /// ("Should I remind you to bring your …"), so a dozen items or a
+    /// sentence-long one is what the user actually reads.
+    ///
+    /// Deliberately **not** `OutputGrounding`. This call is inferential by
+    /// design — "Gym" implies gloves and a towel that no context mentioned —
+    /// and the gate drops precisely the items that share no term with the
+    /// event, which here is all of them. Running it would silence the feature
+    /// permanently, the same reason `suggestLocationReminder` is exempt.
+    /// Shape is the right layer; the content is validated by the user tapping
+    /// Yes, which is a stronger check than any lexical rule.
+    static func usableDeductions(_ items: [String], limit: Int = 4) -> [String] {
+
+        var seen = Set<String>()
+
+        return Array(
+            items
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { item in
+                    guard !item.isEmpty,
+                          item.count <= 40,
+                          item.split(separator: " ").count <= 4
+                    else { return false }
+                    return seen.insert(item.lowercased()).inserted
+                }
+                .prefix(limit)
+        )
+
+    }
+
+    #if DEBUG
+    /// Shape only. What the items *say* is the user's to accept or reject.
+    static func selfCheck() {
+
+        assert(
+            usableDeductions(["gloves", "whey", "AirPods", "towel", "extra"]).count == 4,
+            "deduction: item count not clamped"
+        )
+
+        assert(
+            usableDeductions(["gloves", " Gloves ", "whey"]) == ["gloves", "whey"],
+            "deduction: duplicates survived"
+        )
+
+        assert(
+            usableDeductions([
+                "",
+                "   ",
+                "a reminder to check whether the locker room towels were restocked"
+            ]).isEmpty,
+            "deduction: blank or sentence-length item survived"
+        )
+
+    }
+    #endif
+
     /// Deduces items a user might need for an upcoming event, used for pre-event proactive learning prompts.
     func deduceContextualItems(forPromptText promptText: String) async throws -> [String] {
 
@@ -424,7 +489,7 @@ final class FoundationModelService {
             options: Self.factual
         )
 
-        return response.content.items
+        return Self.usableDeductions(response.content.items)
 
     }
 

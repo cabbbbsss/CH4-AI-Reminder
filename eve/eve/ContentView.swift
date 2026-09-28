@@ -50,6 +50,7 @@ struct ContentView: View {
       #if DEBUG
       OutputGrounding.selfCheck()
       ReminderContextBuilder.selfCheck()
+      FoundationModelService.selfCheck()
       #endif
     }
     .onChange(of: scenePhase) { _, phase in

@@ -12,16 +12,31 @@ final class LearningScheduler {
     private let notifications = NotificationService.shared
     private let contextBuilder: ReminderContextBuilder
     
+    /// EVE Plus. Contextual learning questions are a paid capability, so the
+    /// entitlement is read once here and answers both questions this type
+    /// asks: whether to interrupt the user at all, and what the deduction
+    /// prompt is allowed to retrieve.
+    private let personalizedLearning: Bool
+
     init(context: ModelContext) {
+        let isPro = SubscriptionService.shared.isPro
         self.context = context
+        self.personalizedLearning = isPro
         self.contextBuilder = ReminderContextBuilder(
             context: context,
-            personalizedRetrieval: SubscriptionService.shared.isPro
+            personalizedRetrieval: isPro
         )
     }
     
     /// Evaluates events that are approaching to deduce any learning items.
     func evaluateUpcomingEvents() async {
+        // The gate for the whole feature, in the one place that decides to ask.
+        // Returning before the fetch also means a free account writes no
+        // `ContextualPreference` rows at all — otherwise the empty "already
+        // checked" markers below would silently suppress the questions they
+        // would get on the day they subscribe.
+        guard personalizedLearning else { return }
+
         let events = (try? context.fetch(FetchDescriptor<CalendarEvent>())) ?? []
         let now = Date.now
         

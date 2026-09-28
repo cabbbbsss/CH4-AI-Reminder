@@ -246,6 +246,12 @@ final class ReminderContextBuilder {
         // user's rows say a gym session is happening; these say it implies
         // gear. Fires only on an explicit trigger word, so an event the corpus
         // doesn't cover — "Sleep" — correctly retrieves nothing.
+        // Answers the user gave to EVE's own questions. First in the budget
+        // below: they are the only source here the user stated outright.
+        var confirmed = personalizedRetrieval
+            ? confirmedPreferences(to: eventKeywords)
+            : []
+
         // What this person has actually done before events like this. Gated by
         // the same flag as the other two, so the AI layer still has exactly one
         // entitlement check.
@@ -265,6 +271,7 @@ final class ReminderContextBuilder {
         // outranks anything inferred, but evidence of what *this* person did
         // outranks a generic statement about the activity.
         var budget = Self.characterBudget(forTokens: Self.retrievalTokenBudget)
+        confirmed = Self.take(confirmed, within: &budget)
         beliefs = Self.take(beliefs, within: &budget)
         habits = Self.take(habits, within: &budget)
         knowledge = Self.take(knowledge, within: &budget)
@@ -274,6 +281,13 @@ final class ReminderContextBuilder {
 
         \(section("Beliefs about the user that specifically match this event", beliefs))
         """
+
+        if !confirmed.isEmpty {
+            promptText += "\n\n" + section(
+                "Items this person confirmed they want for this kind of event",
+                confirmed
+            )
+        }
 
         // Same rule as the knowledge section below: omitted entirely when
         // empty, never rendered as "none", so an absence of evidence cannot be
@@ -309,7 +323,7 @@ final class ReminderContextBuilder {
         // Grounds a prep item that names the provider ("Zoom", "Teams") — the
         // host survives keyword extraction from the URL.
         groundingTerms.formUnion(keywords(from: eventMeetingURL ?? ""))
-        for line in beliefs + habits + knowledge {
+        for line in confirmed + beliefs + habits + knowledge {
             groundingTerms.formUnion(keywords(from: UntrustedText.strip(line)))
         }
 
@@ -318,7 +332,7 @@ final class ReminderContextBuilder {
             groundingTerms: groundingTerms,
             subjectTerms: titleKeywords,
             retrievalMissed: personalizedRetrieval
-                && beliefs.isEmpty && habits.isEmpty && knowledge.isEmpty
+                && confirmed.isEmpty && beliefs.isEmpty && habits.isEmpty && knowledge.isEmpty
         )
 
     }
@@ -335,7 +349,7 @@ final class ReminderContextBuilder {
     static func selfCheck() {
 
         guard let container = try? ModelContainer(
-            for: AIInsight.self, CalendarReminder.self,
+            for: AIInsight.self, CalendarReminder.self, ContextualPreference.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         ) else {
             assertionFailure("context builder self-check could not open an in-memory store")
@@ -381,6 +395,66 @@ final class ReminderContextBuilder {
         assert(
             prompt(pro: true, title: "Tennis")?.retrievalMissed == true,
             "an unmatched event should report a retrieval miss"
+        )
+
+        // MARK: Confirmed answers — the last step of the learning loop.
+        //
+        // The loop is only real if a stored answer reaches a *later* prompt.
+        // These assert that it does, that it does so only for the event it was
+        // about, and that a free account never sees it.
+
+        let answerStore = ModelContext(container)
+        answerStore.insert(
+            ContextualPreference(
+                eventType: "Gym",
+                items: ["gloves", "whey"],
+                confidence: 1.0,
+                isUserConfirmed: true
+            )
+        )
+        // Answered, but the user said no — nothing to carry forward.
+        answerStore.insert(
+            ContextualPreference(
+                eventType: "Dentist",
+                items: [],
+                confidence: 0,
+                isUserConfirmed: true
+            )
+        )
+
+        func answerPrompt(pro: Bool, title: String) -> String {
+            ReminderContextBuilder(context: answerStore, personalizedRetrieval: pro)
+                .buildPreparationContext(
+                    eventTitle: title, eventDate: date, eventNotes: nil, eventLocation: nil
+                )?.promptText ?? ""
+        }
+
+        assert(
+            answerPrompt(pro: true, title: "Gym").contains("gloves"),
+            "a confirmed answer never reached a later prep prompt"
+        )
+        assert(
+            !answerPrompt(pro: false, title: "Gym").contains("gloves"),
+            "confirmed-answer context leaked to a free account"
+        )
+        assert(
+            !answerPrompt(pro: true, title: "Piano Practice").contains("gloves"),
+            "a confirmed answer reached an unrelated event"
+        )
+
+        // Customize: ContextualCustomizeView overwrites the row's items in
+        // place, so what the user edited — not what the model deduced — is
+        // what a later prompt sees.
+        let customized = (try? answerStore.fetch(FetchDescriptor<ContextualPreference>()))?
+            .first { $0.eventType == "Gym" }
+        customized?.items = ["chalk"]
+        let afterEdit = answerPrompt(pro: true, title: "Gym")
+        assert(afterEdit.contains("chalk"), "a customized answer did not reach a later prompt")
+        assert(!afterEdit.contains("gloves"), "the replaced answer was still being retrieved")
+        assert(
+            !answerPrompt(pro: true, title: "Dentist")
+                .contains("confirmed they want for this kind of event"),
+            "an empty confirmed answer was rendered as a section"
         )
 
         // MARK: Habit retrieval — the five cases, in one seeded store.
@@ -753,6 +827,45 @@ final class ReminderContextBuilder {
     private func sharesKeyword(_ text: String, with eventKeywords: Set<String>) -> Bool {
         guard !eventKeywords.isEmpty else { return false }
         return !keywords(from: text).isDisjoint(with: eventKeywords)
+    }
+
+    /// Items the user explicitly confirmed they want for this kind of event.
+    ///
+    /// The other end of `LearningScheduler`: it asks "should I remind you to
+    /// bring your gloves?", the user taps Yes, and `ContextualPreference` is
+    /// marked `isUserConfirmed`. Those answers already reached the wide
+    /// context behind `decide`; they did not reach this prompt, which is where
+    /// per-event prep actually comes from — so a confirmed answer about Gym
+    /// never informed a Gym checklist. This closes that loop.
+    ///
+    /// Matched on `eventType` rather than handed over wholesale, because this
+    /// is a per-event prompt and every other source here is filtered the same
+    /// way.
+    private func confirmedPreferences(
+        to eventKeywords: Set<String>,
+        limit: Int = 2
+    ) -> [String] {
+
+        let prefs = (try? context.fetch(FetchDescriptor<ContextualPreference>())) ?? []
+
+        let matching = prefs
+            .filter { $0.isUserConfirmed && !$0.items.isEmpty }
+            .compactMap { pref -> (pref: ContextualPreference, score: Double)? in
+                guard let score = relevance(of: pref.eventType, to: eventKeywords) else { return nil }
+                return (pref, score)
+            }
+            .sorted { $0.score > $1.score }
+            .prefix(limit)
+            .map(\.pref)
+
+        // The event type came from EventKit and the items were model-generated
+        // before the user confirmed them, so a confirmed answer is still not
+        // trusted text — an injection the user waved through is still an
+        // injection.
+        return englishOnlyDelimiting(matching.map {
+            (lead: "", untrusted: "\($0.eventType): \($0.items.joined(separator: ", "))", trail: "")
+        })
+
     }
 
     /// Prep items this person has actually ticked off before events like this
