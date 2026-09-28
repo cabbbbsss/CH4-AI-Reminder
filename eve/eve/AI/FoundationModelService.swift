@@ -129,9 +129,18 @@ struct ContextualDeduction {
 /// The only gateway to Apple's on-device model.
 /// Input: ReminderContext. Output: ReminderDecision. Nothing else.
 ///
-/// Conforms to `ReasoningEngine` so callers depend on the shape of the work
-/// rather than on Foundation Models itself — see that protocol for why.
-final class FoundationModelService: ReasoningEngine {
+/// Note what the method signatures below avoid: no Foundation Models type
+/// crosses this boundary. Callers deal in `String`, `[String]`,
+/// `ReminderContext`, `ReminderDecision`, `OnboardingQuestion` and
+/// `ProposedInsight` — all Eve's own. That is what would make a second
+/// conformer (Private Cloud Compute, say) a swap rather than a rewrite.
+///
+/// A `ReasoningEngine` protocol used to say so as well. It was deleted: no
+/// call site ever held one, so it bought neither the swap nor testability,
+/// and it had already drifted — `suggestTiming` and `deduceContextualItems`
+/// were added here and never to it. Extract it again when there is a second
+/// conformer to extract it *from*.
+final class FoundationModelService {
 
     /// Throws unless the on-device model is ready to take a request.
     ///
@@ -160,7 +169,7 @@ final class FoundationModelService: ReasoningEngine {
 
     /// Deterministic. For choosing one value from a fixed set, where the same
     /// input returning the same answer matters more than variety.
-    private static let deterministic = GenerationOptions(samplingMode: .greedy)
+    private static let deterministic = GenerationOptions(sampling: .greedy)
 
     /// Low variance, for output that must stay specific and traceable — the
     /// prep lists and the belief extraction, where a wider spread shows up as

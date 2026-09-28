@@ -30,7 +30,10 @@ final class AssistantManager {
     private let notificationService: NotificationService
 
     init(context: ModelContext, notificationService: NotificationService) {
-        self.contextBuilder = ReminderContextBuilder(context: context)
+        self.contextBuilder = ReminderContextBuilder(
+            context: context,
+            personalizedRetrieval: SubscriptionService.shared.isPro
+        )
         self.insightManager = InsightManager(context: context)
         self.notificationService = notificationService
     }
@@ -236,7 +239,7 @@ final class AssistantManager {
         // list as the correct "nothing specific" answer.
         return OutputGrounding.filterLogging(
             items,
-            groundedIn: prompt.groundingTerms,
+            groundedIn: prompt.retrievalMissed ? [] : prompt.groundingTerms,
             notRestating: prompt.subjectTerms,
             label: "prep/\(title)"
         )

@@ -14,7 +14,10 @@ final class LearningScheduler {
     
     init(context: ModelContext) {
         self.context = context
-        self.contextBuilder = ReminderContextBuilder(context: context)
+        self.contextBuilder = ReminderContextBuilder(
+            context: context,
+            personalizedRetrieval: SubscriptionService.shared.isPro
+        )
     }
     
     /// Evaluates events that are approaching to deduce any learning items.

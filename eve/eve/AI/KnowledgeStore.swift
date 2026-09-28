@@ -74,8 +74,11 @@ struct KnowledgeStore {
         guard !subjectKeywords.isEmpty else { return [] }
 
         let scored: [(fact: Fact, hits: Int)] = facts.compactMap { fact in
+            // Triggers are literals from the JSON while `subjectKeywords` has
+            // been through `contentTerms`, so they need the same folding or the
+            // plural ones ("pills", "groceries", "teams") stop matching.
             let hits = fact.triggers.reduce(into: 0) { total, trigger in
-                if subjectKeywords.contains(trigger) { total += 1 }
+                if subjectKeywords.contains(OutputGrounding.stem(trigger)) { total += 1 }
             }
             return hits > 0 ? (fact, hits) : nil
         }

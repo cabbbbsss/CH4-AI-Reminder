@@ -35,12 +35,41 @@ enum OutputGrounding {
         "do", "not", "no", "yes", "today", "tomorrow", "day", "time"
     ]
 
-    /// Lowercased content words, stopwords removed.
+    /// Folds a plural onto its singular, so both sides of a comparison land on
+    /// the same token.
+    ///
+    /// Measured need: an event titled "Mountain Trail Hike" retrieved none of
+    /// the user's beliefs, because the belief said "morning hikes" — a
+    /// relevant, correctly-stored belief lost to one letter.
+    ///
+    /// Anything that compares against the output of `contentTerms` must be run
+    /// through this too, or it silently stops matching: `KnowledgeStore`'s
+    /// triggers ("pills", "groceries", "teams") and the place synonym sets
+    /// ("chores", "kids") are literals that would otherwise never be hit again.
+    ///
+    /// The `count > 3` guard is why "bus" and "gas" survive intact, and the
+    /// `ss` guard is why "pass" does not become "pas".
+    ///
+    // ponytail: plural strip only, not linguistics — "glasses" becomes
+    // "glasse", which is harmless because every caller runs this same function
+    // and only ever compares results with each other. Reach for NLTagger
+    // `.lemma` if a real miss ever traces back to tense or an -ing form.
+    static func stem(_ word: String) -> String {
+        guard word.count > 3, word.hasSuffix("s"), !word.hasSuffix("ss") else { return word }
+        return String(word.dropLast())
+    }
+
+    /// Lowercased content words, stopwords removed, plurals folded.
+    ///
+    /// Stopwords are matched before stemming, on the raw word — they are
+    /// function words with no plurals, so the order costs nothing and keeps
+    /// that list readable as written.
     static func contentTerms(of text: String) -> Set<String> {
         Set(
             text.lowercased()
                 .components(separatedBy: CharacterSet.alphanumerics.inverted)
                 .filter { $0.count >= 2 && !stopwords.contains($0) }
+                .map(stem)
         )
     }
 
@@ -53,11 +82,11 @@ enum OutputGrounding {
     /// substitution the gate is here to catch. They stay out of `stopwords`
     /// because retrieval *does* want them: a reminder saying "pack passport"
     /// is a genuine lexical signal when matching an event.
-    private static let evidenceFreeWords: Set<String> = [
+    private static let evidenceFreeWords: Set<String> = Set([
         "bring", "check", "prepare", "prep", "pack", "take", "get", "grab",
         "remember", "forget", "don", "ready", "before", "make", "sure",
         "need", "needs", "have", "any", "some", "all", "out", "up", "off"
-    ]
+    ].map(stem))
 
     // MARK: - The gate
 
@@ -80,14 +109,17 @@ enum OutputGrounding {
         notRestating subjectTerms: Set<String> = []
     ) -> (kept: [String], dropped: [String]) {
 
-        // Nothing to check against — an empty context can't disprove anything,
-        // and dropping everything here would silently disable the feature on
-        // exactly the sparse installs it's least safe to be wrong about.
-        guard !terms.isEmpty else { return (items, []) }
-
+        // An empty `terms` disables the disjointness test only — it can't
+        // disprove anything, and dropping everything would silently disable
+        // the feature on exactly the sparse installs it's least safe to be
+        // wrong about. Callers pass an empty set deliberately: see
+        // `PreparationPrompt.hasRetrievedContext`.
+        //
+        // The restatement rule below still runs. It used to be skipped here
+        // too, by an early return, which was backwards — with no retrieved
+        // context the vacuous items are the *only* ones the test above would
+        // have let through.
         let evidence = terms.subtracting(evidenceFreeWords)
-
-        guard !evidence.isEmpty else { return (items, []) }
 
         var kept: [String] = []
         var dropped: [String] = []
@@ -96,7 +128,7 @@ enum OutputGrounding {
 
             let itemTerms = contentTerms(of: item).subtracting(evidenceFreeWords)
 
-            if itemTerms.isDisjoint(with: evidence) {
+            if !evidence.isEmpty, itemTerms.isDisjoint(with: evidence) {
                 dropped.append(item)
                 continue
             }
@@ -114,6 +146,52 @@ enum OutputGrounding {
         return (kept, dropped)
 
     }
+
+    // MARK: - Self-check
+    //
+    // There is no test target, and the rules above have each regressed once
+    // already, so the three cases that matter run at launch in debug builds.
+
+    #if DEBUG
+    static func selfCheck() {
+
+        // Plural and singular have to reach the same token — the miss that
+        // `stem` exists to fix — without flattening the words it must not touch.
+        assert(contentTerms(of: "morning hikes").contains("hike"), "stem: plural not folded")
+        assert(contentTerms(of: "Mountain Trail Hike").contains("hike"), "stem: singular altered")
+        assert(contentTerms(of: "board meetings") == contentTerms(of: "Board Meeting"),
+               "stem: plural and singular disagree")
+        assert(contentTerms(of: "bus pass").isSuperset(of: ["bus", "pass"]),
+               "stem: over-eager, short words and -ss must survive")
+
+        // Both sets are built the way callers build them — through
+        // `contentTerms` — rather than written as literals. Literals drifted
+        // the moment `stem` landed: the check hand-wrote "tennis" while every
+        // real caller was by then producing "tenni".
+        let tennis = contentTerms(of: "Tennis")
+
+        // Invention is dropped while there is retrieved context to disprove it.
+        assert(
+            filter(["Bring your racket"], groundedIn: contentTerms(of: "gym towel")).kept.isEmpty,
+            "grounding: ungrounded item survived a context that disproved it"
+        )
+
+        // With no retrieved context the same item is admitted, rather than the
+        // gate collapsing into "the item must echo the event title".
+        assert(
+            filter(["Bring your racket"], groundedIn: [], notRestating: tennis).kept.count == 1,
+            "grounding: gate still rewarding restatement on an unretrieved event"
+        )
+
+        // ...but the vacuous item stays dropped. This is the case the early
+        // return used to get backwards.
+        assert(
+            filter(["Bring tennis"], groundedIn: [], notRestating: tennis).dropped.count == 1,
+            "grounding: restatement admitted when the context was empty"
+        )
+
+    }
+    #endif
 
     /// `filter`, with the dropped items logged in debug builds.
     ///

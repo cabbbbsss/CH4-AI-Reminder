@@ -15,21 +15,76 @@ import NaturalLanguage
 /// into one ReminderContext.
 final class ReminderContextBuilder {
 
-    /// Max characters of an event's notes included in the wide `ReminderContext`.
+    /// Max characters of an event's notes included in a prompt.
     /// Notes are the largest attacker-reachable span, and the prompt shares a
     /// 4096-token window (TN3193), so the excerpt is capped rather than sent whole.
     /// Lower this first if busy days push the context over budget.
     private static let eventNotesExcerptLimit = 200
 
+    /// `text` cut to `eventNotesExcerptLimit`, ellipsised when it was cut.
+    private static func excerpt(_ text: String) -> String {
+        text.count > eventNotesExcerptLimit
+            ? String(text.prefix(eventNotesExcerptLimit)) + "…"
+            : text
+    }
+
     private let context: ModelContext
 
-    init(context: ModelContext) {
+    /// Whether per-event retrieval may run — EVE Plus only.
+    ///
+    /// The *only* entitlement check in the AI layer. It sits here because this
+    /// type is already the single component allowed to gather context, so
+    /// "what may be retrieved" is the same decision as "what enters the
+    /// prompt", and the managers stay free of subscription logic beyond
+    /// handing the answer in.
+    ///
+    /// Defaults to `false` so a caller that forgets it under-serves rather
+    /// than gives the paid path away.
+    ///
+    /// Scoped to `buildPreparationContext`. `build(currentPlace:)` — the wide
+    /// context behind `decide`, and so behind every actual reminder — is
+    /// untouched, which is what keeps the free tier working rather than
+    /// merely not crashing.
+    ///
+    // ponytail: snapshot taken when the builder is constructed. A purchase
+    // mid-session reaches the prep path on the next manager rebuild; pass a
+    // live read instead if that lag ever shows.
+    private let personalizedRetrieval: Bool
+
+    init(context: ModelContext, personalizedRetrieval: Bool = false) {
         self.context = context
+        self.personalizedRetrieval = personalizedRetrieval
     }
 
     func build(currentPlace: String?) -> ReminderContext {
 
-        ReminderContext(
+        // The per-section caps below never added up to anything: ten events
+        // carrying notes, twelve beliefs, twenty history rows and an unbounded
+        // preference list can exceed the 4096-token window between them,
+        // before the instructions and the schema are counted. The prompt is
+        // then silently truncated mid-context, which presents as Eve ignoring
+        // something it was told — easy to misread as the model being too small.
+        // `insights(limit:)` already called its own cap a floor rather than a
+        // fix; this is the ceiling those caps sit under.
+        //
+        // Trimmed here rather than in `promptText` so the context object holds
+        // only what the model is shown: `groundingTerms` is derived from these
+        // same fields, and terms from a dropped line would let `OutputGrounding`
+        // admit output grounded on context that never reached the prompt.
+        //
+        // Call order is priority order. The schedule and the user's own
+        // beliefs lead — the instructions name them as what a reminder is
+        // built from — and the history tail goes first, being the section
+        // whose rows repeat each other most.
+        var budget = Self.characterBudget(forTokens: Self.contextTokenBudget)
+
+        let events = Self.take(upcomingEvents(), within: &budget)
+        let beliefs = Self.take(insights(), within: &budget)
+        let preferences = Self.take(contextualPreferences(), within: &budget)
+        let answers = Self.take(answeredQuestions(), within: &budget)
+        let history = Self.take(recentHistory(), within: &budget)
+
+        let context = ReminderContext(
             currentDate: .now,
             currentPlace: currentPlace.flatMap(englishOrNil).map { UntrustedText.delimit($0) },
             userName: userName(),
@@ -38,12 +93,23 @@ final class ReminderContextBuilder {
             eventDescription: nil,
             eventLocation: nil,
             guests: nil,
-            upcomingEvents: upcomingEvents(),
-            insights: insights(),
-            recentHistory: recentHistory(),
-            answeredQuestions: answeredQuestions(),
-            contextualPreferences: contextualPreferences()
+            upcomingEvents: events,
+            insights: beliefs,
+            recentHistory: history,
+            answeredQuestions: answers,
+            contextualPreferences: preferences
         )
+
+        // The budget covers the gathered sections; the headers, the scalar
+        // lines and `nextUrgentItem` sit outside it. This is the check that
+        // they stay small enough for that to be safe — it fails on the
+        // rendered prompt, which is the thing that actually has to fit.
+        assert(
+            context.promptText.count <= Self.characterBudget(forTokens: 3000),
+            "wide context prompt exceeded its estimate: \(context.promptText.count) characters"
+        )
+
+        return context
 
     }
 
@@ -76,6 +142,29 @@ final class ReminderContextBuilder {
         /// item that merely restates the title ("Bring breakfast" for an event
         /// called "Breakfast") — grounded, well formed, and useless.
         let subjectTerms: Set<String>
+
+        /// True when retrieval *ran and found nothing*, leaving `groundingTerms`
+        /// as only the event's own words.
+        ///
+        /// Callers pass an empty set to `OutputGrounding` in that case, because
+        /// the gate and lexical retrieval otherwise fail together on the same
+        /// event and compound: retrieval misses, so the only evidence left is
+        /// the title, so "shares a term with the context" collapses into
+        /// "echoes the event title". A "Tennis" event drops "Bring your racket"
+        /// and keeps "Pack tennis shoes" — the gate stops catching invention
+        /// and starts rewarding restatement.
+        ///
+        /// False for a free account, which is the distinction the name carries:
+        /// retrieval did not miss, it never ran, so the event's own details are
+        /// the whole of what the model was given and holding the output to them
+        /// is exactly right. Reading this as "no retrieved terms" would have
+        /// un-gated every free prompt — the gate must not weaken with the tier.
+        ///
+        /// Nothing is unguarded either way: the strict instructions still forbid
+        /// introducing objects absent from the prompt, and `subjectTerms` still
+        /// discards the vacuous items. Widening a trigger in `knowledge.json`
+        /// is what moves a subscriber's event back onto the gated path.
+        let retrievalMissed: Bool
 
     }
 
@@ -129,32 +218,45 @@ final class ReminderContextBuilder {
             eventLine += "\nGuests: \(UntrustedText.delimit(safeAttendees))"
         }
 
-        if let eventNotes, let safeNotes = englishOrNil(eventNotes) {
-            eventLine += "\nEvent notes: \(UntrustedText.delimit(safeNotes))"
+        // Excerpted here, before either use below. Cutting the notes only on
+        // their way into `eventLine` would leave `eventKeywords` — which is
+        // both what retrieval matches on and what `OutputGrounding` holds the
+        // output to — built from text the model was never shown, so a prep
+        // item naming something from the cut tail would be admitted as
+        // grounded. Same reason the language filter has to apply to both:
+        // notes dropped as non-English were still reaching the keywords.
+        let notes = eventNotes.flatMap(englishOrNil).map(Self.excerpt)
+
+        if let notes {
+            eventLine += "\nEvent notes: \(UntrustedText.delimit(notes))"
         }
 
         // The content words of the event, which every match is made against.
         let titleKeywords = keywords(from: eventTitle)
-        let eventKeywords = keywords(from: "\(eventTitle) \(eventNotes ?? "")")
+        let eventKeywords = keywords(from: "\(eventTitle) \(notes ?? "")")
 
-        var beliefs = relevantInsights(to: eventKeywords)
+        // The retrieval half of the prompt, and the whole of what EVE Plus
+        // buys here: the user's own beliefs matched to *this* event, and Eve's
+        // corpus of what the activity implies. Everything else in this prompt
+        // — the event, its notes, location, guests, link — is the free tier's
+        // and is assembled identically below.
+        var beliefs = personalizedRetrieval ? relevantInsights(to: eventKeywords) : []
 
         // Eve's own corpus: what this *kind* of activity usually needs. The
         // user's rows say a gym session is happening; these say it implies
         // gear. Fires only on an explicit trigger word, so an event the corpus
         // doesn't cover — "Sleep" — correctly retrieves nothing.
-        var knowledge = KnowledgeStore
-            .facts(matching: eventKeywords)
-            .map(\.text)
+        var knowledge = personalizedRetrieval
+            ? KnowledgeStore.facts(matching: eventKeywords).map(\.text)
+            : []
 
         // Everything above is ranked but not yet bounded. The window is 4096
         // tokens shared with the instructions, the schema and the response
         // (TN3193), so trim to a budget rather than trusting per-section caps
         // to add up to something safe.
-        (beliefs, knowledge) = Self.fitToBudget(
-            beliefs: beliefs,
-            knowledge: knowledge
-        )
+        var budget = Self.characterBudget(forTokens: Self.retrievalTokenBudget)
+        beliefs = Self.take(beliefs, within: &budget)
+        knowledge = Self.take(knowledge, within: &budget)
 
         var promptText = """
         Event: \(eventLine)
@@ -193,10 +295,99 @@ final class ReminderContextBuilder {
         return PreparationPrompt(
             promptText: promptText,
             groundingTerms: groundingTerms,
-            subjectTerms: titleKeywords
+            subjectTerms: titleKeywords,
+            retrievalMissed: personalizedRetrieval && beliefs.isEmpty && knowledge.isEmpty
         )
 
     }
+
+    // MARK: - Self-check
+    //
+    // No test target, and the tier split has two ways to go quietly wrong: the
+    // paid path silently retrieving nothing, or the free path silently losing
+    // its grounding gate. Both are checked at launch in debug builds against a
+    // throwaway in-memory store.
+
+    #if DEBUG
+    @MainActor
+    static func selfCheck() {
+
+        guard let container = try? ModelContainer(
+            for: AIInsight.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        ) else {
+            assertionFailure("context builder self-check could not open an in-memory store")
+            return
+        }
+
+        let date = Date.now.addingTimeInterval(3600)
+
+        func prompt(pro: Bool, title: String) -> PreparationPrompt? {
+            ReminderContextBuilder(
+                context: ModelContext(container),
+                personalizedRetrieval: pro
+            )
+            .buildPreparationContext(eventTitle: title, eventDate: date, eventNotes: nil, eventLocation: nil)
+        }
+
+        // EVE Plus: the corpus covers "Gym", so retrieval reaches the prompt.
+        let plus = prompt(pro: true, title: "Gym")
+        assert(
+            plus?.promptText.contains("General knowledge") == true,
+            "EVE Plus prep prompt lost its retrieved knowledge"
+        )
+        assert(plus?.retrievalMissed == false, "retrieval hit but was reported as a miss")
+
+        // Free: same event, same everything else, no retrieved sections.
+        let free = prompt(pro: false, title: "Gym")
+        assert(
+            free?.promptText.contains("General knowledge") == false,
+            "free prep prompt received retrieved knowledge"
+        )
+        assert(
+            free?.promptText.contains("Gym") == true,
+            "free prep prompt lost the event itself, not just the retrieval"
+        )
+
+        // ...and the free prompt stays gated. `retrievalMissed` must stay false
+        // when retrieval never ran, or every free item skips the disjointness
+        // test in `OutputGrounding`.
+        assert(free?.retrievalMissed == false, "free path would bypass the grounding gate")
+
+        // A subscriber on an event the corpus says nothing about is the one
+        // case that *does* bypass it — see `PreparationPrompt.retrievalMissed`.
+        assert(
+            prompt(pro: true, title: "Tennis")?.retrievalMissed == true,
+            "an unmatched event should report a retrieval miss"
+        )
+
+        // The belief half, on the exact pair that used to miss: the event says
+        // "Hike", the belief says "hikes". Seeded in its own store so the
+        // assertions above stay unaffected.
+        let seeded = ModelContext(container)
+        seeded.insert(
+            AIInsight(
+                category: .behavior,
+                title: "Belief",
+                value: "You often forget your sunglasses on morning hikes.",
+                confidence: 0.8,
+                sourceSummary: "Self-check"
+            )
+        )
+        let hike = ReminderContextBuilder(context: seeded, personalizedRetrieval: true)
+            .buildPreparationContext(
+                eventTitle: "Mountain Trail Hike",
+                eventDate: date,
+                eventNotes: nil,
+                eventLocation: nil
+            )
+        assert(
+            hike?.promptText.contains("sunglasses") == true,
+            "a belief about hikes no longer reaches a Hike event"
+        )
+
+    }
+    #endif
 
     // MARK: - Token budget
 
@@ -216,35 +407,46 @@ final class ReminderContextBuilder {
     /// response.
     private static let retrievalTokenBudget = 900
 
-    /// Trims the retrieved sections to fit `retrievalTokenBudget`,
-    /// interleaved by priority rather than section.
+    /// Tokens allowed for the gathered context in the wide prompt.
     ///
-    /// Order matters: the user's own beliefs outrank Eve's general knowledge,
-    /// so a crowded event keeps the personal rows and drops the generic ones.
-    /// Taking whole sections in turn would instead let a long belief list
-    /// starve the knowledge entirely, or vice versa.
-    private static func fitToBudget(
-        beliefs: [String],
-        knowledge: [String]
-    ) -> (beliefs: [String], knowledge: [String]) {
+    /// Bigger than `retrievalTokenBudget` because this prompt *is* the
+    /// context — there is no one event carrying the subject — but still short
+    /// of the window: `decide`'s instructions, `ReminderDecision`'s schema
+    /// (its `@Guide` descriptions are prompt text too) and the response need
+    /// the rest. The same context also feeds `extractInsights`, whose reply is
+    /// the longest of the three, so the headroom is sized for that one.
+    ///
+    /// Rarely binds on an ordinary account; it exists for the heavy ones.
+    private static let contextTokenBudget = 2400
 
-        var budget = Int(Double(retrievalTokenBudget) * charactersPerToken)
+    /// The character allowance for `tokens`, which `take` spends.
+    private static func characterBudget(forTokens tokens: Int) -> Int {
+        Int(Double(tokens) * charactersPerToken)
+    }
 
-        func take(_ lines: [String]) -> [String] {
-            var kept: [String] = []
-            for line in lines {
-                let cost = line.count + 3   // "- " and the newline
-                guard cost <= budget else { break }
-                budget -= cost
-                kept.append(line)
-            }
-            return kept
+    /// Greedily takes lines while they fit, spending `budget` as it goes.
+    ///
+    /// Callers hold the budget and call this once per section, so the call
+    /// order *is* the priority order: a crowded prompt keeps the sections
+    /// asked for first and drops the tail of the ones asked for last. Handing
+    /// whole sections a fixed share each would instead let one long section
+    /// starve another, or leave its allowance unspent while the next is cut.
+    ///
+    /// Stops at the first line that doesn't fit rather than skipping it and
+    /// trying the next: every caller passes lines already ranked best-first,
+    /// so what follows an over-long line is worth less than it was.
+    private static func take(_ lines: [String], within budget: inout Int) -> [String] {
+
+        var kept: [String] = []
+
+        for line in lines {
+            let cost = line.count + 3   // "- " and the newline
+            guard cost <= budget else { break }
+            budget -= cost
+            kept.append(line)
         }
 
-        let keptBeliefs = take(beliefs)
-        let keptKnowledge = take(knowledge)
-
-        return (keptBeliefs, keptKnowledge)
+        return kept
 
     }
 
@@ -260,25 +462,25 @@ final class ReminderContextBuilder {
         case home, work, other
     }
 
-    private static let homeIndicators: Set<String> = [
+    private static let homeIndicators: Set<String> = Set([
         "home", "house", "apartment", "flat", "residence", "condo"
-    ]
+    ].map(OutputGrounding.stem))
 
-    private static let workIndicators: Set<String> = [
+    private static let workIndicators: Set<String> = Set([
         "office", "work", "workplace", "job", "company", "hq", "headquarters"
-    ]
+    ].map(OutputGrounding.stem))
 
-    private static let homeSynonyms: Set<String> = [
+    private static let homeSynonyms: Set<String> = Set([
         "home", "house", "family", "dinner", "breakfast", "lunch", "cook", "cooking",
         "laundry", "groceries", "grocery", "chores", "clean", "cleaning", "rent",
         "sleep", "relax", "kids", "pet", "dog", "cat", "garden"
-    ]
+    ].map(OutputGrounding.stem))
 
-    private static let workSynonyms: Set<String> = [
+    private static let workSynonyms: Set<String> = Set([
         "work", "office", "meeting", "meetings", "standup", "sync", "call", "calls",
         "client", "project", "deadline", "presentation", "report", "class", "lecture",
         "campus", "academy", "school", "shift", "interview", "review", "sprint", "demo"
-    ]
+    ].map(OutputGrounding.stem))
 
     private func placeKind(for placeName: String) -> PlaceKind {
         let nameKeywords = keywords(from: placeName)
@@ -531,9 +733,15 @@ final class ReminderContextBuilder {
 
     // MARK: - Urgency
 
-    /// True if there's anything pending at all — any future calendar event,
-    /// or any reminder (due or not). Used to decide whether it's even worth
-    /// asking the model, versus showing a deterministic "day's clear" state.
+    /// True if any calendar event is still ahead of us. Used to decide whether
+    /// it's even worth asking the model, versus showing a deterministic
+    /// "day's clear" state.
+    ///
+    /// Calendar events only, deliberately. Eve's own `CalendarReminder` rows
+    /// are generated *from* those events, so they can't be pending when none
+    /// is; and the native Reminders app is a store Eve doesn't read — adding
+    /// an EventKit reminders fetch here would mean a second permission prompt
+    /// to answer a question the calendar already answers.
     func hasAnyPendingCommitment() -> Bool {
 
         let now = Date.now
@@ -626,16 +834,45 @@ final class ReminderContextBuilder {
         isEnglishSafe(text) ? text : nil
     }
 
+    /// Below this, the recognizer's guess is noise and the text is let
+    /// through. Measured on real title shapes — the split is not close:
+    ///
+    ///     Gym                                    sv 0.13
+    ///     Breakfast                              en 0.14
+    ///     Team standup                           id 0.25
+    ///     Tennis                                 fr 0.43
+    ///     Sleep                                  en 0.44
+    ///     Dentist                                tr 0.46
+    ///     Standup                                id 0.47
+    ///     Lunch with the team at the office…     en 0.99
+    ///     Rapat tim pagi ini di kantor pusat     id 1.00
+    ///
+    /// Anything in 0.5...0.9 separates them; 0.75 sits in the middle of the
+    /// gap. Re-measure before moving it — this is the calibration knob for the
+    /// whole filter.
+    private static let languageConfidenceFloor = 0.75
+
     /// True when the dominant language is English, or when the recognizer
-    /// can't confidently identify a language (short strings, proper nouns,
-    /// dates) — in which case it won't tip the prompt's overall detection.
+    /// can't confidently identify one (short strings, proper nouns, dates) —
+    /// in which case it won't tip the prompt's overall detection either.
+    ///
+    /// The confidence floor is the point: this used to read `dominantLanguage`,
+    /// which returns its best guess for *any* input and never nil in practice.
+    /// So a one-word title was classified on noise — "Gym" is Swedish, "Tennis"
+    /// is French, "Standup" is Indonesian — and `buildPreparationContext`
+    /// returned nil for them at its opening guard. One- and two-word titles are
+    /// what calendars contain, so the prep path was dead for most events, and
+    /// the titles that did survive ("Breakfast", en 0.14) passed on a coin
+    /// flip rather than on being English.
     private func isEnglishSafe(_ text: String) -> Bool {
         recognizer.reset()
         recognizer.processString(text)
-        guard let language = recognizer.dominantLanguage else {
+        guard let guess = recognizer.languageHypotheses(withMaximum: 1).first,
+              guess.value >= Self.languageConfidenceFloor
+        else {
             return true
         }
-        return language == .english
+        return guess.key == .english
     }
 
     // MARK: - Gathering
@@ -681,10 +918,7 @@ final class ReminderContextBuilder {
             }
 
             if let notes = event.notes.flatMap(englishOrNil), !notes.isEmpty {
-                let excerpt = notes.count > Self.eventNotesExcerptLimit
-                    ? String(notes.prefix(Self.eventNotesExcerptLimit)) + "…"
-                    : notes
-                line += "\n  Notes: \(UntrustedText.delimit(excerpt))"
+                line += "\n  Notes: \(UntrustedText.delimit(Self.excerpt(notes)))"
             }
 
             return line

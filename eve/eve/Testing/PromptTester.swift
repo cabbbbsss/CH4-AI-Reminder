@@ -6,6 +6,7 @@
 import Foundation
 import Combine
 import OSLog
+import SwiftData
 
 private let logger = Logger(subsystem: "com.caca.Eve", category: "PromptTester")
 
@@ -126,8 +127,17 @@ final class PromptTester: ObservableObject {
         }
     }
 
+    /// Whether the wide context arrived with anything in it.
+    ///
+    /// NOT a retrieval check, despite the name and the "RAG Active" line it
+    /// feeds in the log. Per-event retrieval lives in
+    /// `ReminderContextBuilder.buildPreparationContext` and never runs on this
+    /// path: `build(currentPlace:)` gathers the user's rows wholesale, and
+    /// `MockScenario` hands them over pre-rendered in any case. Read this as
+    /// "the scenario had context", and compare free against EVE Plus through
+    /// `ReminderContextBuilder.selfCheck()` instead, which exercises the real
+    /// retrieval path.
     private func checkRAGUsed(context: ReminderContext) -> Bool {
-        // RAG is effectively considered "used" if there are any retrieved insights or upcoming events injected.
         return !context.insights.isEmpty || !context.upcomingEvents.isEmpty
     }
 
@@ -286,47 +296,161 @@ final class PromptTester: ObservableObject {
         }
     }
     
+    /// Runs the real prep pipeline twice over one event — once as a free
+    /// account, once as \(SubscriptionService.displayName) — so the difference
+    /// retrieval makes is something you can read rather than something the
+    /// asserts merely promise.
+    ///
+    /// This used to hand `suggestPreparation` the scenario's `nextUrgentItem`
+    /// string directly, which skipped `ReminderContextBuilder` entirely: no
+    /// retrieval, no grounding terms, no gate. It measured the model, not the
+    /// feature. It now goes through `buildPreparationContext` and
+    /// `OutputGrounding` on exactly the path `CalendarReminderManager` takes.
+    ///
+    /// Runs against a throwaway store seeded from the scenario's own
+    /// `insights`, not the live one.
+    ///
+    /// This reverses an earlier choice here, for a reason that only appeared
+    /// once this became an evaluation rather than a smoke test: the comparison
+    /// has to differ by entitlement and nothing else, and a live store makes
+    /// the belief half vary per install. Worse, on a fresh test device that
+    /// store is *empty* — so the belief half of retrieval has never actually
+    /// run, and every result so far has really only exercised the corpus.
     func runEventPreparation(scenarioName: String) async {
-        guard let context = scenarios[scenarioName] else { return }
-        
+        guard let scenario = rawScenarios[scenarioName] else { return }
+
         isTesting = true
         defer { isTesting = false }
-        
-        let promptText = context.nextUrgentItem ?? "No urgent item"
-        currentInstructions = "Event Preparation Instructions (Internal strictly guided array schema)"
-        currentPromptText = promptText
-        ragUsed = false // Event prep test here doesn't use the full RAG builder pipeline for brevity
-        currentThoughtProcess = "N/A for Event Preparation Array Schema"
-        lastResult = "Generating..."
-        
-        do {
-            let items = try await modelService.suggestPreparation(forPromptText: promptText)
-            var output = "Items:\n"
-            for item in items {
-                output += "- \(item)\n"
-            }
-            if items.isEmpty {
-                output += "No preparation needed."
-            }
-            lastResult = output
-            
-            let result = TestResult(
-                scenarioName: scenarioName,
-                testType: "Event Preparation",
-                ragUsed: ragUsed,
-                promptInstructions: currentInstructions,
-                promptText: currentPromptText,
-                thoughtProcess: currentThoughtProcess,
-                output: output,
-                expectedOutput: nil,
-                accuracyScore: nil,
-                timestamp: Date()
-            )
-            saveResult(result)
-            logToMarkdown(result: result)
-        } catch {
-            lastResult = "Error: \(error.localizedDescription)"
+
+        guard let container = try? ModelContainer(
+            for: AIInsight.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        ) else {
+            lastResult = "Could not open an in-memory store for the comparison."
+            return
         }
+
+        let modelContext = ModelContext(container)
+
+        // Titles are deliberately neutral. `relevantInsights` matches on
+        // "title: value", so a descriptive title would add terms of its own and
+        // quietly decide the retrieval this test exists to measure.
+        for (index, value) in scenario.insights.enumerated() {
+            modelContext.insert(
+                AIInsight(
+                    category: .behavior,
+                    title: "Belief \(index + 1)",
+                    value: value,
+                    confidence: 0.8,
+                    sourceSummary: "Seeded by PromptTester"
+                )
+            )
+        }
+
+        // "Board Meeting at 2:00 PM" -> "Board Meeting". Every scenario carries
+        // the time in that string; the whole string is a serviceable title for
+        // one that doesn't.
+        let title = scenario.nextUrgentItem?
+            .components(separatedBy: " at ").first?
+            .trimmingCharacters(in: .whitespaces) ?? scenarioName
+
+        let date = Date.now.addingTimeInterval(3600)
+
+        currentInstructions = "Event Preparation (strict) — free vs \(SubscriptionService.displayName)"
+        currentThoughtProcess = "N/A — EventPreparation carries no scratchpad field"
+        ragUsed = false
+        lastResult = "Generating..."
+
+        var output = ""
+        var prompts = ""
+
+        for isPro in [false, true] {
+
+            let label = isPro ? SubscriptionService.displayName : "Free"
+
+            guard let prompt = ReminderContextBuilder(
+                context: modelContext,
+                personalizedRetrieval: isPro
+            ).buildPreparationContext(
+                eventTitle: title,
+                eventDate: date,
+                eventNotes: scenario.eventDescription,
+                eventLocation: scenario.eventLocation,
+                eventAttendees: scenario.guests?.joined(separator: ", "),
+                eventMeetingURL: scenario.meetingLink
+            ) else {
+                output += "\n===== \(label) =====\nBuilder declined this event (language filter).\n"
+                continue
+            }
+
+            prompts += "===== \(label) =====\n\(prompt.promptText)\n\n"
+
+            let items = (try? await modelService.suggestPreparation(
+                forPromptText: prompt.promptText
+            )) ?? []
+
+            // The same gate, fed the same way `CalendarReminderManager` feeds
+            // it — including the empty set that an unmatched event earns, so a
+            // bypass here means a bypass in the app.
+            let result = OutputGrounding.filter(
+                items,
+                groundedIn: prompt.retrievalMissed ? [] : prompt.groundingTerms,
+                notRestating: prompt.subjectTerms
+            )
+
+            let retrieval = isPro
+                ? (prompt.retrievalMissed ? "ran, matched nothing" : "matched")
+                : "off (free)"
+
+
+            output += "\n===== \(label) =====\n"
+            output += "Retrieval: \(retrieval)\n"
+            output += "Model returned \(items.count), shown \(result.kept.count)\n"
+            output += result.kept.isEmpty
+                ? "- (nothing)\n"
+                : result.kept.map { "- \($0)\n" }.joined()
+
+            if !result.dropped.isEmpty {
+                output += "Dropped as ungrounded:\n"
+                output += result.dropped.map { "- \($0)\n" }.joined()
+            }
+
+            // Which seeded beliefs survived matching, named individually: the
+            // prompt shows what got through, this shows what was on offer, and
+            // the gap between them is the retrieval result. Written here, after
+            // the section header — appending it where the values are computed
+            // filed the whole block under the previous tier.
+            if isPro {
+                let retrieved = scenario.insights.filter { prompt.promptText.contains($0) }
+                output += "Beliefs offered \(scenario.insights.count), retrieved \(retrieved.count)\n"
+                for belief in scenario.insights {
+                    output += "  \(retrieved.contains(belief) ? "[hit] " : "[miss]") \(belief)\n"
+                }
+            }
+
+            if isPro, !prompt.retrievalMissed { ragUsed = true }
+
+        }
+
+        currentPromptText = prompts
+        lastResult = output
+
+        // No do/catch: both model calls above already absorb their failure as
+        // an empty item list, which the report shows as "returned 0".
+        let result = TestResult(
+            scenarioName: scenarioName,
+            testType: "Event Preparation (free vs Plus)",
+            ragUsed: ragUsed,
+            promptInstructions: currentInstructions,
+            promptText: currentPromptText,
+            thoughtProcess: currentThoughtProcess,
+            output: output,
+            expectedOutput: nil,
+            accuracyScore: nil,
+            timestamp: Date()
+        )
+        saveResult(result)
+        logToMarkdown(result: result)
     }
     
     func runInsightExtraction(scenarioName: String) async {
