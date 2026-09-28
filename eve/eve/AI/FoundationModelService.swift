@@ -226,8 +226,9 @@ final class FoundationModelService {
     private let preparationInstructions = """
     Extract 2-4 concrete preparation items for the provided event.
 
-    - Source items ONLY from the event details, matching beliefs/reminders, or "General knowledge" (if applicable).
+    - Source items ONLY from the event details, matching beliefs/reminders, "What this person has actually done before events like this", or "General knowledge" (if applicable).
     - Prefer user-provided event details over "General knowledge".
+    - A repeated past action outranks "General knowledge" when both apply. State it as preparation, NEVER as an observation about the user's habits.
     - EVERY item MUST name a specific thing to bring, prepare, or check.
     - NEVER write generic advice (e.g., "arrive on time", "be prepared").
     - NEVER introduce objects or details absent from the provided sources.
@@ -252,6 +253,7 @@ final class FoundationModelService {
     - Base reminders on the event details, matching beliefs/reminders, or "General knowledge".
     - Common-sense inference from the activity is required (e.g. "Gym" → bring workout gear).
     - Prioritize "General knowledge" over assumptions if it covers the activity.
+    - A repeated past action, when listed, outranks "General knowledge".
     - NEVER invent specifics not directly implied by the event's nature (e.g., umbrella for a meeting).
     - NEVER output generic advice (e.g., "be prepared"). EVERY item MUST be specific and actionable.
     - Return EMPTY list if the event is too vague (e.g., "Sleep", "Free time").

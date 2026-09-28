@@ -30,7 +30,10 @@
       "category": "actionable",
       "title": "Upcoming Board Meeting",
       "body": "Print and review the Q3 financial reports for the meeting in Conference Room A."
-    }
+    },
+    "completedPrep": [
+      "Print the quarterly deck"
+    ]
   },
   "Student Morning": {
     "currentPlace": "Dorm",

@@ -29,6 +29,13 @@ struct MockScenario: Decodable {
     let insights: [String]
     let recentHistory: [String]
     let answeredQuestions: [String]
+
+    /// Prep items the user is supposed to have ticked off before earlier
+    /// occurrences of this event. Optional, so the original scenarios decode
+    /// unchanged. Each is seeded twice, which is the threshold
+    /// `completedHabits` requires before it will call something a habit.
+    let completedPrep: [String]?
+
     let expectedDecision: ExpectedDecision?
     
     var context: ReminderContext {
@@ -323,7 +330,7 @@ final class PromptTester: ObservableObject {
         defer { isTesting = false }
 
         guard let container = try? ModelContainer(
-            for: AIInsight.self,
+            for: AIInsight.self, CalendarReminder.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         ) else {
             lastResult = "Could not open an in-memory store for the comparison."
@@ -355,6 +362,21 @@ final class PromptTester: ObservableObject {
             .trimmingCharacters(in: .whitespaces) ?? scenarioName
 
         let date = Date.now.addingTimeInterval(3600)
+
+        // Seeded after `title`, because a habit only counts when its own event
+        // title matches this one — the same relevance test the app applies.
+        for (index, text) in (scenario.completedPrep ?? []).enumerated() {
+            for occurrence in 0..<2 {
+                let row = CalendarReminder(
+                    occurrenceID: "seed-\(index)-\(occurrence)",
+                    eventTitle: title,
+                    eventDate: date.addingTimeInterval(-Double(occurrence + 1) * 7 * 86_400),
+                    text: text
+                )
+                row.isCompleted = true
+                modelContext.insert(row)
+            }
+        }
 
         currentInstructions = "Event Preparation (strict) — free vs \(SubscriptionService.displayName)"
         currentThoughtProcess = "N/A — EventPreparation carries no scratchpad field"
@@ -420,6 +442,14 @@ final class PromptTester: ObservableObject {
             // the gap between them is the retrieval result. Written here, after
             // the section header — appending it where the values are computed
             // filed the whole block under the previous tier.
+            if isPro, let habits = scenario.completedPrep, !habits.isEmpty {
+                let used = habits.filter { prompt.promptText.contains($0) }
+                output += "Habits offered \(habits.count), retrieved \(used.count)\n"
+                for habit in habits {
+                    output += "  \(used.contains(habit) ? "[hit] " : "[miss]") \(habit)\n"
+                }
+            }
+
             if isPro {
                 let retrieved = scenario.insights.filter { prompt.promptText.contains($0) }
                 output += "Beliefs offered \(scenario.insights.count), retrieved \(retrieved.count)\n"

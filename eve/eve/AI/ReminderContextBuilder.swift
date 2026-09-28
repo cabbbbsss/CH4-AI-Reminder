@@ -246,6 +246,13 @@ final class ReminderContextBuilder {
         // user's rows say a gym session is happening; these say it implies
         // gear. Fires only on an explicit trigger word, so an event the corpus
         // doesn't cover — "Sleep" — correctly retrieves nothing.
+        // What this person has actually done before events like this. Gated by
+        // the same flag as the other two, so the AI layer still has exactly one
+        // entitlement check.
+        var habits = personalizedRetrieval
+            ? completedHabits(to: eventKeywords, before: eventDate)
+            : []
+
         var knowledge = personalizedRetrieval
             ? KnowledgeStore.facts(matching: eventKeywords).map(\.text)
             : []
@@ -254,8 +261,12 @@ final class ReminderContextBuilder {
         // tokens shared with the instructions, the schema and the response
         // (TN3193), so trim to a budget rather than trusting per-section caps
         // to add up to something safe.
+        // Habits sit between the two on purpose: a belief the user confirmed
+        // outranks anything inferred, but evidence of what *this* person did
+        // outranks a generic statement about the activity.
         var budget = Self.characterBudget(forTokens: Self.retrievalTokenBudget)
         beliefs = Self.take(beliefs, within: &budget)
+        habits = Self.take(habits, within: &budget)
         knowledge = Self.take(knowledge, within: &budget)
 
         var promptText = """
@@ -263,6 +274,16 @@ final class ReminderContextBuilder {
 
         \(section("Beliefs about the user that specifically match this event", beliefs))
         """
+
+        // Same rule as the knowledge section below: omitted entirely when
+        // empty, never rendered as "none", so an absence of evidence cannot be
+        // read as a fact about the user.
+        if !habits.isEmpty {
+            promptText += "\n\n" + section(
+                "What this person has actually done before events like this",
+                habits
+            )
+        }
 
         // Only added when non-empty: an explicit "none" here invites the model
         // to remark on the absence, and the strict prep instructions already
@@ -288,7 +309,7 @@ final class ReminderContextBuilder {
         // Grounds a prep item that names the provider ("Zoom", "Teams") — the
         // host survives keyword extraction from the URL.
         groundingTerms.formUnion(keywords(from: eventMeetingURL ?? ""))
-        for line in beliefs + knowledge {
+        for line in beliefs + habits + knowledge {
             groundingTerms.formUnion(keywords(from: UntrustedText.strip(line)))
         }
 
@@ -296,7 +317,8 @@ final class ReminderContextBuilder {
             promptText: promptText,
             groundingTerms: groundingTerms,
             subjectTerms: titleKeywords,
-            retrievalMissed: personalizedRetrieval && beliefs.isEmpty && knowledge.isEmpty
+            retrievalMissed: personalizedRetrieval
+                && beliefs.isEmpty && habits.isEmpty && knowledge.isEmpty
         )
 
     }
@@ -313,7 +335,7 @@ final class ReminderContextBuilder {
     static func selfCheck() {
 
         guard let container = try? ModelContainer(
-            for: AIInsight.self,
+            for: AIInsight.self, CalendarReminder.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         ) else {
             assertionFailure("context builder self-check could not open an in-memory store")
@@ -359,6 +381,61 @@ final class ReminderContextBuilder {
         assert(
             prompt(pro: true, title: "Tennis")?.retrievalMissed == true,
             "an unmatched event should report a retrieval miss"
+        )
+
+        // MARK: Habit retrieval — the five cases, in one seeded store.
+
+        let habitStore = ModelContext(container)
+
+        func completed(_ text: String, event: String, daysAgo: Int, occurrence: String) {
+            let row = CalendarReminder(
+                occurrenceID: occurrence,
+                eventTitle: event,
+                eventDate: date.addingTimeInterval(-Double(daysAgo) * 86_400),
+                text: text
+            )
+            row.isCompleted = true
+            habitStore.insert(row)
+        }
+
+        // A pattern: same habit, two earlier occurrences of the same event.
+        completed("Print the quarterly deck", event: "Board Meeting", daysAgo: 7, occurrence: "b1")
+        completed("Print the quarterly deck", event: "Board Meeting", daysAgo: 14, occurrence: "b2")
+        // Irrelevant to a board meeting, and repeated, so only relevance can exclude it.
+        completed("Bring the insurance card", event: "Dental Checkup", daysAgo: 3, occurrence: "d1")
+        completed("Bring the insurance card", event: "Dental Checkup", daysAgo: 9, occurrence: "d2")
+        // Relevant but done once — an incident, not a habit.
+        completed("Book the corner room", event: "Board Meeting", daysAgo: 21, occurrence: "b3")
+
+        func habitPrompt(pro: Bool, title: String) -> String {
+            ReminderContextBuilder(context: habitStore, personalizedRetrieval: pro)
+                .buildPreparationContext(
+                    eventTitle: title, eventDate: date, eventNotes: nil, eventLocation: nil
+                )?.promptText ?? ""
+        }
+
+        let plusBoard = habitPrompt(pro: true, title: "Board Meeting")
+
+        // 1. Free, with the same history present, gets none of it.
+        assert(
+            !habitPrompt(pro: false, title: "Board Meeting").contains("quarterly deck"),
+            "history personalization leaked to a free account"
+        )
+
+        // 2. Plus gets the repeated, relevant habit.
+        assert(plusBoard.contains("quarterly deck"), "a repeated relevant habit was not retrieved")
+
+        // 3. ...without the repeated but irrelevant one.
+        assert(!plusBoard.contains("insurance card"), "an unrelated habit reached the prompt")
+
+        // 4. A single occurrence stays below the threshold.
+        assert(!plusBoard.contains("corner room"), "one completion was presented as a habit")
+
+        // 5. No qualifying history means no section at all, not an empty one.
+        assert(
+            !habitPrompt(pro: true, title: "Piano Practice")
+                .contains("actually done before events like this"),
+            "an empty habit section was rendered"
         )
 
         // The belief half, on the exact pair that used to miss: the event says
@@ -676,6 +753,65 @@ final class ReminderContextBuilder {
     private func sharesKeyword(_ text: String, with eventKeywords: Set<String>) -> Bool {
         guard !eventKeywords.isEmpty else { return false }
         return !keywords(from: text).isDisjoint(with: eventKeywords)
+    }
+
+    /// Prep items this person has actually ticked off before events like this
+    /// one, kept only where they form a pattern.
+    ///
+    /// Evidence rather than narration. `HistoryItem` looks like the natural
+    /// source and is not: `reminderCompleted`, `reminderIgnored` and
+    /// `reminderSnoozed` are declared but never written, so that store holds
+    /// only calendar-sync bookkeeping, GPS fixes, and restatements of insights
+    /// and answers this builder already retrieves by other means. A completed
+    /// `CalendarReminder` is the one place the app records that the user did
+    /// something, and `regenerate` deletes only *uncompleted* system rows, so
+    /// they accumulate.
+    ///
+    /// `occurrencesNeeded` is the whole safeguard: one completed item is an
+    /// incident, and presenting it as a habit would invent a person. Only a
+    /// thing done before two separate earlier occurrences is offered, and
+    /// nothing is offered when nothing qualifies.
+    private func completedHabits(
+        to eventKeywords: Set<String>,
+        before cutoff: Date,
+        limit: Int = 2,
+        occurrencesNeeded: Int = 2
+    ) -> [String] {
+
+        // Strictly earlier events only, so this event's own items can never
+        // feed themselves back in as evidence of a habit.
+        let descriptor = FetchDescriptor<CalendarReminder>(
+            predicate: #Predicate { $0.isCompleted && $0.eventDate < cutoff },
+            sortBy: [SortDescriptor(\.eventDate, order: .reverse)]
+        )
+
+        let completed = (try? context.fetch(descriptor)) ?? []
+
+        // Grouped by what the item *says*, through the shared tokeniser, so
+        // "Bring your laptop charger" and "Bring the laptop charger" are one
+        // habit. Keying on the raw string would almost never repeat, and the
+        // feature would silently never fire.
+        var byHabit: [String: (text: String, occurrences: Set<String>)] = [:]
+
+        for row in completed where sharesKeyword(row.eventTitle, with: eventKeywords) {
+            let key = keywords(from: row.text).sorted().joined(separator: " ")
+            guard !key.isEmpty else { continue }
+            // Rows arrive newest first, so the text kept is the most recent
+            // phrasing of the habit.
+            byHabit[key, default: (row.text, [])].occurrences.insert(row.occurrenceID)
+        }
+
+        let patterns = byHabit.values
+            .filter { $0.occurrences.count >= occurrencesNeeded }
+            .sorted { $0.occurrences.count > $1.occurrences.count }
+            .prefix(limit)
+
+        // The text was model-generated and the event title came from EventKit,
+        // so both travel as untrusted, exactly like beliefs do.
+        return englishOnlyDelimiting(patterns.map {
+            (lead: "", untrusted: $0.text, trail: " (done before \($0.occurrences.count) times)")
+        })
+
     }
 
     /// Beliefs relevant to one event, ranked and capped.
