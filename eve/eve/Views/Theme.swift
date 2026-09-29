@@ -77,6 +77,18 @@ extension ShapeStyle where Self == Color {
 
     /// Text and icons on `eveInverseSurface`.
     static var eveOnInverseSurface: Color { Color(.textSecondary) }
+
+    /// The lit top of an inverted pill, above `eveInverseSurface`.
+    ///
+    /// The one value the PLUS badge's gradient needs that no existing token
+    /// covers; its other stop, its border and its label are all
+    /// `eveInverseSurface` / `eveOnInverseSurface` already.
+    ///
+    /// The artboard specifies light only (#3E6590). Dark is derived from the
+    /// same relationship — a highlight *above* the inverse surface, which in
+    /// dark mode is itself light — so the pill keeps its lit edge instead of
+    /// inverting into a dark smudge. Replace it if a dark artboard lands.
+    static var eveInverseSurfaceLit: Color { Color(.gradientPlusStart) }
 }
 
 // MARK: - Type scale

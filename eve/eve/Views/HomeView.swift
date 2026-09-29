@@ -325,14 +325,37 @@ struct HomeView: View {
         .padding(.horizontal, Theme.Spacing.gutter)
     }
 
+    /// Sketch `Homepage Copy 28` — an 82×35 capsule, gradient lit from the top
+    /// left, hairline border and label in the same pale blue.
+    ///
+    /// Sized by its padding rather than pinned to 82×35, so the pill grows with
+    /// Dynamic Type instead of clipping its own label.
+    ///
+    /// The artboard sets the label in `Lighters` 15. That font is not in the
+    /// bundle and there is no `UIAppFonts` entry, so `Font.custom` would fall
+    /// back to the system face without saying so — this asks for the system
+    /// face outright, at the artboard's size and weight, and leans on tracking
+    /// for the wide setting the display face gave it for free.
     private var plusBadge: some View {
         Text("PLUS")
-            .font(.eveCaption)
-            .tracking(1)
+            .font(.system(size: 15))
+            .tracking(3)
             .foregroundStyle(Color.eveOnInverseSurface)
             .padding(.horizontal, Theme.Spacing.m)
             .padding(.vertical, Theme.Spacing.xs)
-            .background(Capsule().fill(Color.eveInverseSurface))
+            .background {
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.eveInverseSurfaceLit, Color.eveInverseSurface],
+                            startPoint: .topLeading,
+                            endPoint: .bottom
+                        )
+                    )
+                    .overlay(
+                        Capsule().strokeBorder(Color.eveOnInverseSurface, lineWidth: 1)
+                    )
+            }
             .accessibilityLabel("\(SubscriptionService.displayName) subscriber")
     }
 

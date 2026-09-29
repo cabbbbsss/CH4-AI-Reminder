@@ -33,3 +33,6 @@ Icon_
 ._*
 .Spotlight-V100
 .Trashes
+
+# Local MCP servers (machine-specific, e.g. the Sketch plugin bridge)
+.mcp.json
