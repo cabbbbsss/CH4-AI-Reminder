@@ -23,12 +23,4 @@ enum FeatureFlags {
     /// calendar event.
     static let showDebugTools = false
 
-    /// The "Previous question" chevron in `OnboardingQuestionsView`.
-    ///
-    /// Not a debug surface — a product decision. "Remove the back button from
-    /// onboarding" took the others out via `OnboardingBackButton`, which
-    /// `OnboardingQuestionsView` never used, so this one survived. Off for the
-    /// same reason as the rest.
-    static let showOnboardingBackButton = false
-
 }

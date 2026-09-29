@@ -356,7 +356,7 @@ struct HomeView: View {
                         Capsule().strokeBorder(Color.eveOnInverseSurface, lineWidth: 1)
                     )
             }
-            .accessibilityLabel("Eve Plus subscriber")
+            .accessibilityLabel("\(SubscriptionService.displayName) subscriber")
     }
 
     // MARK: - Suggestion bubble

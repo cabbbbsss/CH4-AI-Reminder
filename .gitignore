@@ -10,7 +10,13 @@ DerivedData/
 xcuserdata/
 *.xcuserdatad
 *.xcuserstate
-project.xcworkspace/
+**/project.xcworkspace/*
+# ...except the SwiftPM lockfile, so a fresh clone resolves the same RevenueCat version
+!**/project.xcworkspace/xcshareddata/
+**/project.xcworkspace/xcshareddata/*
+!**/project.xcworkspace/xcshareddata/swiftpm/
+**/project.xcworkspace/xcshareddata/swiftpm/*
+!**/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 !*.xcodeproj/project.pbxproj
 !*.xcodeproj/xcshareddata/
 !*.xcworkspace/contents.xcworkspacedata
