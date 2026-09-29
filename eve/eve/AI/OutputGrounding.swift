@@ -54,7 +54,7 @@ enum OutputGrounding {
     // "glasse", which is harmless because every caller runs this same function
     // and only ever compares results with each other. Reach for NLTagger
     // `.lemma` if a real miss ever traces back to tense or an -ing form.
-    static func stem(_ word: String) -> String {
+    nonisolated static func stem(_ word: String) -> String {
         guard word.count > 3, word.hasSuffix("s"), !word.hasSuffix("ss") else { return word }
         return String(word.dropLast())
     }

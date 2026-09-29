@@ -46,17 +46,12 @@ final class SubscriptionService {
     /// RevenueCat's public SDK key. Public by design — it can only read
     /// offerings and start purchases, so shipping it in the binary is expected
     /// (the secret key, which can mutate subscriber state, never leaves the
-    /// dashboard). Swap this for the `appl_…` production key before submitting;
-    /// a `test_…` key only reaches RevenueCat's Test Store, not App Store Connect.
+    /// dashboard). This is a `test_…` key, which only reaches RevenueCat's Test
+    /// Store: purchases are simulated, so anyone building from source can unlock
+    /// EVE Plus without an App Store account. The SDK deliberately crashes a
+    /// Release build that uses a Test Store key; swap in the `appl_…` key before
+    /// an App Store release.
     private static let apiKey = "test_UvsrpxjISkvnAtPLeZrXESJDtnx"
-
-    /// Package identifiers configured on the offering, in display order.
-    ///
-    /// RevenueCat's built-in package types (`$rc_lifetime`, `$rc_annual`,
-    /// `$rc_monthly`) are tried first via `Offering.lifetime`/`.annual`/`.monthly`;
-    /// these are the custom-identifier fallback for an offering that was set up
-    /// with plain names instead.
-    private static let packageIdentifierFallbacks = ["lifetime", "yearly", "monthly"]
 
     // MARK: - Observable state
 
@@ -66,9 +61,6 @@ final class SubscriptionService {
 
     /// The offering that backs the paywall, or `nil` while loading / on failure.
     private(set) var currentOffering: Offering?
-
-    private(set) var isLoadingOfferings = false
-    private(set) var isPurchasing = false
 
     /// Last user-presentable failure. Views clear it once shown.
     var lastErrorMessage: String?
@@ -91,11 +83,6 @@ final class SubscriptionService {
     /// The raw entitlement, for screens that want renewal date or store.
     var entitlement: EntitlementInfo? {
         customerInfo?.entitlements[Self.entitlementID]
-    }
-
-    /// When the current subscription lapses. `nil` for lifetime purchases.
-    var proExpirationDate: Date? {
-        entitlement?.expirationDate
     }
 
     /// A one-line status for the Settings row.
@@ -198,9 +185,6 @@ final class SubscriptionService {
     /// user should see. Never hardcode the product list here: which packages are
     /// in the offering, and any A/B experiment over them, is a remote decision.
     func loadOfferings() async {
-        isLoadingOfferings = true
-        defer { isLoadingOfferings = false }
-
         do {
             currentOffering = try await Purchases.shared.offerings().current
         } catch {
@@ -209,56 +193,7 @@ final class SubscriptionService {
         }
     }
 
-    /// Lifetime → Yearly → Monthly, skipping any the offering doesn't carry.
-    ///
-    /// Only needed by a hand-built paywall; the RevenueCat-hosted paywall lays
-    /// the offering out itself.
-    var orderedPackages: [Package] {
-        guard let offering = currentOffering else { return [] }
-
-        let byType = [offering.lifetime, offering.annual, offering.monthly]
-        let resolved = zip(byType, Self.packageIdentifierFallbacks).map { typed, identifier in
-            typed ?? offering.package(identifier: identifier)
-        }
-
-        let ordered = resolved.compactMap { $0 }
-        // An offering built entirely out of custom package types matches nothing
-        // above — fall back to whatever order the dashboard defined.
-        return ordered.isEmpty ? offering.availablePackages : ordered
-    }
-
-    // MARK: - Purchasing
-
-    enum PurchaseOutcome: Equatable {
-        case purchased
-        case cancelled
-        case failed(String)
-    }
-
-    /// Buys a package and reports what happened.
-    ///
-    /// A user backing out of the App Store sheet is `.cancelled`, not an error —
-    /// showing an alert for it is the most common paywall mistake. Entitlement
-    /// state is not set here: the returned `CustomerInfo` flows back through
-    /// `customerInfoStream`, so there is exactly one place it is written.
-    @discardableResult
-    func purchase(_ package: Package) async -> PurchaseOutcome {
-        guard !isPurchasing else { return .cancelled }
-        isPurchasing = true
-        defer { isPurchasing = false }
-
-        do {
-            let result = try await Purchases.shared.purchase(package: package)
-            if result.userCancelled { return .cancelled }
-            customerInfo = result.customerInfo
-            return isPro ? .purchased : .failed("The purchase went through but \(Self.displayName) didn't unlock. Try Restore Purchases.")
-        } catch {
-            if (error as? ErrorCode) == .purchaseCancelledError { return .cancelled }
-            let message = Self.message(for: error)
-            lastErrorMessage = message
-            return .failed(message)
-        }
-    }
+    // MARK: - Restoring
 
     /// Restores purchases made with this Apple ID.
     ///

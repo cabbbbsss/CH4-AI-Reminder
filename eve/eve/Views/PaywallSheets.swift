@@ -54,24 +54,6 @@ extension View {
             EvePaywallSheet(onUnlocked: onUnlocked)
         }
     }
-
-    /// Shows the paywall automatically whenever this view appears without the
-    /// `EVE Plus` entitlement, and nothing once the user has it.
-    ///
-    /// Use this to gate a whole screen. For a single button or row, prefer
-    /// checking `SubscriptionService.shared.isPro` and presenting
-    /// ``evePaywall(isPresented:onUnlocked:)`` yourself, so the user sees what
-    /// they're buying before the sheet arrives.
-    ///
-    /// If `CustomerInfo` can't be fetched — offline, first launch — RevenueCat
-    /// deliberately shows nothing rather than locking a paying user out.
-    func eveProGate() -> some View {
-        presentPaywallIfNeeded(
-            requiredEntitlementIdentifier: SubscriptionService.entitlementID,
-            purchaseCompleted: { _ in SubscriptionService.shared.refreshAfterPaywall() },
-            restoreCompleted: { _ in SubscriptionService.shared.refreshAfterPaywall() }
-        )
-    }
 }
 
 // MARK: - Customer Center

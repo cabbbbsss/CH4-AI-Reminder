@@ -151,6 +151,9 @@ struct ProSettingsSection: View {
     @State private var isShowingPaywall = false
     @State private var isShowingCustomerCenter = false
     @State private var isRestoring = false
+    /// A successful restore changes nothing visible when the user was already
+    /// subscribed, so it gets its own confirmation. Failures use `errorAlert`.
+    @State private var isShowingRestored = false
 
     /// `lastErrorMessage` doubles as the alert trigger — set it to present,
     /// clear it on dismiss.
@@ -194,7 +197,7 @@ struct ProSettingsSection: View {
                 Button {
                     Task {
                         isRestoring = true
-                        await subscriptions.restorePurchases()
+                        isShowingRestored = await subscriptions.restorePurchases()
                         isRestoring = false
                     }
                 } label: {
@@ -214,6 +217,11 @@ struct ProSettingsSection: View {
             Button("OK", role: .cancel) { }
         } message: {
             Text(subscriptions.lastErrorMessage ?? "")
+        }
+        .alert("\(SubscriptionService.displayName) restored", isPresented: $isShowingRestored) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Your \(SubscriptionService.displayName) membership is active on this iPhone.")
         }
     }
 }
