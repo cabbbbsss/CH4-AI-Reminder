@@ -14,26 +14,14 @@ final class UserProfile {
     /// What the user asks EVE to call them. Empty until they set it in Settings.
     var name: String
 
-    var homeLocation: String?
-
-    var workLocation: String?
-
-    var reminderStyle: String
-
     var createdAt: Date
 
     init(
         name: String = "",
-        homeLocation: String? = nil,
-        workLocation: String? = nil,
-        reminderStyle: String = "Adaptive",
         createdAt: Date = .now
     ) {
 
         self.name = name
-        self.homeLocation = homeLocation
-        self.workLocation = workLocation
-        self.reminderStyle = reminderStyle
         self.createdAt = createdAt
 
     }

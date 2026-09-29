@@ -91,16 +91,32 @@ struct ReminderContext {
             return "\(header):\n" + lines.map { "- \($0)" }.joined(separator: "\n")
         }
 
+        func detail(_ label: String, _ value: String?) -> String? {
+            guard let value, !value.isEmpty else { return nil }
+            return "\(label): \(value)"
+        }
+
+        // Rendered only when present. `build(currentPlace:)` passes all four as
+        // nil — the per-event equivalents travel inside `upcomingEvents`, where
+        // they *are* populated — so in production these were four `none` lines
+        // in every prompt, asserting that information was absent when it had
+        // simply never been gathered here. `PromptTester`'s scenarios do supply
+        // them, and those render exactly as before.
+        let eventDetail = [
+            detail("Meeting link", meetingLink),
+            detail("Event location", eventLocation),
+            detail("Event description", eventDescription),
+            (guests?.isEmpty == false) ? section("Guests", guests ?? []) : nil
+        ]
+        .compactMap { $0 }
+        .joined(separator: "\n")
+
         return """
         Current date and time: \(currentDate.formatted(date: .complete, time: .shortened))
         Current place: \(currentPlace ?? "unknown")
         User's name: \((userName?.isEmpty == false ? userName : nil) ?? "unknown")
 
-        Most urgent upcoming commitment: \(nextUrgentItem ?? "none within the next 24 hours")
-        Meeting link: \(meetingLink ?? "none")
-        Event location: \(eventLocation ?? "none")
-        Event description: \(eventDescription ?? "none")
-        \(section("Guests", guests ?? []))
+        Most urgent upcoming commitment: \(nextUrgentItem ?? "none within the next 24 hours")\(eventDetail.isEmpty ? "" : "\n" + eventDetail)
 
         \(section("Upcoming calendar events", upcomingEvents))
 
