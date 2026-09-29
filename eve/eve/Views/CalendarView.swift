@@ -147,11 +147,15 @@ struct CalendarView: View {
                 await syncManager?.start()
             }
         }
+        // Re-runs on every return to this tab as well as on a date change.
+        // The manager remembers what it already prepared this session, so a
+        // day that's done returns at once — and without the spinner.
         .task(id: selectedDate) {
             if reminderManager == nil { reminderManager = CalendarReminderManager(context: modelContext) }
+            guard let reminderManager, reminderManager.needsGeneration(for: selectedDate) else { return }
             isGenerating = true
-            await reminderManager?.ensureReminders(for: selectedDate)
-            isGenerating = false
+            defer { isGenerating = false }
+            await reminderManager.ensureReminders(for: selectedDate)
         }
     }
 

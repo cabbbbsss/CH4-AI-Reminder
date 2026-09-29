@@ -194,18 +194,44 @@ final class AssistantManager {
     /// way is dropped, and when the user has a calendar the questions have to
     /// be about it. An empty result is fine — the view falls back to the
     /// hand-written set.
+    ///
+    /// Asked twice at most. A single generation is at the mercy of one
+    /// sample: a thrown error, or a batch the filter empties entirely, used to
+    /// send the user straight to the hand-written set after the whole wait.
+    /// The second attempt runs at the same temperature, so it is a genuinely
+    /// different draw rather than the same answer again.
     func onboardingQuestions(currentPlace: String?) async -> [OnboardingQuestion] {
 
         let reminderContext = contextBuilder.build(currentPlace: currentPlace)
 
-        let generated = (try? await foundationModel.generateOnboardingQuestions(
-            from: reminderContext
-        )) ?? []
+        for attempt in 1...2 {
 
-        return QuestionShape.usable(
-            generated,
-            groundedIn: reminderContext.calendarTerms
-        )
+            let generated: [OnboardingQuestion]
+
+            do {
+                generated = try await foundationModel.generateOnboardingQuestions(
+                    from: reminderContext
+                )
+            } catch {
+                #if DEBUG
+                print("[Eve/onboarding] attempt \(attempt): generation failed — \(error)")
+                #endif
+                continue
+            }
+
+            let usable = QuestionShape.usable(
+                generated,
+                groundedIn: reminderContext.calendarTerms
+            )
+
+            #if DEBUG
+            print("[Eve/onboarding] attempt \(attempt): \(generated.count) generated, \(usable.count) usable")
+            #endif
+
+            if !usable.isEmpty { return usable }
+        }
+
+        return []
     }
 
     /// A short, event-specific prep checklist for one calendar event —

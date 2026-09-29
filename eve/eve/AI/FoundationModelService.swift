@@ -99,7 +99,10 @@ struct OnboardingQuestionSet {
     @Guide(description: "Inference scratchpad to analyze user context before formulating questions")
     let thoughtProcess: String
 
-    @Guide(description: "Concise yes/no onboarding questions based ONLY on the provided context. If the user's data lacks clear patterns, return an empty array [] so the app can use its fallback questions.")
+    // No "return an empty array if…" escape hatch here any more: the model
+    // took it on thin-but-usable calendars, and an empty list sends the user
+    // to the generic fallback set after the whole wait.
+    @Guide(description: "3 to 5 concise yes/no onboarding questions based ONLY on the provided context.")
     let questions: [OnboardingQuestion]
 
 }
@@ -503,7 +506,7 @@ final class FoundationModelService {
     - NEVER ask open-ended questions using "when", "what", "where", "how", "which", "who", or "why".
     - When the context lists calendar events, EVERY question MUST be about something named in them — the event, its place, or the people in it. Questions unrelated to the user's calendar are discarded before the user sees them.
     - ONLY ask about generic topics (like medication, pets, commute) if the context lists no calendar events at all.
-    - If there is not enough data to form meaningful questions, return an empty list of questions.
+    - Write 3 to 5 questions. With only a few events, ask about those few from different angles (the event, its place, its people, preparing for it).
     - Limit each question to ONE sentence.
     - NEVER repeat questions.
 
