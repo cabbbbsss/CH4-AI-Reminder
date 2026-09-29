@@ -110,7 +110,7 @@ struct OnboardingQuestionsView: View {
 
   private var bottomBar: some View {
     HStack {
-      if index > 0, FeatureFlags.showOnboardingBackButton {
+      if index > 0 {
         Button {
           goingForward = false
           withAnimation(.easeInOut) { index -= 1 }
