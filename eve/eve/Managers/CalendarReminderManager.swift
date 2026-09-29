@@ -29,10 +29,7 @@ final class CalendarReminderManager {
 
     init(context: ModelContext) {
         self.context = context
-        self.contextBuilder = ReminderContextBuilder(
-            context: context,
-            personalizedRetrieval: SubscriptionService.shared.isPro
-        )
+        self.contextBuilder = .followingEntitlement(context: context)
     }
 
     /// One event's prep generation, reduced to plain values so it can cross

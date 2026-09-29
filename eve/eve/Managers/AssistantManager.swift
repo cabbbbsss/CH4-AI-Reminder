@@ -30,10 +30,7 @@ final class AssistantManager {
     private let notificationService: NotificationService
 
     init(context: ModelContext, notificationService: NotificationService) {
-        self.contextBuilder = ReminderContextBuilder(
-            context: context,
-            personalizedRetrieval: SubscriptionService.shared.isPro
-        )
+        self.contextBuilder = .followingEntitlement(context: context)
         self.insightManager = InsightManager(context: context)
         self.notificationService = notificationService
     }
