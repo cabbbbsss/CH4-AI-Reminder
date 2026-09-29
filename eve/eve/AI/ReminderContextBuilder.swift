@@ -397,6 +397,30 @@ final class ReminderContextBuilder {
             "an unmatched event should report a retrieval miss"
         )
 
+        // MARK: Wide prompt — absent event detail is omitted, not asserted.
+
+        func wide(link: String?, place: String?, desc: String?, guests: [String]?) -> String {
+            ReminderContext(
+                currentDate: date, currentPlace: nil, userName: nil, nextUrgentItem: nil,
+                meetingLink: link, eventDescription: desc, eventLocation: place, guests: guests,
+                upcomingEvents: [], insights: [], recentHistory: [],
+                answeredQuestions: [], contextualPreferences: []
+            ).promptText
+        }
+
+        // Production shape: `build(currentPlace:)` passes all four as nil.
+        let bare = wide(link: nil, place: nil, desc: nil, guests: nil)
+        for absent in ["Meeting link", "Event location", "Event description", "Guests"] {
+            assert(!bare.contains(absent), "wide prompt still renders an empty \(absent) line")
+        }
+
+        // PromptTester's scenarios do supply them, and must still render.
+        let full = wide(link: "https://zoom.us/j/1", place: "Room A", desc: "Quarterly review", guests: ["Sarah"])
+        for present in ["Meeting link: https://zoom.us/j/1", "Event location: Room A",
+                        "Event description: Quarterly review", "Sarah"] {
+            assert(full.contains(present), "wide prompt dropped a populated value: \(present)")
+        }
+
         // MARK: Confirmed answers — the last step of the learning loop.
         //
         // The loop is only real if a stored answer reaches a *later* prompt.
@@ -872,8 +896,8 @@ final class ReminderContextBuilder {
     /// one, kept only where they form a pattern.
     ///
     /// Evidence rather than narration. `HistoryItem` looks like the natural
-    /// source and is not: `reminderCompleted`, `reminderIgnored` and
-    /// `reminderSnoozed` are declared but never written, so that store holds
+    /// source and is not: it never recorded reminder interactions at all — the
+    /// enum cases for them were removed as never-written — so that store holds
     /// only calendar-sync bookkeeping, GPS fixes, and restatements of insights
     /// and answers this builder already retrieves by other means. A completed
     /// `CalendarReminder` is the one place the app records that the user did

@@ -94,37 +94,37 @@ struct SettingsView: View {
                     }
                 }
 
-//                // General App
-//                SettingsSection(header: "General App") {
-//                    SettingsCard {
-//                        SettingsRow(label: "Language")
-//                        SettingsDivider()
-//                        SettingsRow(label: "Legal & Privacy")
-//                    }
-//                }
+                // Restored from a commented-out block, unchanged, and compiled
+                // only for DEBUG. These are the one-tap way to check that
+                // notifications are delivered at all, and that the contextual
+                // learning notification and its Yes/No/Customize actions work
+                // on a real device — `testEvaluateNextEvent` deliberately
+                // bypasses the 1.5-hour window and the already-asked check so
+                // it fires in five seconds rather than when an event happens.
+                #if DEBUG
+                SettingsSection(header: "Notification Diagnostics") {
+                    SettingsCard {
+                        Button {
+                            Task { @MainActor in try? await notificationService.scheduleTestNotification() }
+                        } label: {
+                            SettingsRow(icon: "bell.badge.fill", label: "Send test notification (5s)", showChevron: false)
+                        }
+                        .buttonStyle(.plain)
 
-//                SettingsSection(header: "Notification Diagnostics") {
-//                    SettingsCard {
-//                        Button {
-//                            Task { @MainActor in try? await notificationService.scheduleTestNotification() }
-//                        } label: {
-//                            SettingsRow(icon: "bell.badge.fill", label: "Send test notification (5s)", showChevron: false)
-//                        }
-//                        .buttonStyle(.plain)
-//
-//                        SettingsDivider()
-//
-//                        Button {
-//                            Task { @MainActor in
-//                                let scheduler = LearningScheduler(context: modelContext)
-//                                await scheduler.testEvaluateNextEvent()
-//                            }
-//                        } label: {
-//                            SettingsRow(icon: "brain.head.profile", label: "Send learning notification (5s)", showChevron: false)
-//                        }
-//                        .buttonStyle(.plain)
-//                    }
-//                }
+                        SettingsDivider()
+
+                        Button {
+                            Task { @MainActor in
+                                let scheduler = LearningScheduler(context: modelContext)
+                                await scheduler.testEvaluateNextEvent()
+                            }
+                        } label: {
+                            SettingsRow(icon: "brain.head.profile", label: "Send learning notification (5s)", showChevron: false)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                #endif
             }
             .padding(.top, 16)
             .padding(.bottom, 40)

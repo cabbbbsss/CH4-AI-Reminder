@@ -12,12 +12,6 @@ enum HistoryItemType: String, Codable, CaseIterable {
 
     case calendarImported
 
-    case reminderCompleted
-
-    case reminderIgnored
-
-    case reminderSnoozed
-
     case questionAnswered
 
     case insightCreated
