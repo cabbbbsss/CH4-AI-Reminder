@@ -25,7 +25,16 @@ struct HomeView: View {
     /// it, so the badge stays hidden until a real entitlement check does.
     /// When StoreKit lands, this is the single line that should start reading
     /// from it instead of local storage.
-    @AppStorage("isPlusUser") private var isPlusUser = false
+    /// The entitlement itself, not a cached copy of it.
+    ///
+    /// This was `@AppStorage("isPlusUser")`, which nothing in the app ever
+    /// wrote — so the badge reflected whatever had been left in UserDefaults
+    /// rather than the subscription, and could claim Plus on a free account
+    /// while Settings correctly read "Free" from the same screen's data.
+    /// `SubscriptionService` is the single source of truth for this, and
+    /// observing it means the badge also follows a purchase or lapse without
+    /// a relaunch.
+    @Bindable private var subscriptions = SubscriptionService.shared
 
     /// A reminder being started from an add row's ⓘ: the title typed so
     /// far and the moment the row stands for, handed to the Details sheet.
@@ -284,7 +293,7 @@ struct HomeView: View {
 
             Spacer(minLength: Theme.Spacing.xs)
 
-            if isPlusUser {
+            if subscriptions.isPro {
                 plusBadge
             }
 
