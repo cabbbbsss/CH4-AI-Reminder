@@ -333,7 +333,7 @@ struct HomeView: View {
             .padding(.horizontal, Theme.Spacing.m)
             .padding(.vertical, Theme.Spacing.xs)
             .background(Capsule().fill(Color.eveInverseSurface))
-            .accessibilityLabel("Eve Plus subscriber")
+            .accessibilityLabel("\(SubscriptionService.displayName) subscriber")
     }
 
     // MARK: - Suggestion bubble
