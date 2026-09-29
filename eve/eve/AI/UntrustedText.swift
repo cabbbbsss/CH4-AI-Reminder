@@ -44,10 +44,19 @@ enum UntrustedText {
     /// than sent to the model — `ReminderContextBuilder` collecting grounding
     /// terms, for one. Without this, "untrusted" itself becomes a word the
     /// context appears to contain.
+    ///
+    /// Also applied to everything the model returns (see
+    /// `FoundationModelService`). The instruction rule asks it never to repeat
+    /// the delimiters, but a model quoting an event title verbatim copies them
+    /// anyway — "Is <untrusted>Scholarship prep</untrusted> your main focus?"
+    /// reached the onboarding screen. So this matches the loose forms a model
+    /// writes too (`< untrusted >`, `</Untrusted>`), not only the exact tags.
     static func strip(_ text: String) -> String {
-        text
-            .replacingOccurrences(of: openTag, with: "", options: .caseInsensitive)
-            .replacingOccurrences(of: closeTag, with: "", options: .caseInsensitive)
+        text.replacingOccurrences(
+            of: #"<\s*/?\s*untrusted\s*>"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
     }
 
     /// Appended to every instruction string in `FoundationModelService`, so the
