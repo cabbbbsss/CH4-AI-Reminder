@@ -19,12 +19,13 @@ struct HomeView: View {
     /// and ordered in `todaysReminders` instead.
     @Query private var allReminders: [CalendarReminder]
 
-    /// Drives the PLUS badge. Observed, so the badge appears the moment a
-    /// purchase or restore grants the entitlement — no relaunch.
+    /// Whether to show the PLUS badge.
     ///
-    /// This used to be an `@AppStorage("isPlusUser")` placeholder that
-    /// nothing ever set, so the badge never showed even for subscribers.
-    @Bindable private var subscriptions = SubscriptionService.shared
+    /// A placeholder for the subscription that doesn't exist yet: nothing sets
+    /// it, so the badge stays hidden until a real entitlement check does.
+    /// When StoreKit lands, this is the single line that should start reading
+    /// from it instead of local storage.
+    @AppStorage("isPlusUser") private var isPlusUser = false
 
     /// A reminder being started from an add row's ⓘ: the title typed so
     /// far and the moment the row stands for, handed to the Details sheet.
@@ -283,23 +284,23 @@ struct HomeView: View {
 
             Spacer(minLength: Theme.Spacing.xs)
 
-            if subscriptions.isPro {
+            if isPlusUser {
                 plusBadge
             }
 
-            // Prompt tester entry, hidden again so debug builds used for demos
-            // and device testing show the real header. Uncomment to reach the
-            // free-vs-Plus prep comparison; release builds never see it anyway.
-//            #if DEBUG
-//            NavigationLink(destination: PromptTesterView()) {
-//                Image(systemName: "ladybug.fill")
-//                    .font(.title3)
-//                    .foregroundStyle(Color.eveOnSurface)
-//                    .padding(Theme.Spacing.xs)
-//            }
-//            .buttonStyle(.glass)
-//            .buttonBorderShape(.circle)
-//            #endif
+            // Re-enabled to reach the free-vs-Plus prep comparison. The
+            // `#if DEBUG` was always here — commenting it out as well was for
+            // a demo build, and release builds never saw it either way.
+            #if DEBUG
+            NavigationLink(destination: PromptTesterView()) {
+                Image(systemName: "ladybug.fill")
+                    .font(.title3)
+                    .foregroundStyle(Color.eveOnSurface)
+                    .padding(Theme.Spacing.xs)
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            #endif
 
             NavigationLink(destination: SettingsView()) {
                 Image(systemName: "gearshape.fill")
