@@ -288,18 +288,19 @@ struct HomeView: View {
                 plusBadge
             }
 
-            // Re-enabled to reach the free-vs-Plus prep comparison. The
-            // `#if DEBUG` was always here — commenting it out as well was for
-            // a demo build, and release builds never saw it either way.
+            // Entry to the Prompt Tester. Debug builds only, and hidden even
+            // there unless `showDebugTools` is on — see `FeatureFlags`.
             #if DEBUG
-            NavigationLink(destination: PromptTesterView()) {
-                Image(systemName: "ladybug.fill")
-                    .font(.title3)
-                    .foregroundStyle(Color.eveOnSurface)
-                    .padding(Theme.Spacing.xs)
+            if FeatureFlags.showDebugTools {
+                NavigationLink(destination: PromptTesterView()) {
+                    Image(systemName: "ladybug.fill")
+                        .font(.title3)
+                        .foregroundStyle(Color.eveOnSurface)
+                        .padding(Theme.Spacing.xs)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
             #endif
 
             NavigationLink(destination: SettingsView()) {

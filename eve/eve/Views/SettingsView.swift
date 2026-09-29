@@ -102,26 +102,28 @@ struct SettingsView: View {
                 // bypasses the 1.5-hour window and the already-asked check so
                 // it fires in five seconds rather than when an event happens.
                 #if DEBUG
-                SettingsSection(header: "Notification Diagnostics") {
-                    SettingsCard {
-                        Button {
-                            Task { @MainActor in try? await notificationService.scheduleTestNotification() }
-                        } label: {
-                            SettingsRow(icon: "bell.badge.fill", label: "Send test notification (5s)", showChevron: false)
-                        }
-                        .buttonStyle(.plain)
-
-                        SettingsDivider()
-
-                        Button {
-                            Task { @MainActor in
-                                let scheduler = LearningScheduler(context: modelContext)
-                                await scheduler.testEvaluateNextEvent()
+                if FeatureFlags.showDebugTools {
+                    SettingsSection(header: "Notification Diagnostics") {
+                        SettingsCard {
+                            Button {
+                                Task { @MainActor in try? await notificationService.scheduleTestNotification() }
+                            } label: {
+                                SettingsRow(icon: "bell.badge.fill", label: "Send test notification (5s)", showChevron: false)
                             }
-                        } label: {
-                            SettingsRow(icon: "brain.head.profile", label: "Send learning notification (5s)", showChevron: false)
+                            .buttonStyle(.plain)
+
+                            SettingsDivider()
+
+                            Button {
+                                Task { @MainActor in
+                                    let scheduler = LearningScheduler(context: modelContext)
+                                    await scheduler.testEvaluateNextEvent()
+                                }
+                            } label: {
+                                SettingsRow(icon: "brain.head.profile", label: "Send learning notification (5s)", showChevron: false)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
                 #endif
