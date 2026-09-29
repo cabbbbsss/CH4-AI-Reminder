@@ -19,10 +19,10 @@ final class ReminderContextBuilder {
     /// Notes are the largest attacker-reachable span, and the prompt shares a
     /// 4096-token window (TN3193), so the excerpt is capped rather than sent whole.
     /// Lower this first if busy days push the context over budget.
-    private static let eventNotesExcerptLimit = 200
+    private nonisolated static let eventNotesExcerptLimit = 200
 
     /// `text` cut to `eventNotesExcerptLimit`, ellipsised when it was cut.
-    private static func excerpt(_ text: String) -> String {
+    private nonisolated static func excerpt(_ text: String) -> String {
         text.count > eventNotesExcerptLimit
             ? String(text.prefix(eventNotesExcerptLimit)) + "…"
             : text
