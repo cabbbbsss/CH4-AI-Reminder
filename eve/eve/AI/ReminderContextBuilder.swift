@@ -46,14 +46,33 @@ final class ReminderContextBuilder {
     /// untouched, which is what keeps the free tier working rather than
     /// merely not crashing.
     ///
-    // ponytail: snapshot taken when the builder is constructed. A purchase
-    // mid-session reaches the prep path on the next manager rebuild; pass a
-    // live read instead if that lag ever shows.
-    private let personalizedRetrieval: Bool
+    /// Read at every build, not captured once. A snapshot taken when the
+    /// builder was made was wrong in two ways: Home builds its managers at
+    /// launch, usually before RevenueCat's first `CustomerInfo` has arrived,
+    /// so even a paying user was treated as Free all session; and a purchase
+    /// made mid-session never reached the long-lived managers at all.
+    private var personalizedRetrieval: Bool { personalizedRetrievalSource() }
 
-    init(context: ModelContext, personalizedRetrieval: Bool = false) {
+    private let personalizedRetrievalSource: () -> Bool
+
+    /// A builder with a fixed answer — for tests and the prompt tester, which
+    /// compare the Free and Plus paths side by side.
+    convenience init(context: ModelContext, personalizedRetrieval: Bool = false) {
+        self.init(context: context, personalizedRetrievalSource: { personalizedRetrieval })
+    }
+
+    private init(context: ModelContext, personalizedRetrievalSource: @escaping () -> Bool) {
         self.context = context
-        self.personalizedRetrieval = personalizedRetrieval
+        self.personalizedRetrievalSource = personalizedRetrievalSource
+    }
+
+    /// A builder that follows the user's EVE Plus entitlement as it changes.
+    /// What the app's managers should use.
+    static func followingEntitlement(context: ModelContext) -> ReminderContextBuilder {
+        ReminderContextBuilder(
+            context: context,
+            personalizedRetrievalSource: { SubscriptionService.shared.isPro }
+        )
     }
 
     func build(currentPlace: String?) -> ReminderContext {

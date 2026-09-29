@@ -13,19 +13,18 @@ final class LearningScheduler {
     private let contextBuilder: ReminderContextBuilder
     
     /// EVE Plus. Contextual learning questions are a paid capability, so the
-    /// entitlement is read once here and answers both questions this type
-    /// asks: whether to interrupt the user at all, and what the deduction
-    /// prompt is allowed to retrieve.
-    private let personalizedLearning: Bool
+    /// entitlement answers both questions this type asks: whether to
+    /// interrupt the user at all, and (through the builder) what the
+    /// deduction prompt is allowed to retrieve.
+    ///
+    /// Read live rather than at init: Home makes this scheduler at launch,
+    /// usually before RevenueCat has reported the entitlement, and keeps it
+    /// for the session — a snapshot left subscribers on Free.
+    private var personalizedLearning: Bool { SubscriptionService.shared.isPro }
 
     init(context: ModelContext) {
-        let isPro = SubscriptionService.shared.isPro
         self.context = context
-        self.personalizedLearning = isPro
-        self.contextBuilder = ReminderContextBuilder(
-            context: context,
-            personalizedRetrieval: isPro
-        )
+        self.contextBuilder = .followingEntitlement(context: context)
     }
     
     /// Evaluates events that are approaching to deduce any learning items.

@@ -49,10 +49,7 @@ final class AdaptiveNotificationCoordinator {
         self.context = context
         self.notifications = notifications ?? .shared
         self.routes = routes ?? MapKitRouteEstimator()
-        contextBuilder = ReminderContextBuilder(
-            context: context,
-            personalizedRetrieval: SubscriptionService.shared.isPro
-        )
+        contextBuilder = .followingEntitlement(context: context)
         self.notifications.onFeedback = { [weak self] occurrenceID, feedback in
             self?.record(feedback: feedback, for: occurrenceID)
         }
