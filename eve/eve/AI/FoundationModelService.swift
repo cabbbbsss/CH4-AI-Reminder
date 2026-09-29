@@ -342,8 +342,36 @@ final class FoundationModelService {
             options: Self.conversational
         )
 
-        return response.content
+        let decision = response.content
 
+        // Title and body go to the Home bubble and to a notification.
+        return ReminderDecision(
+            thoughtProcess: decision.thoughtProcess,
+            shouldNotify: decision.shouldNotify,
+            category: decision.category,
+            title: Self.clean(decision.title),
+            body: Self.clean(decision.body),
+            followUpQuestion: decision.followUpQuestion.map(Self.clean)
+        )
+
+    }
+
+    // MARK: - Output cleanup
+
+    /// Model text on its way to the user, with any `<untrusted>` delimiter it
+    /// copied out of the prompt removed.
+    ///
+    /// Event titles reach every prompt wrapped in those delimiters, and a
+    /// model quoting a title verbatim copies them along with it — the
+    /// instruction rule asking it not to is a request, not a guarantee. So
+    /// every string this service hands back as user-facing text passes
+    /// through here: onboarding questions, the reminder bubble and
+    /// notification, prep and location items, deductions, and insights.
+    private static func clean(_ text: String) -> String {
+        UntrustedText.strip(text)
+            // A tag removed between two words can leave a doubled space.
+            .replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// A short, event-specific checklist of easily-forgotten prep items.
@@ -362,7 +390,7 @@ final class FoundationModelService {
             options: Self.factual
         )
 
-        return response.content.items
+        return response.content.items.map(Self.clean)
 
     }
 
@@ -375,9 +403,10 @@ final class FoundationModelService {
             options: Self.factual
         )
         let content = response.content
+        let action = Self.clean(content.action)
         return EventTimingSuggestion(
             preparationMinutes: min(120, max(5, content.preparationMinutes)),
-            action: content.action.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : content.action
+            action: action.isEmpty ? nil : action
         )
     }
 
@@ -399,7 +428,7 @@ final class FoundationModelService {
             options: Self.factual
         )
 
-        return response.content.items
+        return response.content.items.map(Self.clean)
 
     }
 
@@ -476,6 +505,19 @@ final class FoundationModelService {
             "deduction: blank or sentence-length item survived"
         )
 
+        // The onboarding question that shipped with its delimiters showing.
+        assert(
+            clean("Is <untrusted>Scholarship prep</untrusted> your main focus right now?")
+                == "Is Scholarship prep your main focus right now?",
+            "output: untrusted delimiters leaked to the user"
+        )
+
+        assert(
+            clean("Bring < Untrusted >notes</untrusted > to  <untrusted>Room A</untrusted>")
+                == "Bring notes to Room A",
+            "output: loose delimiter forms or doubled spaces survived"
+        )
+
     }
     #endif
 
@@ -492,7 +534,7 @@ final class FoundationModelService {
             options: Self.factual
         )
 
-        return Self.usableDeductions(response.content.items)
+        return Self.usableDeductions(response.content.items.map(Self.clean))
 
     }
 
@@ -528,7 +570,13 @@ final class FoundationModelService {
             options: Self.conversational
         )
 
-        return response.content.questions
+        // Cleaned before `QuestionShape` sees them, so a question that only
+        // failed by quoting a delimited title is shown clean rather than
+        // dropped — and nothing tagged reaches `QuestionAnswer`, which feeds
+        // every later prompt.
+        return response.content.questions.map {
+            OnboardingQuestion(question: Self.clean($0.question), category: $0.category)
+        }
 
     }
 
@@ -564,7 +612,18 @@ final class FoundationModelService {
             options: Self.factual
         )
 
-        return response.content.insights
+        // `value` is what the Insights screen shows; `title` is the matching
+        // key. Both persist and re-enter later prompts.
+        return response.content.insights.map {
+            ProposedInsight(
+                thoughtProcess: $0.thoughtProcess,
+                category: $0.category,
+                title: Self.clean($0.title),
+                value: Self.clean($0.value),
+                confidence: $0.confidence,
+                sourceSummary: Self.clean($0.sourceSummary)
+            )
+        }
 
     }
 
