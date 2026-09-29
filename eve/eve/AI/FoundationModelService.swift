@@ -132,9 +132,18 @@ struct ContextualDeduction {
 /// The only gateway to Apple's on-device model.
 /// Input: ReminderContext. Output: ReminderDecision. Nothing else.
 ///
-/// Conforms to `ReasoningEngine` so callers depend on the shape of the work
-/// rather than on Foundation Models itself — see that protocol for why.
-final class FoundationModelService: ReasoningEngine {
+/// Note what the method signatures below avoid: no Foundation Models type
+/// crosses this boundary. Callers deal in `String`, `[String]`,
+/// `ReminderContext`, `ReminderDecision`, `OnboardingQuestion` and
+/// `ProposedInsight` — all Eve's own. That is what would make a second
+/// conformer (Private Cloud Compute, say) a swap rather than a rewrite.
+///
+/// A `ReasoningEngine` protocol used to say so as well. It was deleted: no
+/// call site ever held one, so it bought neither the swap nor testability,
+/// and it had already drifted — `suggestTiming` and `deduceContextualItems`
+/// were added here and never to it. Extract it again when there is a second
+/// conformer to extract it *from*.
+final class FoundationModelService {
 
     /// Throws unless the on-device model is ready to take a request.
     ///
@@ -163,7 +172,7 @@ final class FoundationModelService: ReasoningEngine {
 
     /// Deterministic. For choosing one value from a fixed set, where the same
     /// input returning the same answer matters more than variety.
-    private static let deterministic = GenerationOptions(samplingMode: .greedy)
+    private static let deterministic = GenerationOptions(sampling: .greedy)
 
     /// Low variance, for output that must stay specific and traceable — the
     /// prep lists and the belief extraction, where a wider spread shows up as
@@ -220,8 +229,10 @@ final class FoundationModelService: ReasoningEngine {
     private let preparationInstructions = """
     Extract 2-4 concrete preparation items for the provided event.
 
-    - Source items ONLY from the event details, matching beliefs/reminders, or "General knowledge" (if applicable).
+    - Source items ONLY from the event details, matching beliefs/reminders, items the person confirmed, "What this person has actually done before events like this", or "General knowledge" (if applicable).
+    - A confirmed item is the person's own answer. Include it when listed.
     - Prefer user-provided event details over "General knowledge".
+    - A repeated past action outranks "General knowledge" when both apply. State it as preparation, NEVER as an observation about the user's habits.
     - EVERY item MUST name a specific thing to bring, prepare, or check.
     - NEVER write generic advice (e.g., "arrive on time", "be prepared").
     - NEVER introduce objects or details absent from the provided sources.
@@ -246,6 +257,7 @@ final class FoundationModelService: ReasoningEngine {
     - Base reminders on the event details, matching beliefs/reminders, or "General knowledge".
     - Common-sense inference from the activity is required (e.g. "Gym" → bring workout gear).
     - Prioritize "General knowledge" over assumptions if it covers the activity.
+    - A repeated past action, when listed, outranks "General knowledge".
     - NEVER invent specifics not directly implied by the event's nature (e.g., umbrella for a meeting).
     - NEVER output generic advice (e.g., "be prepared"). EVERY item MUST be specific and actionable.
     - Return EMPTY list if the event is too vague (e.g., "Sleep", "Free time").
@@ -403,6 +415,70 @@ final class FoundationModelService: ReasoningEngine {
     \(UntrustedText.instructionRule)
     """
 
+    /// The constraints `contextualDeductionInstructions` already asks for,
+    /// enforced.
+    ///
+    /// A `@Guide` description steers generation; it does not bound it. Guided
+    /// decoding enforces the *type* — `[String]` — so "2-4 items" and "1-3
+    /// words" are requests the model is free to miss. `suggestTiming` already
+    /// clamps its minutes in Swift for exactly this reason; this call had no
+    /// equivalent, and it needs one more than most: the strings are
+    /// interpolated straight into a notification body
+    /// ("Should I remind you to bring your …"), so a dozen items or a
+    /// sentence-long one is what the user actually reads.
+    ///
+    /// Deliberately **not** `OutputGrounding`. This call is inferential by
+    /// design — "Gym" implies gloves and a towel that no context mentioned —
+    /// and the gate drops precisely the items that share no term with the
+    /// event, which here is all of them. Running it would silence the feature
+    /// permanently, the same reason `suggestLocationReminder` is exempt.
+    /// Shape is the right layer; the content is validated by the user tapping
+    /// Yes, which is a stronger check than any lexical rule.
+    static func usableDeductions(_ items: [String], limit: Int = 4) -> [String] {
+
+        var seen = Set<String>()
+
+        return Array(
+            items
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { item in
+                    guard !item.isEmpty,
+                          item.count <= 40,
+                          item.split(separator: " ").count <= 4
+                    else { return false }
+                    return seen.insert(item.lowercased()).inserted
+                }
+                .prefix(limit)
+        )
+
+    }
+
+    #if DEBUG
+    /// Shape only. What the items *say* is the user's to accept or reject.
+    static func selfCheck() {
+
+        assert(
+            usableDeductions(["gloves", "whey", "AirPods", "towel", "extra"]).count == 4,
+            "deduction: item count not clamped"
+        )
+
+        assert(
+            usableDeductions(["gloves", " Gloves ", "whey"]) == ["gloves", "whey"],
+            "deduction: duplicates survived"
+        )
+
+        assert(
+            usableDeductions([
+                "",
+                "   ",
+                "a reminder to check whether the locker room towels were restocked"
+            ]).isEmpty,
+            "deduction: blank or sentence-length item survived"
+        )
+
+    }
+    #endif
+
     /// Deduces items a user might need for an upcoming event, used for pre-event proactive learning prompts.
     func deduceContextualItems(forPromptText promptText: String) async throws -> [String] {
 
@@ -416,7 +492,7 @@ final class FoundationModelService: ReasoningEngine {
             options: Self.factual
         )
 
-        return response.content.items
+        return Self.usableDeductions(response.content.items)
 
     }
 

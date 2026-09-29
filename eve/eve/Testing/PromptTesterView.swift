@@ -44,7 +44,7 @@ struct PromptTesterView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     
-                    Button("Test Event Prep") {
+                    Button("Test Prep: Free vs Plus") {
                         Task { await tester.runEventPreparation(scenarioName: selectedScenario) }
                     }
                     .buttonStyle(.bordered)

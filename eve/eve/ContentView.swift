@@ -46,6 +46,12 @@ struct ContentView: View {
       // passing observations that would otherwise re-enter every prompt.
       // A no-op once the store is clean.
       try? InsightManager(context: modelContext).pruneMalformed()
+
+      #if DEBUG
+      OutputGrounding.selfCheck()
+      ReminderContextBuilder.selfCheck()
+      FoundationModelService.selfCheck()
+      #endif
     }
     .onChange(of: scenePhase) { _, phase in
       if phase == .active {

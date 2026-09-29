@@ -33,9 +33,15 @@ final class LocationRoutingManager {
     // No shared FoundationModelService: generation runs in a task group and
     // each task makes its own (see `items(for:index:)`).
 
-    init(context: ModelContext) {
+    /// - Parameter personalizedRetrieval: EVE Plus. Passed in rather than read
+    ///   from `SubscriptionService`, which is `@MainActor` while this type is
+    ///   not — the caller is a view and already holds the answer.
+    init(context: ModelContext, personalizedRetrieval: Bool) {
         self.context = context
-        self.contextBuilder = ReminderContextBuilder(context: context)
+        self.contextBuilder = ReminderContextBuilder(
+            context: context,
+            personalizedRetrieval: personalizedRetrieval
+        )
     }
 
     /// Re-derives every location's system-managed reminders from the current

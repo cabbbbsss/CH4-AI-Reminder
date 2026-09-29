@@ -101,7 +101,10 @@ struct LocationView: View {
         }
         .task {
             if routingManager == nil {
-                routingManager = LocationRoutingManager(context: modelContext)
+                routingManager = LocationRoutingManager(
+                        context: modelContext,
+                        personalizedRetrieval: subscriptions.isPro
+                    )
             }
             if selectedLocationID == nil {
                 selectedLocationID = savedLocations.first?.id
