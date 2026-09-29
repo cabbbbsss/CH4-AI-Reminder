@@ -105,19 +105,38 @@ enum QuestionShape {
 
         return questions.filter { candidate in
 
-            guard reasonToReject(candidate.question) == nil else { return false }
+            if let reason = reasonToReject(candidate.question) {
+                logDrop(candidate.question, reason)
+                return false
+            }
 
             let key = candidate.question
                 .lowercased()
                 .trimmingCharacters(in: .whitespacesAndNewlines)
 
-            guard seen.insert(key).inserted else { return false }
+            guard seen.insert(key).inserted else {
+                logDrop(candidate.question, "duplicate")
+                return false
+            }
 
             guard !calendarTerms.isEmpty else { return true }
 
-            return !OutputGrounding
+            let grounded = !OutputGrounding
                 .contentTerms(of: candidate.question)
                 .isDisjoint(with: calendarTerms)
+
+            if !grounded { logDrop(candidate.question, "not about anything on the calendar") }
+
+            return grounded
         }
+    }
+
+    /// Every drop is silent to the user — the screen just shows fallback
+    /// questions — so the log is the only way to see which rule emptied a
+    /// batch on a real account.
+    private static func logDrop(_ question: String, _ reason: String) {
+        #if DEBUG
+        print("[Eve/onboarding] dropped question (\(reason)) — \"\(question)\"")
+        #endif
     }
 }

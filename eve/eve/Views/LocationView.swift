@@ -127,19 +127,17 @@ struct LocationView: View {
                 // typed into, keeping what was typed.
                 .onTapGesture { focusedAddRow = nil }
 
-            if savedLocations.isEmpty {
-                emptyLocationsState
-            } else {
-                VStack(spacing: 0) {
-                    locationFilter
-                        .padding(.top, Theme.Spacing.xxs)
+            // Same layout with or without places: before the first one is
+            // saved, the chips row holds only the + and the card says so.
+            VStack(spacing: 0) {
+                locationFilter
+                    .padding(.top, Theme.Spacing.xxs)
 
-                    if let location = activeLocation {
-                        addressBlock(for: location)
-                    }
-
-                    selectedLocationCard
+                if let location = activeLocation {
+                    addressBlock(for: location)
                 }
+
+                selectedLocationCard
             }
         }
     }
@@ -148,12 +146,17 @@ struct LocationView: View {
 
     private var locationFilter: some View {
         HStack(spacing: Theme.Spacing.xs) {
+            addLocationButton
+                .padding(.leading, Theme.Spacing.gutter)
+
             chipsRow
-                // Chips run out under the filter rather than stopping short
-                // of it, so the row reads as one strip with a fixed control
-                // at its end.
+                // Chips run out under the controls at both ends rather than
+                // stopping short of them, so the row reads as one strip
+                // between two fixed controls.
                 .mask(
                     HStack(spacing: 0) {
+                        LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: Theme.Spacing.s)
                         Rectangle()
                         LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
                             .frame(width: Theme.Spacing.xl)
@@ -165,35 +168,43 @@ struct LocationView: View {
         }
     }
 
+    /// Add a new place — pinned to the left of the chips rather than
+    /// scrolling with them, the way the filter is pinned to the right.
+    ///
+    /// Kept out of the chips' `ScrollView` and mask on purpose: both clip to
+    /// their bounds, which cut the glass button's soft shadow off in a hard
+    /// edge. Out here it renders like Calendar's header "+", whose view
+    /// structure and modifiers it shares.
+    ///
+    /// Past the free allowance it wears a lock and opens the paywall instead,
+    /// so the limit is visible before it is hit rather than announced by an
+    /// error afterwards.
+    private var addLocationButton: some View {
+        Button(action: beginAddingLocation) {
+            Image(systemName: "plus")
+                .font(.title3)
+                .foregroundStyle(Color.eveOnSurface)
+                .padding(Theme.Spacing.xs)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        // Badged on the button rather than its label: the circular
+        // border shape clips the label, and the lock is meant to
+        // break that edge.
+        .overlay(alignment: .bottomTrailing) {
+            if !canAddLocation {
+                LockBadge()
+                    .offset(x: 3, y: 3)
+            }
+        }
+        .accessibilityLabel(canAddLocation
+                            ? "Add location"
+                            : "Add location, requires \(SubscriptionService.displayName)")
+    }
+
     private var chipsRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Theme.Spacing.xs) {
-                // Add a new place — sits to the left of the location chips.
-                // Past the free allowance it wears a lock and opens the
-                // paywall instead, so the limit is visible before it is hit
-                // rather than announced by an error afterwards.
-                // Same view structure and modifiers as Calendar's header "+".
-                Button(action: beginAddingLocation) {
-                    Image(systemName: "plus")
-                        .font(.title3)
-                        .foregroundStyle(Color.eveOnSurface)
-                        .padding(Theme.Spacing.xs)
-                }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                // Badged on the button rather than its label: the circular
-                // border shape clips the label, and the lock is meant to
-                // break that edge.
-                .overlay(alignment: .bottomTrailing) {
-                    if !canAddLocation {
-                        LockBadge()
-                            .offset(x: 3, y: 3)
-                    }
-                }
-                .accessibilityLabel(canAddLocation
-                                    ? "Add location"
-                                    : "Add location, requires \(SubscriptionService.displayName)")
-
                 ForEach(savedLocations) { location in
                     LocationChip(
                         location: location,
@@ -219,7 +230,8 @@ struct LocationView: View {
                     }
                 }
             }
-            .padding(.leading, Theme.Spacing.gutter)
+            // Lets the first chip start clear of the leading fade.
+            .padding(.leading, Theme.Spacing.s)
             // Lets the last chip scroll clear of the fade.
             .padding(.trailing, Theme.Spacing.xl)
             .padding(.vertical, Theme.Spacing.xs)
@@ -261,19 +273,22 @@ struct LocationView: View {
 
     // MARK: - Selected location card
 
-    @ViewBuilder
     private var selectedLocationCard: some View {
-        if let location = activeLocation {
-            // No location header inside the card — the filter above already
-            // shows which place these reminders belong to.
-            remindersList(for: location)
-                .background(Color.eveSurface)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
-                .shadow(color: Color.eveOnSurface.opacity(0.1), radius: 10, y: 5)
-                .padding(.horizontal, Theme.Spacing.gutter)
-                .padding(.top, Theme.Spacing.s)
-                .padding(.bottom, Theme.Spacing.gutter)
+        Group {
+            if let location = activeLocation {
+                // No location header inside the card — the filter above already
+                // shows which place these reminders belong to.
+                remindersList(for: location)
+            } else {
+                noPlacesContent
+            }
         }
+        .background(Color.eveSurface)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
+        .shadow(color: Color.eveOnSurface.opacity(0.1), radius: 10, y: 5)
+        .padding(.horizontal, Theme.Spacing.gutter)
+        .padding(.top, Theme.Spacing.s)
+        .padding(.bottom, Theme.Spacing.gutter)
     }
 
     private func remindersList(for location: SavedLocation) -> some View {
@@ -396,33 +411,15 @@ struct LocationView: View {
 
     // MARK: - Empty state
 
-    private var emptyLocationsState: some View {
-        VStack(spacing: Theme.Spacing.xs) {
-            Image(systemName: "mappin.slash")
-                .font(.system(size: 44))
-                .foregroundStyle(Color.eveOnSurface.opacity(0.5))
-            Text("No places yet")
-                .font(.eveSectionTitle)
-                .foregroundStyle(Color.eveOnSurface)
-            Text("Add a place and Eve will start learning what to remind you there.")
-                .font(.eveDetail)
-                .foregroundStyle(Color.eveOnSurface.opacity(0.7))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Theme.Spacing.xxl)
-
-            Button(action: beginAddingLocation) {
-                Label("Add Location", systemImage: "plus")
-                    .font(.eveButton)
-                    // Grows with the label instead of a fixed 200×40 box, so
-                    // it doesn't clip at larger Dynamic Type sizes.
-                    .padding(.horizontal, Theme.Spacing.xxl)
-                    .padding(.vertical, Theme.Spacing.s)
-            }
-            .buttonStyle(.glassProminent)
-            .buttonBorderShape(.capsule)
-            .tint(Color.accentColor)
-            .padding(.top, Theme.Spacing.xs)
-        }
+    /// The card's contents before any place is saved. No button of its own —
+    /// the + in the chips row is the one way to add a place.
+    private var noPlacesContent: some View {
+        Text("No places yet. Tap + to add one.")
+            .font(.eveBody)
+            .foregroundStyle(Color.eveOnSurfaceMuted)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.horizontal, Theme.Spacing.l)
+            .padding(.vertical, Theme.Spacing.m)
     }
 
     // MARK: - Data

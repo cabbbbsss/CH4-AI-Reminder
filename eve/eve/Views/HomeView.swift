@@ -343,14 +343,14 @@ struct HomeView: View {
             }
 
             // Capped so an over-long model response can't push the routine off
-            // the screen. The prompt asks for one sentence under 18 words,
-            // which fits in three lines here — this is the guarantee for when
-            // it doesn't comply, since nothing about a generated string is
-            // certain.
+            // the screen. The prompt asks for one sentence under 18 words, but
+            // that's words, not width — a sentence quoting a long event title
+            // needs four lines here, and three cut it off mid-time. Five fits
+            // any compliant sentence; the routine below scrolls anyway.
             Text(suggestionText)
                 .font(.eveBody)
                 .foregroundStyle(Color.eveOnSurface)
-                .lineLimit(3)
+                .lineLimit(5)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(Theme.Spacing.m)
@@ -374,75 +374,90 @@ struct HomeView: View {
         }
     }
 
+    /// A `List`, not a `ScrollView`, because `RoutineRow`'s swipe actions only
+    /// exist on List rows before iOS 27 — in a plain stack iOS 26 silently
+    /// ignores `.swipeActions`, so swipe-to-delete worked on one OS and not the
+    /// other. The list's own chrome is stripped so it still reads as the
+    /// same loose column it was.
     private var routineList: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+        List {
 
-                if todaysReminders.isEmpty {
+            if todaysReminders.isEmpty {
 
-                    Text("Nothing to prepare for today.")
-                        .font(.eveBody)
-                        .foregroundStyle(Color.eveOnSurfaceMuted)
-                        .padding(.top, Theme.Spacing.m)
+                Text("Nothing to prepare for today.")
+                    .font(.eveBody)
+                    .foregroundStyle(Color.eveOnSurfaceMuted)
+                    .routineListRow(top: Theme.Spacing.m)
 
-                    addRow(id: Self.emptyAddRowID, in: nil)
+                addRow(id: Self.emptyAddRowID, in: nil)
+                    .routineListRow()
 
-                } else {
+            } else {
 
-                    ForEach(Array(visibleParts.enumerated()), id: \.element.id) { index, part in
-                        section(
-                            part,
-                            todaysReminders.filter { part.contains($0.reminderDate) },
-                            // A rule under the last section would be a line
-                            // with nothing after it.
-                            showsDivider: index < visibleParts.count - 1
-                        )
-                    }
-
+                ForEach(Array(visibleParts.enumerated()), id: \.element.id) { index, part in
+                    section(
+                        part,
+                        todaysReminders.filter { part.contains($0.reminderDate) },
+                        isFirst: index == 0,
+                        // A rule under the last section would be a line
+                        // with nothing after it.
+                        showsDivider: index < visibleParts.count - 1
+                    )
                 }
 
             }
-            .padding(.horizontal, Theme.Spacing.gutter)
-            // Clears the tab bar, so the last add row isn't sitting under it
-            // when the list happens to end near the bottom of the screen.
-            .padding(.bottom, Theme.Spacing.xxl * 2)
+
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        // The divider row is 1pt tall; the default minimum would pad it out.
+        .environment(\.defaultMinListRowHeight, 0)
+        // Clears the tab bar, so the last add row isn't sitting under it
+        // when the list happens to end near the bottom of the screen.
+        .contentMargins(.bottom, Theme.Spacing.xxl * 2, for: .scrollContent)
         .scrollIndicators(.hidden)
         // Dragging the list away from a field dismisses too, which is what
         // every other iOS list does.
         .scrollDismissesKeyboard(.interactively)
     }
 
+    /// One part of the day, as separate list rows — heading, reminders, add
+    /// row, rule — so each reminder is its own row and can be swiped.
+    @ViewBuilder
     private func section(
         _ part: DayPart,
         _ items: [CalendarReminder],
+        isFirst: Bool,
         showsDivider: Bool
     ) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
 
-            Text(part.title)
-                .font(.eveBody.weight(.semibold))
-                .foregroundStyle(Color.eveOnSurfaceMuted)
+        Text(part.title)
+            .font(.eveBody.weight(.semibold))
+            .foregroundStyle(Color.eveOnSurfaceMuted)
+            // The gap between sections used to be the outer stack's spacing;
+            // it lives on the heading now that there is no outer stack.
+            .routineListRow(top: isFirst ? 0 : Theme.Spacing.xl - Theme.Spacing.m)
 
-            ForEach(items) { reminder in
-                RoutineRow(
-                    reminder: reminder,
-                    focused: $focusedReminderID,
-                    onToggleCompleted: { toggleCompleted(reminder) },
-                    onCommitTitle: { commitTitle($0, on: reminder) },
-                    onOpenDetails: { editingReminder = reminder },
-                    onDelete: { deleteReminder(reminder) }
-                )
-            }
+        ForEach(items) { reminder in
+            RoutineRow(
+                reminder: reminder,
+                focused: $focusedReminderID,
+                onToggleCompleted: { toggleCompleted(reminder) },
+                onCommitTitle: { commitTitle($0, on: reminder) },
+                onOpenDetails: { editingReminder = reminder },
+                onDelete: { deleteReminder(reminder) }
+            )
+            .routineListRow()
+        }
 
-            addRow(id: Self.addRowIDs[part]!, in: part)
+        addRow(id: Self.addRowIDs[part]!, in: part)
+            .routineListRow()
 
-            // Inside the section rather than between them, so the rule picks up
-            // this stack's tighter spacing and sits just under the add circle —
-            // the outer stack's gap left it floating midway to the next heading.
-            if showsDivider {
-                sectionDivider
-            }
+        // Closes this section rather than opening the next, so it sits just
+        // under the add circle with more air beneath it.
+        if showsDivider {
+            sectionDivider
+                .routineListRow()
         }
     }
 
@@ -669,6 +684,15 @@ private struct RoutineRow: View {
             }
             .tint(.gray)
         }
+        // A vertical-axis field treats the return key as a newline, so
+        // `.onSubmit` never fires and the keyboard's ✓ would add a line
+        // break instead of finishing. Catch the break here and treat it as
+        // the submit it was meant to be.
+        .onChange(of: draftTitle) { _, newValue in
+            guard newValue.contains(where: \.isNewline) else { return }
+            draftTitle = newValue.filter { !$0.isNewline }
+            focused.wrappedValue = nil
+        }
         // Keeps the field in step when the reminder changes underneath it —
         // an edit saved from the Details sheet, or a sync rewriting the row.
         .onChange(of: reminder.text) { _, newValue in
@@ -688,6 +712,24 @@ private struct RoutineRow: View {
             return
         }
         onCommitTitle(trimmed)
+    }
+}
+
+// MARK: - Routine list rows
+
+private extension View {
+
+    /// Strips a routine list row back to plain content in the column: no
+    /// background, no separator, the screen's gutter at the sides. `bottom`
+    /// is the spacing the rows used to get from their stack.
+    func routineListRow(top: CGFloat = 0, bottom: CGFloat = Theme.Spacing.m) -> some View {
+        self
+            .listRowInsets(EdgeInsets(
+                top: top, leading: Theme.Spacing.gutter,
+                bottom: bottom, trailing: Theme.Spacing.gutter
+            ))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
     }
 }
 

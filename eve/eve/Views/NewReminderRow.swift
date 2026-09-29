@@ -59,7 +59,12 @@ struct NewReminderRow<ID: Hashable>: View {
                 .foregroundStyle(Color.eveOnSurface)
                 .focused(focused, equals: focusID)
                 .submitLabel(.done)
-                .onSubmit(commit)
+                .onSubmit {
+                    commit()
+                    // ✓ means finished: put the keyboard away rather than
+                    // leaving the emptied field waiting for another title.
+                    focused.wrappedValue = nil
+                }
 
             // Only while typing — at rest the row is just its placeholder.
             // Collapsed rather than removed: a view taken out of the tree

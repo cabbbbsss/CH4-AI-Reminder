@@ -69,6 +69,24 @@ final class AILearningEngine {
     OnboardingQuestion(question: "Would you like reminders before you leave home?", category: "preference")
   ]
 
+  /// Fewest questions the screen should ask.
+  private static let minimumQuestions = 3
+
+  /// The personalised questions, filled out from the fallback set when too
+  /// few survived — rather than all-or-nothing, which threw away one or two
+  /// good personalised questions just because the filter dropped the rest.
+  /// With none at all this is simply the fallback set.
+  private static func toppedUp(_ generated: [OnboardingQuestion]) -> [OnboardingQuestion] {
+    guard generated.count < minimumQuestions else { return generated }
+
+    let asked = Set(generated.map { $0.question.lowercased() })
+    let fill = fallbackQuestions
+      .filter { !asked.contains($0.question.lowercased()) }
+      .prefix(minimumQuestions - generated.count)
+
+    return generated.isEmpty ? fallbackQuestions : generated + fill
+  }
+
   /// What a step reports back: whether it had anything to work with, and the
   /// line to show underneath it once it's finished.
   private struct StepOutcome {
@@ -196,7 +214,7 @@ final class AILearningEngine {
       let generated = await assistant.onboardingQuestions(
         currentPlace: lastKnownPlace
       )
-      self.onboardingQuestions = generated.isEmpty ? Self.fallbackQuestions : generated
+      self.onboardingQuestions = Self.toppedUp(generated)
 
       return StepOutcome(
         succeeded: true,

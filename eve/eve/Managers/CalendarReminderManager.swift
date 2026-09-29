@@ -49,15 +49,60 @@ final class CalendarReminderManager {
         let subjectTerms: Set<String>
     }
 
+    // MARK: - Session memory
+    //
+    // An event counts as done once it has a stored reminder — but an event
+    // the model had nothing for (or whose items grounding dropped) never gets
+    // one, so it looked undone forever. Calendar's `.task(id:)` re-runs on
+    // every return to the tab, which meant re-asking the model for those
+    // events, and showing the spinner, every single time. Remembering what
+    // was already asked this session stops that.
+    //
+    // Static, because Home and Calendar each make their own manager and both
+    // prepare today.
+
+    /// Events already sent to the model this session, whether or not it came
+    /// back with anything. Only recorded for runs that finished uncancelled.
+    private static var attemptedOccurrenceIDs: Set<String> = []
+
+    /// Days (start of day) being generated right now, so Home and Calendar
+    /// opening together don't both generate — and insert — the same day.
+    private static var inFlightDays: Set<Date> = []
+
+    /// Whether `ensureReminders(for:)` would actually ask the model for
+    /// anything on `date`. Cheap: reads the store, makes no model call. Lets
+    /// the Calendar skip its "Preparing" spinner on a day already done.
+    func needsGeneration(for date: Date) -> Bool {
+        guard !Self.inFlightDays.contains(Calendar.current.startOfDay(for: date)) else {
+            return false
+        }
+        return !pendingEvents(on: date).isEmpty
+    }
+
+    /// Events on `date` with no reminder yet that haven't been tried this
+    /// session.
+    private func pendingEvents(on date: Date) -> [CalendarEvent] {
+        let coveredOccurrenceIDs = Set(existingReminders(for: date).map(\.occurrenceID))
+        return eventsOn(date).filter {
+            !coveredOccurrenceIDs.contains($0.occurrenceID)
+                && !Self.attemptedOccurrenceIDs.contains($0.occurrenceID)
+        }
+    }
+
     /// Generates reminders for any event on `date` that doesn't have one
     /// yet. Safe to call repeatedly — existing rows (system or user-owned)
-    /// are never duplicated.
+    /// are never duplicated, and an event is only asked about once per
+    /// session.
     func ensureReminders(for date: Date) async {
 
-        let events = eventsOn(date)
+        let day = Calendar.current.startOfDay(for: date)
+        guard !Self.inFlightDays.contains(day) else { return }
+
+        let events = pendingEvents(on: date)
         guard !events.isEmpty else { return }
 
-        let coveredOccurrenceIDs = Set(existingReminders(for: date).map(\.occurrenceID))
+        Self.inFlightDays.insert(day)
+        defer { Self.inFlightDays.remove(day) }
 
         // Three phases, deliberately: read SwiftData and build every prompt
         // here, run the model calls off-actor, then insert back here. The
@@ -68,7 +113,6 @@ final class CalendarReminderManager {
         // re-runs it on *every* date change — so an eight-event day cost
         // eight sequential round-trips before anything appeared.
         let jobs: [PrepJob] = events
-            .filter { !coveredOccurrenceIDs.contains($0.occurrenceID) }
             .compactMap { event in
 
                 guard let prompt = contextBuilder.buildPreparationContext(
@@ -94,6 +138,14 @@ final class CalendarReminderManager {
         guard !jobs.isEmpty else { return }
 
         let itemsByOccurrence = await Self.generatePrep(for: jobs)
+
+        // Leaving the Calendar tab mid-run cancels this task, and a cancelled
+        // model call comes back empty — which is "not finished", not "nothing
+        // to say". Only a run that got to the end marks its events as asked;
+        // a cancelled one is picked up again next visit.
+        if !Task.isCancelled {
+            Self.attemptedOccurrenceIDs.formUnion(jobs.map(\.occurrenceID))
+        }
 
         for job in jobs {
             for text in (itemsByOccurrence[job.occurrenceID] ?? []).prefix(4) {
@@ -187,6 +239,10 @@ final class CalendarReminderManager {
         }
 
         try? context.save()
+
+        // An explicit reload means ask again, including events the model had
+        // nothing for earlier this session.
+        Self.attemptedOccurrenceIDs.subtract(eventsOn(date).map(\.occurrenceID))
 
         await ensureReminders(for: date)
 
