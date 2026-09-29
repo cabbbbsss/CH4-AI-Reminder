@@ -27,15 +27,20 @@ final class SubscriptionService {
     ///
     /// Gate on *this*, never on a product or package identifier: products get
     /// replaced whenever pricing changes, and an entitlement survives that.
-    static let entitlementID = "eve_pro"
+    ///
+    /// This is the entitlement's *identifier* in the dashboard, which happens
+    /// to read like a name — spaces included. It must match character for
+    /// character: the dashboard entitlement was recreated from `eve_pro` as
+    /// `EVE Plus`, and a stale identifier here means every purchase succeeds
+    /// yet `isPro` stays false.
+    static let entitlementID = "EVE Plus"
 
     /// What the tier is called in the app's own UI.
     ///
-    /// Deliberately *not* derived from ``entitlementID``: the entitlement stayed
-    /// `eve_pro` (renaming one in the dashboard means migrating every subscriber
-    /// on it, for an identifier no user ever sees) while the paywall sells
-    /// "EVE Plus". This is the only place the app says the name itself — keep it
-    /// matching the paywall copy in the dashboard.
+    /// Kept separate from ``entitlementID`` even though the two read the same
+    /// today: one is a dashboard key that must never drift, the other is copy
+    /// that should always match the paywall. This is the only place the app
+    /// says the name itself.
     static let displayName = "EVE Plus"
 
     /// RevenueCat's public SDK key. Public by design — it can only read

@@ -1,8 +1,14 @@
-# EVE
+<p align="center">
+  <img src="assets/eve-logo.svg" width="128" height="128" alt="EVE app icon">
+</p>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![iOS 26.2+](https://img.shields.io/badge/iOS-26.2%2B-black)
-![RevenueCat](https://img.shields.io/badge/RevenueCat-SDK%205.90-F25A5A)
+<h1 align="center">EVE</h1>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/iOS-26.2%2B-black" alt="iOS 26.2+">
+  <img src="https://img.shields.io/badge/RevenueCat-SDK%205.90-F25A5A" alt="RevenueCat SDK 5.90">
+</p>
 
 **EVE remembers the small things you always forget, like your keys, your earphones, your
 charger, and reminds you at the moment you need them.** It learns your routine on-device and
@@ -45,6 +51,10 @@ typing, and a calm interface with little visual load.
   *Too Late*, which shift when future reminders fire.
 - **Shows its work.** The Insights screen lists what EVE believes about your routine, in plain
   sentences you can edit or delete.
+
+<p align="center">
+  <img src="assets/eve-user-flow.svg" width="680" alt="EVE screen flow: welcome, permissions, AI learning, onboarding questions, then Home, which leads to Settings, Insights, and History">
+</p>
 
 ## Stack
 
@@ -123,7 +133,7 @@ people who want EVE more deeply in their life.
 
 | | |
 |---|---|
-| Entitlement | `eve_pro` (the app gates on the entitlement, never on a product ID) |
+| Entitlement | `EVE Plus` (the app gates on the entitlement, never on a product ID) |
 | Unlimited places | Free accounts keep **1** saved place; EVE Plus is unlimited. Tapping **+** on the Locations screen at the limit opens the paywall, and the add flow resumes after purchase |
 | Personalized prep | Each event's prep list draws on what EVE has learned about you: confirmed answers, insights, and what you did before similar events |
 | Contextual learning | Before an upcoming event, EVE deduces what you might need ("Gym coming up. Should I remind you to bring your gloves?") and asks |
@@ -145,7 +155,7 @@ public `test_…` SDK key, so purchases are simulated and no money moves:
    screen after saving one place.
 3. Pick a package on the paywall. RevenueCat shows a Test Store dialog. Choose
    **Test valid purchase**.
-4. The `eve_pro` entitlement activates immediately: Settings shows your membership, the
+4. The `EVE Plus` entitlement activates immediately: Settings shows your membership, the
    **PLUS** badge appears on Home, and you can save unlimited places.
 
 The same dialog also lets you simulate a failed or cancelled purchase.

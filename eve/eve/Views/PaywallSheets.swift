@@ -56,7 +56,7 @@ extension View {
     }
 
     /// Shows the paywall automatically whenever this view appears without the
-    /// `eve_pro` entitlement, and nothing once the user has it.
+    /// `EVE Plus` entitlement, and nothing once the user has it.
     ///
     /// Use this to gate a whole screen. For a single button or row, prefer
     /// checking `SubscriptionService.shared.isPro` and presenting
