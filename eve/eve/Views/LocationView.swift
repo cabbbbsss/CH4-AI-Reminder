@@ -617,9 +617,14 @@ struct LocationView: View {
 
 // MARK: - Lock badge
 
-/// Marks an affordance as EVE Plus. Sketch `AAB306B5` — a 12pt disc in the
-/// pale surface colour carrying the crown in the dark one, shadowed so it
-/// reads as sitting on top of the control it badges rather than inside it.
+/// Marks an affordance as EVE Plus. Sketch `AAB306B5` — a disc in the pale
+/// surface colour carrying the crown in the dark one, shadowed so it reads as
+/// sitting on top of the control it badges rather than inside it.
+///
+/// Drawn at 22pt rather than the artboard's 12. At 12 the crown is a 7pt glyph
+/// hanging off a button, which reads as a smudge on a device even though it is
+/// correct on the canvas — the artboard is inspected at zoom, a badge is
+/// glanced at. The proportions are the artboard's; only the scale is not.
 ///
 /// A crown rather than the padlock it replaced: the same information, said as
 /// what the feature belongs to instead of what the user cannot do.
@@ -629,8 +634,8 @@ struct LocationView: View {
 /// and why the badge inverts correctly in dark mode for free.
 private struct LockBadge: View {
     var body: some View {
-        PlusCrown(height: 7, tint: Color.eveOnSurface)
-            .frame(width: 12, height: 12)
+        PlusCrown(height: 12, tint: Color.eveOnSurface)
+            .frame(width: 22, height: 22)
             .background(Circle().fill(Color.eveSurface))
             .shadow(color: Color.eveOnSurface.opacity(0.25), radius: 4, y: 2)
             .accessibilityHidden(true)
