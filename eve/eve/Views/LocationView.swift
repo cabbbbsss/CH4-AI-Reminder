@@ -194,10 +194,10 @@ struct LocationView: View {
         // Badged on the button rather than its label: the circular
         // border shape clips the label, and the lock is meant to
         // break that edge.
-        .overlay(alignment: .bottomTrailing) {
+        .overlay(alignment: .topTrailing) {
             if !canAddLocation {
                 LockBadge()
-                    .offset(x: 3, y: 3)
+                    .offset(x: 2, y: -2)
             }
         }
         .accessibilityLabel(canAddLocation
@@ -617,16 +617,22 @@ struct LocationView: View {
 
 // MARK: - Lock badge
 
-/// The padlock that marks a locked affordance. Filled with the surface colour
-/// so it reads as sitting on top of the control it badges rather than inside it.
+/// Marks an affordance as EVE Plus. Sketch `AAB306B5` — a 12pt disc in the
+/// pale surface colour carrying the crown in the dark one, shadowed so it
+/// reads as sitting on top of the control it badges rather than inside it.
+///
+/// A crown rather than the padlock it replaced: the same information, said as
+/// what the feature belongs to instead of what the user cannot do.
+///
+/// The artboard's `#E8F3FF` disc and `#1D3557` crown are already this app's
+/// `eveSurface` / `eveOnSurface` pair, which is why nothing here is a literal —
+/// and why the badge inverts correctly in dark mode for free.
 private struct LockBadge: View {
     var body: some View {
-        Image(systemName: "lock.fill")
-            .font(.system(size: 9, weight: .bold))
-            .foregroundStyle(Color.eveOnSurface)
-            .padding(4)
+        PlusCrown(height: 7, tint: Color.eveOnSurface)
+            .frame(width: 12, height: 12)
             .background(Circle().fill(Color.eveSurface))
-            .overlay(Circle().stroke(Color.eveOnSurface.opacity(0.08), lineWidth: 1))
+            .shadow(color: Color.eveOnSurface.opacity(0.25), radius: 4, y: 2)
             .accessibilityHidden(true)
     }
 }
