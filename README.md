@@ -77,7 +77,7 @@ about Apple's frameworks rather than about someone's API.
 
 | | |
 |---|---|
-| Mac | Xcode **27.0** or later (verified with Xcode 27.0, build 27A266a) |
+| Mac | Xcode **26.3** or later (verified with Xcode 26.3, build 17C529, and Xcode 27.0, build 27A266a) |
 | iPhone | **iOS 26.2 or later.** For the AI features, an iPhone that supports **Apple Intelligence**, with Apple Intelligence turned on in Settings |
 | Accounts | A free Apple ID in Xcode to sign the app for your own device. **No** paid developer account, App Store Connect setup, or RevenueCat account needed |
 
