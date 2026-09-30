@@ -39,13 +39,19 @@ final class ReminderScheduler {
     ///
     /// Safe to call after any edit, including ones that should leave nothing
     /// pending — a completed, undated or past reminder simply ends up cancelled.
-    /// - Parameter mayPrompt: passed to `NotificationService`. True when the
-    ///   user just edited this reminder, false for a bulk resync.
+    /// - Parameter mayPrompt: passed to `NotificationService`. Whether an
+    ///   undecided user may be asked now; false only where no prompt can show.
     func sync(_ reminder: CalendarReminder, mayPrompt: Bool = true) async {
 
         notifications.cancelReminder(id: reminder.notificationID)
 
         guard !reminder.isCompleted else { return }
+
+        // Asked before the checks below, not after: a place reminder and one
+        // added for "now" both return early there, so the user's own reminders
+        // used to be exactly the ones that never asked. A reminder the user
+        // just saved is the moment to ask, and nothing can deliver without it.
+        guard await notifications.isAllowed(mayPrompt: mayPrompt) else { return }
 
         // A location-triggered reminder is delivered on arrival instead of on
         // a clock (see `deliverOnArrival`), so it gets no timed notification.
@@ -72,9 +78,10 @@ final class ReminderScheduler {
     /// Rebuilds the pending set from the store. Call on launch, after which
     /// per-reminder `sync` keeps it current.
     ///
-    /// Never prompts: this runs at startup over reminders that already exist,
-    /// and a permission dialog here would block whatever is queued behind it.
-    /// Permission is asked for when the user saves or completes a reminder.
+    /// Asks for permission once when there is something to deliver and the
+    /// user hasn't decided, so a routine Eve generated gets the prompt too.
+    /// The prompt suspends this until it's answered — callers on a path the
+    /// UI waits for must not await it (Home runs it detached).
     func syncAll() async {
 
         let all = (try? context.fetch(FetchDescriptor<CalendarReminder>())) ?? []
@@ -85,7 +92,7 @@ final class ReminderScheduler {
             .prefix(Self.pendingLimit)
 
         for reminder in upcoming {
-            await sync(reminder, mayPrompt: false)
+            await sync(reminder)
         }
     }
 

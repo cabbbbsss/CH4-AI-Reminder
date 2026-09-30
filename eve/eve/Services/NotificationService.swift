@@ -56,11 +56,14 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
 
     /// Returns false if the user denied notifications.
+    ///
+    /// Asks through `PermissionManager` so its observable status changes the
+    /// moment iOS answers — Home schedules everything else off that change.
     @discardableResult
     func requestPermission() async -> Bool {
-        (try? await center.requestAuthorization(
-            options: [.alert, .sound, .badge]
-        )) ?? false
+        PermissionManager.canDeliverNotifications(
+            await PermissionManager.shared.requestNotificationsIfUndetermined()
+        )
     }
 
     func notificationSettings() async -> UNNotificationSettings {
@@ -89,7 +92,7 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// permission suspends until the prompt is answered, which on first launch
     /// stalls everything queued behind it, so housekeeping passes false and
     /// simply schedules nothing until permission exists.
-    private func isAllowed(mayPrompt: Bool) async -> Bool {
+    func isAllowed(mayPrompt: Bool) async -> Bool {
         switch await center.notificationSettings().authorizationStatus {
         case .authorized, .provisional, .ephemeral:
             return true
