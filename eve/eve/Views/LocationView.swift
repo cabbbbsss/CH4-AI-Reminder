@@ -686,8 +686,8 @@ private enum PlaceEntry: Identifiable {
         }
     }
 
-    /// Reminder text without any legacy "EventTitle: " prefix — the event is
-    /// shown on its own subtitle line now.
+    /// Reminder text without any legacy "EventTitle: " prefix — the list
+    /// shows only the reminder; the event lives in the Details sheet.
     var title: String {
         switch self {
         case .routed(let r):
@@ -696,13 +696,6 @@ private enum PlaceEntry: Identifiable {
             return r.text.hasPrefix(prefix) ? String(r.text.dropFirst(prefix.count)) : r.text
         case .pinned(let r):
             return r.text
-        }
-    }
-
-    var eventTitle: String? {
-        switch self {
-        case .routed(let r): return r.eventTitle
-        case .pinned(let r): return r.eventTitle.isEmpty ? nil : r.eventTitle
         }
     }
 
@@ -749,13 +742,6 @@ private struct LocationReminderRow: View {
                     .foregroundStyle(entry.isCompleted ? Color.eveOnSurfaceFaint : Color.eveOnSurface)
                     .strikethrough(entry.isCompleted, color: .eveOnSurfaceFaint)
                     .multilineTextAlignment(.leading)
-
-                if let event = entry.eventTitle, !event.isEmpty {
-                    Text(event)
-                        .font(.eveCaption)
-                        .foregroundStyle(Color.eveOnSurfaceFaint)
-                        .lineLimit(1)
-                }
             }
 
             Spacer(minLength: 0)
