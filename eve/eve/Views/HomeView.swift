@@ -48,6 +48,8 @@ struct HomeView: View {
     /// a relaunch.
     @Bindable private var subscriptions = SubscriptionService.shared
 
+    @Bindable private var permissions = PermissionManager.shared
+
     /// A reminder being started from an add row's ⓘ: the title typed so
     /// far and the moment the row stands for, handed to the Details sheet.
     @State private var newReminderDraft: NewReminderDraft?
@@ -199,12 +201,12 @@ struct HomeView: View {
             // reinstall or a reboot leaves every existing reminder silent. Right
             // after the routine, so today's new rows are scheduled too.
             //
-            // Deliberately not awaited. Nothing on screen waits for it, and
-            // while it *was* part of this chain its permission prompt suspended
-            // startup until the user answered — leaving the routine and the
-            // suggestion bubble stuck behind a dialog on first launch. It no
-            // longer prompts at all (see `syncAll`), and now it also can't
-            // delay anything if it turns slow.
+            // Deliberately not awaited. It asks for notification permission
+            // when the routine has something to deliver (see `syncAll`), and
+            // that prompt suspends it until answered — while it *was* part of
+            // this chain, that left the suggestion bubble stuck behind the
+            // dialog on first launch. Detached, the routine is already on
+            // screen when the prompt appears and nothing here waits for it.
             Task { await scheduler.syncAll() }
 
             // Everything else that asks the on-device model waits until the
@@ -304,6 +306,18 @@ struct HomeView: View {
         .onChange(of: viewModel?.sync.lastSync) { _, _ in
             calendarDidSync()
         }
+        // Anything synced before permission existed scheduled nothing, so
+        // catch up the moment it turns on — whichever reminder's prompt was
+        // answered, or on a return from the Settings app. `old` must be a
+        // real read: nil → granted is just the launch read.
+        .onChange(of: permissions.notificationStatus) { old, new in
+            guard let old, let new,
+                  !PermissionManager.canDeliverNotifications(old),
+                  PermissionManager.canDeliverNotifications(new) else { return }
+            Task { await scheduler?.syncAll() }
+            viewModel?.requestReconcile()
+            Task { await learningScheduler?.evaluateUpcomingEvents() }
+        }
         .onReceive(
             Timer.publish(every: 600, on: .main, in: .common).autoconnect()
         ) { _ in
@@ -346,8 +360,9 @@ struct HomeView: View {
             // Most syncs bring nothing new for today; only new rows need
             // their notifications and the re-read the bubble held back.
             guard await prepareRoutine(with: reminderManager) > 0 else { return }
-            await scheduler?.syncAll()
+            // Before the resync, which may sit on the permission prompt.
             refreshSuggestion()
+            await scheduler?.syncAll()
         }
     }
 

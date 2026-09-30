@@ -1,18 +1,17 @@
 import SwiftUI
 
-/// Onboarding step two: explains what Eve reads, then asks for Calendar.
+/// Onboarding step two: explains what Eve reads.
 ///
-/// Eve only needs the calendar to build a routine, so this is the single
-/// permission onboarding requests. Location is asked for later, at the moment
+/// Calendar is the one permission onboarding asks for, and the learning
+/// screen's first step ("Connecting to your calendar…") asks it — that step
+/// is what reads the answer. Asking here as well only put a spinner on this
+/// button while EventKit settled. Location is asked for later, at the moment
 /// the user actually creates a place-based reminder (see `AddLocationSheet`),
 /// and notifications the first time Eve has something to deliver — permissions
 /// land where the user can see what they buy.
 struct PermissionView: View {
     @Binding var currentStep: Int
     @Bindable var permissionManager = PermissionManager.shared
-
-    /// Guards against double-taps while the OS prompt is being presented.
-    @State private var isRequesting = false
 
     @State private var hasAppeared = false
 
@@ -117,40 +116,20 @@ struct PermissionView: View {
 
     private var nextButton: some View {
         Button {
-            requestCalendarThenContinue()
-        } label: {
-            Group {
-                if isRequesting {
-                    ProgressView()
-                } else {
-                    Image(systemName: "chevron.right")
-                        .font(.title3.weight(.semibold))
-                }
-            }
-            .foregroundStyle(Color.eveOnSurface)
-            .frame(width: 26, height: 26)
-            .padding(Theme.Spacing.s)
-        }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.circle)
-        .disabled(isRequesting)
-        .accessibilityLabel("Continue")
-    }
-
-    /// Presents the system Calendar prompt, then moves on regardless of the
-    /// answer — the permission is the user's choice, and Eve degrades to an
-    /// empty routine rather than trapping them on this screen.
-    private func requestCalendarThenContinue() {
-        guard !isRequesting else { return }
-        isRequesting = true
-
-        Task {
-            await permissionManager.requestOnboardingPermissions()
-            isRequesting = false
+            permissionManager.enableAI()  // app-level consent (no OS prompt exists)
             withAnimation {
                 currentStep = 2
             }
+        } label: {
+            Image(systemName: "chevron.right")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Color.eveOnSurface)
+                .frame(width: 26, height: 26)
+                .padding(Theme.Spacing.s)
         }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .accessibilityLabel("Continue")
     }
 }
 

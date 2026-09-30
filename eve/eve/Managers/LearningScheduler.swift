@@ -36,6 +36,14 @@ final class LearningScheduler {
         // would get on the day they subscribe.
         guard personalizedLearning else { return }
 
+        // Checked before anything is saved: each event type is asked about
+        // once (the `ContextualPreference` markers below), so evaluating now
+        // would spend that one question on a notification that can't be
+        // delivered. Home re-runs this once permission arrives.
+        guard PermissionManager.canDeliverNotifications(
+            await PermissionManager.shared.notificationAuthorizationStatus()
+        ) else { return }
+
         let events = (try? context.fetch(FetchDescriptor<CalendarEvent>())) ?? []
         let now = Date.now
         

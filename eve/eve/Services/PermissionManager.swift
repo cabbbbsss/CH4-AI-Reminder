@@ -18,12 +18,14 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
   /// never delivers it once EVE leaves the foreground.
   var isAlwaysLocationGranted: Bool = false
   var isCalendarGranted: Bool = false
-  var isNotificationsGranted: Bool = false
+  /// nil until the first read lands, so the launch read is never mistaken
+  /// for a change — Home resyncs when this turns deliverable.
+  var notificationStatus: UNAuthorizationStatus?
+  var isNotificationsGranted: Bool { notificationStatus.map(Self.canDeliverNotifications) ?? false }
   var isAIEnabled: Bool = false
   var hasCompletedOnboarding: Bool = false
 
   private let locationManager = CLLocationManager()
-  private let eventStore = EKEventStore()
   private var locationContinuation: CheckedContinuation<CLAuthorizationStatus, Never>?
   private let hasRequestedAlwaysKey = "hasRequestedAlwaysLocation"
 
@@ -51,12 +53,12 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
     UNUserNotificationCenter.current().getNotificationSettings { settings in
       // Completion runs off the main actor; hop back on to touch state.
       Task { @MainActor in
-        self.isNotificationsGranted = Self.canDeliverNotifications(settings.authorizationStatus)
+        self.notificationStatus = settings.authorizationStatus
       }
     }
   }
 
-  static func canDeliverNotifications(_ status: UNAuthorizationStatus) -> Bool {
+  nonisolated static func canDeliverNotifications(_ status: UNAuthorizationStatus) -> Bool {
     switch status {
     case .authorized, .provisional, .ephemeral:
       return true
@@ -113,22 +115,14 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
     locationManager.requestAlwaysAuthorization()
   }
 
-  func requestCalendar() async {
-    do {
-      // Method is main-actor isolated, so we resume on main after await.
-      isCalendarGranted = try await eventStore.requestFullAccessToEvents()
-    } catch {
-      print("Failed to request calendar access: \(error)")
-    }
-  }
-
   func requestNotifications() async {
     do {
-      isNotificationsGranted = try await UNUserNotificationCenter.current()
+      _ = try await UNUserNotificationCenter.current()
         .requestAuthorization(options: [.alert, .sound, .badge])
     } catch {
       print("Failed to request notification access: \(error)")
     }
+    notificationStatus = await notificationAuthorizationStatus()
   }
 
   func notificationAuthorizationStatus() async -> UNAuthorizationStatus {
@@ -138,35 +132,16 @@ final class PermissionManager: NSObject, CLLocationManagerDelegate {
   func requestNotificationsIfUndetermined() async -> UNAuthorizationStatus {
     let status = await notificationAuthorizationStatus()
     guard status == .notDetermined else {
-      isNotificationsGranted = Self.canDeliverNotifications(status)
+      notificationStatus = status
       return status
     }
     await requestNotifications()
-    let updatedStatus = await notificationAuthorizationStatus()
-    isNotificationsGranted = Self.canDeliverNotifications(updatedStatus)
-    return updatedStatus
+    return notificationStatus ?? .notDetermined
   }
 
   func enableAI() {
     isAIEnabled = true
     UserDefaults.standard.set(true, forKey: "isAIEnabled")
-  }
-
-  /// The one permission onboarding asks for: Calendar.
-  ///
-  /// Eve builds the routine from calendar events, so that is the only access
-  /// it needs before the app is useful. Everything else is requested at the
-  /// point of use instead of being stacked up behind one Next button:
-  ///
-  /// - Location — when the user adds a place (`AddLocationSheet`), which is
-  ///   the moment a place-based reminder actually becomes possible.
-  /// - Notifications — the first time Eve schedules something to deliver
-  ///   (`NotificationService.scheduleReminder`).
-  ///
-  /// Reminders-app access is gone entirely: Eve reads the calendar only.
-  func requestOnboardingPermissions() async {
-    enableAI()            // app-level consent (no OS prompt exists)
-    await requestCalendar()
   }
 
   func completeOnboarding() {
