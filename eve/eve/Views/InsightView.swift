@@ -63,10 +63,7 @@ struct InsightView: View {
   /// screen rather than in a differently-shaped box per tab.
   private var speechBubble: some View {
     HStack(alignment: .top, spacing: Theme.Spacing.s) {
-      Image("Avatar")
-        .resizable()
-        .scaledToFit()
-        .frame(width: 70, height: 70)
+      EveAvatar(size: 70)
 
       Text("Here's what I've \(Text("learned").fontWeight(.bold)) about you!")
         .font(.eveBody)
