@@ -46,12 +46,20 @@ final class SubscriptionService {
     /// RevenueCat's public SDK key. Public by design — it can only read
     /// offerings and start purchases, so shipping it in the binary is expected
     /// (the secret key, which can mutate subscriber state, never leaves the
-    /// dashboard). This is a `test_…` key, which only reaches RevenueCat's Test
-    /// Store: purchases are simulated, so anyone building from source can unlock
-    /// EVE Plus without an App Store account. The SDK deliberately crashes a
-    /// Release build that uses a Test Store key; swap in the `appl_…` key before
-    /// an App Store release.
+    /// dashboard).
+    ///
+    /// Debug uses a `test_…` key, which only reaches RevenueCat's Test Store:
+    /// purchases are simulated, so anyone building from source can unlock EVE
+    /// Plus without an App Store account. Release — which is what TestFlight and
+    /// the App Store run — must use the `appl_…` key, because the SDK
+    /// deliberately crashes a Release build that uses a Test Store key.
+    /// TestFlight builds purchase against the App Store sandbox, so testers are
+    /// never charged.
+    #if DEBUG
     private static let apiKey = "test_UvsrpxjISkvnAtPLeZrXESJDtnx"
+    #else
+    private static let apiKey = "appl_uejnngKuTsSaNAyyNOLaQajmxGM"
+    #endif
 
     // MARK: - Observable state
 
