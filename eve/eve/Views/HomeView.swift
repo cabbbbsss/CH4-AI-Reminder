@@ -14,6 +14,18 @@ struct HomeView: View {
     /// calendar events — it lists what Eve decided you need to do about them.
     @State private var reminderManager: CalendarReminderManager?
 
+    /// Routine passes running right now. While any is, the suggestion bubble
+    /// holds its re-reads: each new row would otherwise start one, and those
+    /// model calls queue ahead of the rest of the routine's.
+    @State private var routineGenerations = 0
+
+    /// False until startup's own routine pass is done. A calendar sync before
+    /// then only sets `routineRefreshPending` — kicking off its own pass would
+    /// leave startup's call returning early, and startup would then move on
+    /// to the other model work while the routine was still generating.
+    @State private var hasBuiltFirstRoutine = false
+    @State private var routineRefreshPending = false
+
     /// Every reminder Eve holds. `reminderDate` is computed (an hour before
     /// its event), so it can't be a SwiftData sort key — today's are filtered
     /// and ordered in `todaysReminders` instead.
@@ -147,7 +159,6 @@ struct HomeView: View {
             guard viewModel == nil else { return }
             let vm = TodayViewModel(context: modelContext)
             viewModel = vm
-            await vm.start()
 
             // The routine is generated, not imported: without this the list
             // would stay empty until the user happened to open the Calendar
@@ -162,16 +173,48 @@ struct HomeView: View {
             lScheduler.bindNotificationFeedback()
             self.learningScheduler = lScheduler
 
-            // These two don't depend on each other — one builds the day's
-            // routine from the calendar, the other asks the model what matters
-            // right now. Both can take seconds on device, and in sequence the
-            // user waits for their sum, so they run together.
-            //
-            // The second is silent: opening Home never fires a notification.
+            // The routine is what the user is looking at, so it goes first:
+            // import the calendar, then build the day from it straight away.
+            // Location only needs a GPS fix, not the model, so it runs
+            // alongside.
+            await vm.startCalendar()
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { @MainActor in
-                    await manager.ensureReminders(for: .now)
+                    await vm.startLocation()
                 }
+                group.addTask { @MainActor in
+                    await prepareRoutine(with: manager)
+                }
+            }
+
+            // Syncs that landed while the first pass ran were held back (see
+            // `calendarDidSync`) so this pass stayed the one Home waited on.
+            hasBuiltFirstRoutine = true
+            if routineRefreshPending {
+                routineRefreshPending = false
+                await prepareRoutine(with: manager)
+            }
+
+            // Rebuild the pending notifications from the store — without this a
+            // reinstall or a reboot leaves every existing reminder silent. Right
+            // after the routine, so today's new rows are scheduled too.
+            //
+            // Deliberately not awaited. Nothing on screen waits for it, and
+            // while it *was* part of this chain its permission prompt suspended
+            // startup until the user answered — leaving the routine and the
+            // suggestion bubble stuck behind a dialog on first launch. It no
+            // longer prompts at all (see `syncAll`), and now it also can't
+            // delay anything if it turns slow.
+            Task { await scheduler.syncAll() }
+
+            // Everything else that asks the on-device model waits until the
+            // routine is in. The model answers one request at a time, so
+            // running these alongside only put the routine's calls behind
+            // theirs.
+            //
+            // The read is silent: opening Home never fires a notification.
+            vm.startNotifications()
+            await withTaskGroup(of: Void.self) { group in
                 group.addTask { @MainActor in
                     await vm.assistant.generateInitialInsights(
                         currentPlace: vm.location.currentPlace
@@ -181,16 +224,6 @@ struct HomeView: View {
                     await lScheduler.evaluateUpcomingEvents()
                 }
             }
-            // Rebuild the pending notifications from the store — without this a
-            // reinstall or a reboot leaves every existing reminder silent.
-            //
-            // Deliberately not awaited. Nothing on screen waits for it, and
-            // while it *was* part of this chain its permission prompt suspended
-            // startup until the user answered — leaving the routine and the
-            // suggestion bubble stuck behind a dialog on first launch. It no
-            // longer prompts at all (see `syncAll`), and now it also can't
-            // delay anything if it turns slow.
-            Task { await scheduler.syncAll() }
         }
     }
 
@@ -264,6 +297,13 @@ struct HomeView: View {
         .onChange(of: todaysReminders.map(\.id)) { _, _ in
             refreshSuggestion()
         }
+        // EventKit often finishes loading an account's events only after the
+        // first import (typically right after access is granted), and every
+        // later sync can bring new ones. Each gets its reminders here rather
+        // than waiting for a visit to the Calendar tab or a relaunch.
+        .onChange(of: viewModel?.sync.lastSync) { _, _ in
+            calendarDidSync()
+        }
         .onReceive(
             Timer.publish(every: 600, on: .main, in: .common).autoconnect()
         ) { _ in
@@ -275,11 +315,39 @@ struct HomeView: View {
     /// read is already running so overlapping triggers can't stack up model
     /// calls.
     private func refreshSuggestion() {
-        guard let viewModel, viewModel.assistant.isThinking == false else { return }
+        guard let viewModel, viewModel.assistant.isThinking == false,
+              routineGenerations == 0 else { return }
         Task {
             await viewModel.assistant.generateInitialInsights(
                 currentPlace: viewModel.location.currentPlace
             )
+        }
+    }
+
+    // MARK: - Routine
+
+    /// Generates today's reminders, holding the bubble's re-reads meanwhile.
+    /// Returns how many were added.
+    @discardableResult
+    private func prepareRoutine(with manager: CalendarReminderManager) async -> Int {
+        routineGenerations += 1
+        defer { routineGenerations -= 1 }
+        return await manager.ensureReminders(for: .now)
+    }
+
+    /// Picks up events a calendar sync brought in after launch.
+    private func calendarDidSync() {
+        guard hasBuiltFirstRoutine else {
+            routineRefreshPending = true
+            return
+        }
+        guard let reminderManager else { return }
+        Task {
+            // Most syncs bring nothing new for today; only new rows need
+            // their notifications and the re-read the bubble held back.
+            guard await prepareRoutine(with: reminderManager) > 0 else { return }
+            await scheduler?.syncAll()
+            refreshSuggestion()
         }
     }
 

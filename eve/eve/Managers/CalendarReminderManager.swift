@@ -72,6 +72,11 @@ final class CalendarReminderManager {
     /// opening together don't both generate — and insert — the same day.
     private static var inFlightDays: Set<Date> = []
 
+    /// In-flight days someone asked about again mid-run. The run already read
+    /// the store, so an event a calendar sync added since would otherwise sit
+    /// without reminders until something asked a third time.
+    private static var rerunRequestedDays: Set<Date> = []
+
     /// Whether `ensureReminders(for:)` would actually ask the model for
     /// anything on `date`. Cheap: reads the store, makes no model call. Lets
     /// the Calendar skip its "Preparing" spinner on a day already done.
@@ -96,16 +101,45 @@ final class CalendarReminderManager {
     /// yet. Safe to call repeatedly — existing rows (system or user-owned)
     /// are never duplicated, and an event is only asked about once per
     /// session.
-    func ensureReminders(for date: Date) async {
+    ///
+    /// A call that lands while `date` is already generating returns at once,
+    /// but has the running call look again when it finishes.
+    ///
+    /// - Returns: How many reminders this call added — 0 when it returned
+    ///   early for a run already in flight.
+    @discardableResult
+    func ensureReminders(for date: Date) async -> Int {
 
         let day = Calendar.current.startOfDay(for: date)
-        guard !Self.inFlightDays.contains(day) else { return }
 
-        let events = pendingEvents(on: date)
-        guard !events.isEmpty else { return }
+        guard !Self.inFlightDays.contains(day) else {
+            Self.rerunRequestedDays.insert(day)
+            return 0
+        }
 
         Self.inFlightDays.insert(day)
-        defer { Self.inFlightDays.remove(day) }
+        defer {
+            Self.inFlightDays.remove(day)
+            Self.rerunRequestedDays.remove(day)
+        }
+
+        var added = 0
+
+        repeat {
+            Self.rerunRequestedDays.remove(day)
+            added += await generatePending(on: date)
+        } while Self.rerunRequestedDays.contains(day) && !Task.isCancelled
+
+        return added
+
+    }
+
+    /// One pass over the events on `date` still without reminders. Returns
+    /// how many rows it inserted.
+    private func generatePending(on date: Date) async -> Int {
+
+        let events = pendingEvents(on: date)
+        guard !events.isEmpty else { return 0 }
 
         // Three phases, deliberately: read SwiftData and build every prompt
         // here, run the model calls off-actor, then insert back here. The
@@ -139,20 +173,17 @@ final class CalendarReminderManager {
 
             }
 
-        guard !jobs.isEmpty else { return }
+        guard !jobs.isEmpty else { return 0 }
 
-        let itemsByOccurrence = await Self.generatePrep(for: jobs)
+        var added = 0
 
-        // Leaving the Calendar tab mid-run cancels this task, and a cancelled
-        // model call comes back empty — which is "not finished", not "nothing
-        // to say". Only a run that got to the end marks its events as asked;
-        // a cancelled one is picked up again next visit.
-        if !Task.isCancelled {
-            Self.attemptedOccurrenceIDs.formUnion(jobs.map(\.occurrenceID))
-        }
-
-        for job in jobs {
-            for text in (itemsByOccurrence[job.occurrenceID] ?? []).prefix(4) {
+        // Each event is saved the moment its items come back. Saving once at
+        // the end left the list empty until the day's *last* event finished —
+        // on a busy first launch, minutes after the first one was ready.
+        // `jobs` follows event start time, so the soonest come back first.
+        await Self.generatePrep(for: jobs) { job, items in
+            for text in items.prefix(4) {
+                added += 1
                 context.insert(
                     CalendarReminder(
                         occurrenceID: job.occurrenceID,
@@ -163,13 +194,25 @@ final class CalendarReminderManager {
                     )
                 )
             }
+            if !items.isEmpty {
+                try? context.save()
+            }
         }
 
-        try? context.save()
+        // Leaving the Calendar tab mid-run cancels this task, and a cancelled
+        // model call comes back empty — which is "not finished", not "nothing
+        // to say". Only a run that got to the end marks its events as asked;
+        // a cancelled one is picked up again next visit.
+        if !Task.isCancelled {
+            Self.attemptedOccurrenceIDs.formUnion(jobs.map(\.occurrenceID))
+        }
+
+        return added
 
     }
 
-    /// Runs the prep calls concurrently, at most `maxConcurrent` in flight.
+    /// Runs the prep calls concurrently, at most `maxConcurrent` in flight,
+    /// handing each job's items to `onResult` as soon as that job finishes.
     ///
     /// The cap is deliberate. The on-device model serialises requests
     /// internally, so an unbounded group mostly just queues them — while
@@ -181,12 +224,12 @@ final class CalendarReminderManager {
     /// from being captured across the boundary.
     private static func generatePrep(
         for jobs: [PrepJob],
-        maxConcurrent: Int = 4
-    ) async -> [String: [String]] {
+        maxConcurrent: Int = 4,
+        onResult: (PrepJob, [String]) -> Void
+    ) async {
 
-        await withTaskGroup(of: (String, [String]).self) { group in
+        await withTaskGroup(of: (PrepJob, [String]).self) { group in
 
-            var results: [String: [String]] = [:]
             var next = 0
 
             while next < min(maxConcurrent, jobs.count) {
@@ -195,9 +238,9 @@ final class CalendarReminderManager {
                 next += 1
             }
 
-            for await (occurrenceID, items) in group {
+            for await (job, items) in group {
 
-                results[occurrenceID] = items
+                onResult(job, items)
 
                 if next < jobs.count {
                     let job = jobs[next]
@@ -207,13 +250,11 @@ final class CalendarReminderManager {
 
             }
 
-            return results
-
         }
 
     }
 
-    private static func prepItems(for job: PrepJob) async -> (String, [String]) {
+    private static func prepItems(for job: PrepJob) async -> (PrepJob, [String]) {
 
         let service = FoundationModelService()
 
@@ -229,7 +270,7 @@ final class CalendarReminderManager {
             label: "prep/\(job.eventTitle)"
         )
 
-        return (job.occurrenceID, grounded)
+        return (job, grounded)
 
     }
 
