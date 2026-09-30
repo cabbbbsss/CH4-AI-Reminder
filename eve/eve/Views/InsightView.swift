@@ -32,7 +32,7 @@ struct InsightView: View {
       }
       .padding(.top, Theme.Spacing.l)
     }
-    .navigationTitle("Insight")
+    .navigationTitle("Insights")
     .navigationBarTitleDisplayMode(.inline)
     .toolbarBackground(.hidden, for: .navigationBar)
     .sheet(item: $editingInsight) { insight in
