@@ -10,7 +10,7 @@ import SwiftUI
 ///
 /// The artboards use it two ways, which is what `tint` selects between:
 ///
-/// - On the dark inverse surface (Home's pill and avatar) it keeps its own
+/// - On the dark inverse surface (Home's pill) it keeps its own
 ///   white → pale-blue gradient and carries the artboard's drop shadow.
 /// - On a light surface (the Location badge, a Settings row) the artboard
 ///   draws it in the dark navy instead. Tinting template-renders the same

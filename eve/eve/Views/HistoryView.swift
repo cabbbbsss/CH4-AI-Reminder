@@ -21,10 +21,7 @@ struct HistoryView: View {
             VStack(spacing: 0) {
                 // Character + Chat Bubble
                 HStack(alignment: .center, spacing: 16) {
-                    Image("Avatar")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 75, height: 75)
+                    EveAvatar(size: 75)
 
                     Text("I learn from your **interactions** and **adaptively** remind you.")
                         .font(.system(size: 13))
