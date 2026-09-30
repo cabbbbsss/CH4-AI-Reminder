@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="13px" height="12px" viewBox="0 0 13 12" version="1.1" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient x1="50%" y1="0%" x2="50%" y2="98.5182292%" id="crownBody">
+            <stop stop-color="#FFFFFF" offset="0%"></stop>
+            <stop stop-color="#D0E4F8" offset="100%"></stop>
+        </linearGradient>
+        <linearGradient x1="50%" y1="0%" x2="50%" y2="100%" id="crownBar">
+            <stop stop-color="#FFFFFF" offset="0%"></stop>
+            <stop stop-color="#E8F3FF" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g transform="translate(-7, -5)">
+        <path d="M13.5,5 L15.2163939,11.9287143 L20,8.93587061 C18.441199,11.3490412 17.4980937,13.1410243 17.1706841,14.3118201 C16.8432745,15.4826159 16.9488067,16.3786758 17.4872807,17 L9.51271931,17 C10.0572648,16.3023124 10.1295441,15.4062525 9.72955712,14.3118201 C9.32957018,13.2173877 8.4197178,11.4254046 7,8.93587061 L11.7832121,11.9287143 L13.5,5 Z" fill="url(#crownBody)"></path>
+        <rect fill="url(#crownBar)" x="9.16666667" y="15.5" width="8.66666667" height="1.5" rx="0.75"></rect>
+    </g>
+</svg>

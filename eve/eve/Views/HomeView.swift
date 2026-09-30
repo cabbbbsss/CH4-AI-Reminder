@@ -325,24 +325,33 @@ struct HomeView: View {
         .padding(.horizontal, Theme.Spacing.gutter)
     }
 
-    /// Sketch `Homepage Copy 28` — an 82×35 capsule, gradient lit from the top
-    /// left, hairline border and label in the same pale blue.
+    /// Sketch `Homepage Copy 6` — the crowned pill: same gradient capsule and
+    /// hairline border as before, now led by the crown and with the label at
+    /// the artboard's 13.
     ///
-    /// Sized by its padding rather than pinned to 82×35, so the pill grows with
-    /// Dynamic Type instead of clipping its own label.
+    /// Sized by its padding rather than pinned to the artboard's 90×24, so the
+    /// pill grows with Dynamic Type instead of clipping its own label.
     ///
-    /// The artboard sets the label in `Lighters` 15. That font is not in the
+    /// The artboard sets the label in `Lighters`. That font is not in the
     /// bundle and there is no `UIAppFonts` entry, so `Font.custom` would fall
     /// back to the system face without saying so — this asks for the system
-    /// face outright, at the artboard's size and weight, and leans on tracking
-    /// for the wide setting the display face gave it for free.
+    /// face outright, at the artboard's size, and leans on tracking for the
+    /// wide setting the display face gave it for free.
     private var plusBadge: some View {
-        Text("PLUS")
-            .font(.system(size: 15))
-            .tracking(3)
-            .foregroundStyle(Color.eveOnInverseSurface)
-            .padding(.horizontal, Theme.Spacing.m)
-            .padding(.vertical, Theme.Spacing.xs)
+        HStack(spacing: Theme.Spacing.xxs) {
+            // Tinted to the label's own colour rather than left on the
+            // artwork's gradient: the pill is drawn on `eveInverseSurface`,
+            // which flips to pale in dark mode, and a fixed pale crown
+            // disappeared into it while "PLUS" beside it went dark.
+            PlusCrown(height: 12, tint: Color.eveOnInverseSurface, shadow: true)
+
+            Text("PLUS")
+                .font(.system(size: 13))
+                .tracking(3)
+                .foregroundStyle(Color.eveOnInverseSurface)
+        }
+        .padding(.horizontal, Theme.Spacing.s)
+        .padding(.vertical, Theme.Spacing.xs)
             .background {
                 Capsule()
                     .fill(
@@ -359,6 +368,14 @@ struct HomeView: View {
             .accessibilityLabel("\(SubscriptionService.displayName) subscriber")
     }
 
+    /// The avatar's drawn sphere, in points, inside its 70pt frame.
+    ///
+    /// `Avatar` carries a soft glow out to its own edges — the solid body is
+    /// 88.3% of the image, centred. Every EVE Plus mark is placed against this
+    /// rather than the frame, because the artboard's proportions are all
+    /// relative to the sphere.
+    private static let avatarSphere: CGFloat = 70 * 0.883
+
     // MARK: - Suggestion bubble
 
     /// Eve's read on the day. Not a button any more: it refreshes itself when
@@ -371,6 +388,39 @@ struct HomeView: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: 70, height: 70)
+                    // Sketch draws the crowned avatar as the same sphere with
+                    // a ribbon behind it and the crown centred above, so this
+                    // is the existing asset in the middle of those two rather
+                    // than a second 340KB bitmap of the whole thing that would
+                    // then need keeping in step with it.
+                    //
+                    // The artboard's ribbon is 69 across a 60 sphere, so its
+                    // tails clear the body by ~4.5. Sketch draws that sphere as
+                    // a hard-edged circle; `Avatar` is the same body wrapped in
+                    // a soft glow reaching the frame edge, which swallowed
+                    // tails that short — verified by tinting the asset, which
+                    // showed it drawn and correctly placed but entirely behind
+                    // the avatar. So the ribbon takes its 69:60 from the frame,
+                    // where the glow ends, while the crown below takes its
+                    // proportions from the body it actually sits on.
+                    .background(alignment: .top) {
+                        if subscriptions.isPro {
+                            Image("PlusRibbon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 70 * 69 / 60, height: 70 * 79 / 60)
+                        }
+                    }
+                    .overlay(alignment: .top) {
+                        if subscriptions.isPro {
+                            // The artboard draws this crown at 21×19 over the
+                            // 60 sphere — larger than the 13×12 one in the
+                            // pill, same artwork — sitting just clear of the
+                            // sphere's top edge.
+                            PlusCrown(height: Self.avatarSphere * 19 / 60, shadow: true)
+                                .offset(y: (70 - Self.avatarSphere) / 2 - Self.avatarSphere * 21 / 60)
+                        }
+                    }
 
                 if viewModel?.assistant.isThinking == true {
                     ProgressView()

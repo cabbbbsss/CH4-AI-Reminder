@@ -185,7 +185,7 @@ struct ProSettingsSection: View {
                     Button {
                         isShowingPaywall = true
                     } label: {
-                        SettingsRow(icon: "sparkles", label: "Upgrade to \(SubscriptionService.displayName)")
+                        SettingsRow(label: "Upgrade to \(SubscriptionService.displayName)", showsPlusCrown: true)
                     }
                     .buttonStyle(.plain)
                 }
@@ -341,9 +341,21 @@ struct SettingsRow: View {
     var label: String
     var showChevron: Bool = true
 
+    /// Draws the EVE Plus crown in the icon slot instead of an SF Symbol.
+    ///
+    /// A flag rather than a generic icon slot: six call sites pass a symbol
+    /// name and only one wants the crown, and this keeps that one drawing the
+    /// shared `PlusCrown` rather than a second copy of it. Tinted with the
+    /// same `textPrimary` as its sibling symbols, so it matches the row and
+    /// follows the appearance.
+    var showsPlusCrown: Bool = false
+
     var body: some View {
         HStack(spacing: 12) {
-            if let icon {
+            if showsPlusCrown {
+                PlusCrown(height: 17, tint: Color(.textPrimary))
+                    .frame(width: 26)
+            } else if let icon {
                 Image(systemName: icon)
                     .font(.system(size: 17))
                     .foregroundColor(Color(.textPrimary))
