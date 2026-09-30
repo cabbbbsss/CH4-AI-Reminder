@@ -108,18 +108,20 @@ struct CalendarView: View {
     var body: some View {
         ZStack {
             palette.background.ignoresSafeArea()
-            VStack(spacing: 0) {
-                calendarHeader
-                    .padding(.top, Theme.Spacing.l)
-                    .padding(.horizontal, Theme.Spacing.gutter)
-
-                calendarCard
+            calendarCard
                 .padding(.top, 18)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 8)
-            }
         }
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitle("Calendar")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) { addReminderButton }
+                // Without this iOS wraps the item in the bar's wide shared
+                // Liquid Glass capsule; the button already has its own glass.
+                .sharedBackgroundVisibility(.hidden)
+        }
         .sheet(isPresented: $isShowingDatePicker) {
             NavigationStack {
                 DatePicker("Select Date", selection: $selectedDate, displayedComponents: [.date])
@@ -159,29 +161,18 @@ struct CalendarView: View {
         }
     }
 
-    /// Kept outside `ToolbarItem` so iOS cannot wrap the button in the
-    /// navigation bar's wide automatic Liquid Glass capsule. The button uses
-    /// the exact same view structure and modifiers as Home's Settings button.
-    private var calendarHeader: some View {
-        ZStack {
-            Text("Calendar")
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(palette.primaryText)
-
-            HStack {
-                Spacer()
-
-                Button { isAddingReminder = true } label: {
-                    Image(systemName: "plus")
-                        .font(.title3)
-                        .foregroundStyle(Color.eveOnSurface)
-                        .padding(Theme.Spacing.xs)
-                }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .accessibilityLabel("Add reminder")
-            }
+    /// Same view structure and modifiers as Home's Settings button and
+    /// Location's add button, so the three glass circles match.
+    private var addReminderButton: some View {
+        Button { isAddingReminder = true } label: {
+            Image(systemName: "plus")
+                .font(.title3)
+                .foregroundStyle(Color.eveOnSurface)
+                .padding(Theme.Spacing.xs)
         }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .accessibilityLabel("Add reminder")
     }
 
     private var calendarCard: some View {
