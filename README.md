@@ -15,7 +15,7 @@ charger, and reminds you at the moment you need them.** It learns your routine o
 nudges you when the moment fits, not at a fixed time. Built by a team of five at the Apple
 Developer Academy and submitted to RevenueCat Shipaton 2026 (Next Gen Award).
 
-▶️ **Demo video:** _VIDEO_URL_ (under 2 minutes, recorded on an iPhone 17)
+▶️ **Demo video:** [Watch on YouTube](https://youtu.be/P_hUGhMIXto) (1:56, recorded on an iPhone 17)
 
 <p align="center">
   <img src="assets/eve-demo-thumbnail.png" width="1000" alt="EVE demo thumbnail showing the EVE app's routine, calendar, and EVE Plus screens">
