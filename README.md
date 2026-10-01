@@ -17,6 +17,10 @@ Developer Academy and submitted to RevenueCat Shipaton 2026 (Next Gen Award).
 
 ▶️ **Demo video:** _VIDEO_URL_ (under 2 minutes, recorded on an iPhone 17)
 
+<p align="center">
+  <img src="assets/eve-demo-thumbnail.png" width="1000" alt="EVE demo thumbnail showing the EVE app's routine, calendar, and EVE Plus screens">
+</p>
+
 EVE is built for *micro-reminders*: small, easily forgotten actions whose value depends
 entirely on the right moment. Your keys as you walk out the door, your earphones before the
 gym, your charger before a long day, your medication after breakfast. Instead of firing a
